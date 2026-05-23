@@ -24,8 +24,6 @@ view Main =
   ]
 ```
 
----
-
 ## Philosophy
 
 Kura aims for the following principles:
@@ -34,8 +32,6 @@ Kura aims for the following principles:
 - **Engine-friendly** --- integrates cleanly into native game runtimes.
 - **Composable layouts** --- interfaces are built from small reusable primitives.
 - **Deterministic rendering** --- no hidden mutation or implicit side effects.
-
----
 
 ## Example
 
@@ -67,8 +63,6 @@ view model =
   ]
 ```
 
----
-
 ## Influences
 
 Kura draws inspiration from:
@@ -79,8 +73,6 @@ Kura draws inspiration from:
 - React
 - ImGui
 
----
-
 ## Goals
 
 - Bring modern functional UI architecture to game engines
@@ -89,8 +81,6 @@ Kura draws inspiration from:
 - Provide elegant layout and typography primitives
 - Keep the runtime lightweight and embeddable
 - Preserve deterministic behavior across platforms
-
----
 
 ## Non-Goals
 
@@ -102,15 +92,11 @@ Kura is not:
 - a visual node editor
 - a browser runtime
 
----
-
 ## Status
 
 Kura is currently experimental and under active development.
 
 Expect rapid iteration, breaking changes, and evolving APIs.
-
----
 
 ## Vision
 
@@ -121,8 +107,6 @@ Kura aims to become a modern foundation for UI composition in game engines:
 - composable like Haskell
 - practical for real-time systems
 - lightweight enough for native engines
-
----
 
 ## License
 
