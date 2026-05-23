@@ -1,0 +1,9 @@
+{
+  "revision": 0,
+  "rules": [
+    {
+      "primary-output": "Sources/CMakeFiles/kura-runtime.dir/expr.cc.o"
+    }
+  ],
+  "version": 1
+}

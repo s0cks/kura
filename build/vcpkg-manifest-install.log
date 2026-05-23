@@ -1,0 +1,30 @@
+Detecting compiler hash for triplet x64-linux...
+Compiler found: /usr/bin/c++
+The following packages are already installed:
+    jansson:x64-linux@2.15.0
+    libuv:x64-linux@1.52.1
+  * vcpkg-cmake:x64-linux@2024-04-23
+  * vcpkg-cmake-config:x64-linux@2024-05-23
+    yoga:x64-linux@3.2.1
+jansson provides CMake targets:
+
+  # this is heuristically generated, and may not be correct
+  find_package(jansson CONFIG REQUIRED)
+  target_link_libraries(main PRIVATE jansson::jansson)
+
+jansson provides pkg-config modules:
+
+  # Library for encoding, decoding and manipulating JSON data
+  jansson
+
+libuv provides CMake targets:
+
+    find_package(libuv CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>)
+
+yoga provides CMake targets:
+
+    find_package(yoga CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE yoga::yogacore)
+
+All requested installations completed successfully in: 31.7 us

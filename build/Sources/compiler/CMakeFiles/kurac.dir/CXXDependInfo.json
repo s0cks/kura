@@ -1,0 +1,31 @@
+{
+	"bmi-installation" : null,
+	"compiler-frontend-variant" : "GNU",
+	"compiler-id" : "Clang",
+	"compiler-simulate-id" : "",
+	"config" : "Debug",
+	"cxx-modules" : {},
+	"database-info" : null,
+	"dir-cur-bld" : "/home/tazz/Projects/kura/build/Sources/compiler",
+	"dir-cur-src" : "/home/tazz/Projects/kura/Sources/compiler",
+	"dir-top-bld" : "/home/tazz/Projects/kura/build",
+	"dir-top-src" : "/home/tazz/Projects/kura",
+	"exports" : [],
+	"forward-modules-from-target-dirs" : [],
+	"include-dirs" : 
+	[
+		"/home/tazz/Projects/kura/Sources",
+		"Sources"
+	],
+	"language" : "CXX",
+	"linked-target-dirs" : [],
+	"module-dir" : "/home/tazz/Projects/kura/build/Sources/compiler/CMakeFiles/kurac.dir",
+	"sources" : 
+	{
+		"Sources/compiler/CMakeFiles/kurac.dir/main.cc.o" : 
+		{
+			"language" : "CXX",
+			"source" : "/home/tazz/Projects/kura/Sources/compiler/main.cc"
+		}
+	}
+}

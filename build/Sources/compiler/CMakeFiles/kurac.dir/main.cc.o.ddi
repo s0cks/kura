@@ -1,0 +1,9 @@
+{
+  "revision": 0,
+  "rules": [
+    {
+      "primary-output": "Sources/compiler/CMakeFiles/kurac.dir/main.cc.o"
+    }
+  ],
+  "version": 1
+}

@@ -1,0 +1,41 @@
+Package: vcpkg-cmake-config
+Version: 2024-05-23
+Architecture: x64-linux
+Multi-Arch: same
+Abi: d93c61bad32bdfa80b6ba07c454de496e3e8310c4278964ca4b9860646f71edb
+Status: install ok installed
+
+Package: vcpkg-cmake
+Version: 2024-04-23
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 2e9e4d3373ad7b928f88753830ea145ed7b8cc33f8e76c46f2d46358dfb9dc6c
+Status: install ok installed
+
+Package: jansson
+Version: 2.15.0
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 66f5462e91191a7f4a3b554e78cb6fc6d7d42a2fb6fc34b69d4df9a83bf71d5d
+Description: Jansson is a C library for encoding, decoding and manipulating JSON data
+Status: install ok installed
+
+Package: libuv
+Version: 1.52.1
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 96be140ec21a64a5c5f512b3307761667fe1f503154649715ea560887760bb8e
+Description: libuv is a multi-platform support library with a focus on asynchronous I/O.
+Status: install ok installed
+
+Package: yoga
+Version: 3.2.1
+Depends: vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-linux
+Multi-Arch: same
+Abi: 41e7a4da3d61a5340cbf179893bee634f832574a616f2588b58b1fbbefe37dbb
+Description: Yoga is a cross-platform layout engine which implements Flexbox
+Status: install ok installed
+

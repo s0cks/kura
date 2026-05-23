@@ -1,0 +1,19 @@
+ninja_dyndep_version = 1.0
+build Sources/CMakeFiles/kura-runtime.dir/compiler.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/dom.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/expr.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/layout.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/lexer.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/parser.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/source_pos.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/token.cc.o: dyndep
+
+build Sources/CMakeFiles/kura-runtime.dir/type.cc.o: dyndep
+

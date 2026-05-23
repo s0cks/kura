@@ -1,0 +1,8 @@
+{
+  "name": "stator",
+  "dependencies": [
+    "libuv",
+    "jansson",
+    "yoga"
+  ]
+}

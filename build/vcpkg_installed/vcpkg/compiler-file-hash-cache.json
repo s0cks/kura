@@ -1,0 +1,26 @@
+{
+  "/usr/bin/c++" : 
+  {
+    "hash" : "69e2297fefa7b91db682fd2cc05f997937b916dd",
+    "size" : 1746264,
+    "timestamp" : 1777640856
+  },
+  "/usr/bin/cc" : 
+  {
+    "hash" : "d5bb1790913f589d9da2875428b9f5a95a23fdcc",
+    "size" : 1738072,
+    "timestamp" : 1777640856
+  },
+  "/usr/bin/clang" : 
+  {
+    "hash" : "adcf31dfb5ad2decab6184a4ada6a51dcc455cc7",
+    "size" : 178384,
+    "timestamp" : 1778170615
+  },
+  "/usr/bin/clang++" : 
+  {
+    "hash" : "e8d30c826f54ab8f91291b315cf18a546f34d91e",
+    "size" : 178280,
+    "timestamp" : 1778170615
+  }
+}

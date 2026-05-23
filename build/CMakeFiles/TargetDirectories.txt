@@ -1,0 +1,16 @@
+/home/tazz/Projects/kura/build/CMakeFiles/edit_cache.dir
+/home/tazz/Projects/kura/build/CMakeFiles/rebuild_cache.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/intrinsics_gen.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/vt_gen.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/omp_gen.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/acc_gen.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/target_parser_gen.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/kura-runtime.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/edit_cache.dir
+/home/tazz/Projects/kura/build/Sources/CMakeFiles/rebuild_cache.dir
+/home/tazz/Projects/kura/build/Sources/compiler/CMakeFiles/kurac.dir
+/home/tazz/Projects/kura/build/Sources/compiler/CMakeFiles/edit_cache.dir
+/home/tazz/Projects/kura/build/Sources/compiler/CMakeFiles/rebuild_cache.dir
+/home/tazz/Projects/kura/build/Sources/debugger/CMakeFiles/kura-debugger.dir
+/home/tazz/Projects/kura/build/Sources/debugger/CMakeFiles/edit_cache.dir
+/home/tazz/Projects/kura/build/Sources/debugger/CMakeFiles/rebuild_cache.dir
