@@ -1,0 +1,7 @@
+CompileFlags:
+  CompilationDatabase: build/
+Completion:
+  AllScopes: Yes
+Diagnostics:
+  MissingIncludes: None
+  UnusedIncludes: None
