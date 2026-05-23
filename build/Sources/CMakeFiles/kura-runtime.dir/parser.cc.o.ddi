@@ -1,9 +1,0 @@
-{
-  "revision": 0,
-  "rules": [
-    {
-      "primary-output": "Sources/CMakeFiles/kura-runtime.dir/parser.cc.o"
-    }
-  ],
-  "version": 1
-}

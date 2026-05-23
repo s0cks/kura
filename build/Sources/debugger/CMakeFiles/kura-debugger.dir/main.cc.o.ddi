@@ -1,9 +1,0 @@
-{
-  "revision": 0,
-  "rules": [
-    {
-      "primary-output": "Sources/debugger/CMakeFiles/kura-debugger.dir/main.cc.o"
-    }
-  ],
-  "version": 1
-}
