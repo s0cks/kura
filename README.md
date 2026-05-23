@@ -38,16 +38,16 @@ Kura aims for the following principles:
 ```kui
 model = 
   {
-    count : Int
+    count: 0
   }
 
 update msg model =
   match msg
     Increment ->
-      { count = model.count + 1 }
+      { count: model.count + 1 }
 
     Decrement ->
-      { count = model.count - 1 }
+      { count: model.count - 1 }
 
 view model =
   column(align: center)[
