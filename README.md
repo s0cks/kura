@@ -12,13 +12,13 @@ expressive layout primitives and deterministic rendering.
 ```kui
 view Main =
   column [
-    text title "Kura",
+    text title "Kura"
 
-    button primary [
+    button[
       text "Start Game"
-    ],
+    ]
 
-    button secondary [
+    button[
       text "Settings"
     ]
   ]
@@ -28,7 +28,7 @@ view Main =
 
 ## Philosophy
 
-Kura builds itself around the following principles:
+Kura aims for the following principles:
 
 - **Purely functional** --- UI is a pure function of state.
 - **Engine-friendly** --- integrates cleanly into native game runtimes.
@@ -40,28 +40,27 @@ Kura builds itself around the following principles:
 ## Example
 
 ```kui
-model Counter = {
-  count : Int
-}
+model = 
+  {
+    count : Int
+  }
 
 update msg model =
-  case msg of
+  match msg
     Increment ->
-      { model with count = model.count + 1 }
+      { count = model.count + 1 }
 
     Decrement ->
-      { model with count = model.count - 1 }
+      { count = model.count - 1 }
 
 view model =
-  column center [
-    text xl (toString model.count),
-
-    row [
-      button onClick Decrement [
+  column(align: center)[
+    text(model.count)
+    row(align: center)[
+      button(on-click: Decrement)[
         text "-"
-      ],
-
-      button onClick Increment [
+      ]
+      button(on-click: Increment)[
         text "+"
       ]
     ]
