@@ -8,4 +8,4 @@
 #define KURA_VERSION "@@PROJECT_VERSION_MAJOR@@.@@PROJECT_VERSION_MINOR@@.@PROJECT_VERSION_PATCH@@"
 // clang-format on
 
-#endif // KURA_H
+#endif  // KURA_H

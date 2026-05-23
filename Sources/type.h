@@ -7,11 +7,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common.h"
+
 namespace kura {
-#define FOR_EACH_TYPE(V)                                                       \
-  V(Object)                                                                    \
-  V(Number)                                                                    \
-  V(String)                                                                    \
+#define FOR_EACH_TYPE(V) \
+  V(Object)              \
+  V(Number)              \
+  V(String)              \
   V(Bool)
 
 struct Value;
@@ -31,97 +33,95 @@ enum ValueType : uint8_t {
 struct Value {
   ValueType type;
 
-  constexpr Value(const ValueType t) : type(t) {}
-  constexpr Value(const Value &rhs) = default;
-  constexpr Value(Value &&rhs) = default;
+  constexpr Value(const ValueType t) :
+    type(t) {}
+  constexpr Value(const Value& rhs) = default;
+  constexpr Value(Value&& rhs) = default;
   ~Value() = default;
 
-  auto operator=(const Value &rhs) -> Value & = default;
-  auto operator=(Value &&rhs) -> Value & = default;
+  auto operator=(const Value& rhs) -> Value& = default;
+  auto operator=(Value&& rhs) -> Value& = default;
 };
 
 class ValueVisitor {
-public:
+ public:
   ValueVisitor() = default;
   virtual ~ValueVisitor() = default;
-  virtual auto Visit(ValuePtr &value) -> bool = 0;
+  virtual auto Visit(ValuePtr& value) -> bool = 0;
 };
 
 using PropertyMap = std::unordered_map<std::string, ValuePtr>;
 
 class PropertyKeyVisitor {
-public:
+ public:
   PropertyKeyVisitor() = default;
   virtual ~PropertyKeyVisitor() = default;
-  virtual auto Visit(const std::string &key) -> bool = 0;
+  virtual auto Visit(const std::string& key) -> bool = 0;
 };
 
 class PropertyVisitor {
-public:
+ public:
   PropertyVisitor() = default;
   virtual ~PropertyVisitor() = default;
-  virtual auto VisitProperty(const std::string &name, ValuePtr &value)
-      -> bool = 0;
+  virtual auto VisitProperty(const std::string& name, ValuePtr& value) -> bool = 0;
 };
 
 struct Object : Value {
   PropertyMap properties{};
 
-  constexpr Object() : Value(kObjectType) {}
-  Object(const PropertyMap props)
-      : Value(kObjectType), properties(std::move(props)) {}
-  constexpr Object(const Object &rhs) = default;
-  constexpr Object(Object &&rhs) = default;
+  constexpr Object() :
+    Value(kObjectType) {}
+  Object(const PropertyMap props) :
+    Value(kObjectType),
+    properties(std::move(props)) {}
   ~Object() = default;
 
   auto AddProperty(const std::string name, ValuePtr value) -> bool;
   auto GetProperty(const std::string name) const -> ValuePtr;
-  auto VisitAllPropertyKeys(PropertyKeyVisitor *vis) -> bool;
-  auto VisitAllPropertyValues(ValueVisitor *vis) -> bool;
-  auto VisitAllProperties(PropertyVisitor *vis) -> bool;
+  auto VisitAllPropertyKeys(PropertyKeyVisitor* vis) -> bool;
+  auto VisitAllPropertyValues(ValueVisitor* vis) -> bool;
+  auto VisitAllProperties(PropertyVisitor* vis) -> bool;
 
-  auto operator=(const Object &rhs) -> Object &;
-  auto operator=(Object &&rhs) -> Object &;
+  DEFINE_DEFAULT_COPYABLE_TYPE(Object);
 };
 
 struct Bool : Value {
   bool value = false;
 
-  constexpr Bool(const bool val = false) : Value(kBoolType), value(val) {}
-  constexpr Bool(const Bool &rhs) = default;
-  constexpr Bool(Bool &&rhs) = default;
+  constexpr Bool(const bool val = false) :
+    Value(kBoolType),
+    value(val) {}
   ~Bool() = default;
 
-  auto operator=(const Bool &rhs) -> Bool & = default;
-  auto operator=(Bool &&rhs) -> Bool & = default;
+  DEFINE_DEFAULT_COPYABLE_TYPE(Bool);
 };
 
 struct Number : Value {
   double value = 0.0;
 
-  constexpr Number(const double val) : Value(kNumberType), value(val) {}
-  constexpr Number(const Number &rhs) = default;
-  constexpr Number(Number &&rhs) = default;
+  constexpr Number(const double val) :
+    Value(kNumberType),
+    value(val) {}
   ~Number() = default;
 
-  auto operator=(const Number &rhs) -> Number & = default;
-  auto operator=(Number &&rhs) -> Number & = default;
+  DEFINE_DEFAULT_COPYABLE_TYPE(Number);
 };
 
 struct String : Value {
   std::string value{};
 
-  constexpr String() : Value(kStringType) {}
-  String(const std::string val) : Value(kStringType), value(val) {}
-  constexpr String(const std::string_view val)
-      : Value(kStringType), value(val) {}
-  constexpr String(const String &rhs) = default;
-  constexpr String(String &&rhs) = default;
+  constexpr String() :
+    Value(kStringType) {}
+  String(const std::string val) :
+    Value(kStringType),
+    value(val) {}
+  constexpr String(const std::string_view val) :
+    Value(kStringType),
+    value(val) {}
   ~String() = default;
 
-  auto operator=(const String &rhs) -> String & = default;
-  auto operator=(String &&rhs) -> String & = default;
+  DEFINE_DEFAULT_COPYABLE_TYPE(String);
 };
-} // namespace kura
+}  // namespace kura
 
-#endif // KURA_TYPE_H
+#endif  // KURA_TYPE_H

@@ -1,14 +1,18 @@
 #ifndef KURA_LEXER_H
 #define KURA_LEXER_H
 
-#include "source_pos.h"
-#include "token.h"
 #include <cstdio>
 #include <vector>
 
+#include "common.h"
+#include "source_pos.h"
+#include "token.h"
+
 namespace kura {
 class Lexer {
-private:
+  DEFINE_NON_COPYABLE_TYPE(Lexer);
+
+ private:
   Token previous_token_;
   Token current_token_;
   Token peek_token_;
@@ -47,9 +51,9 @@ private:
       }
 
       switch (PeekChar()) {
-      case '\0':
-      case EOF:
-        return EOF;
+        case '\0':
+        case EOF:
+          return EOF;
       }
     } while (true);
   }
@@ -60,17 +64,17 @@ private:
       return EOF;
     const auto next = data_[idx];
     switch (next) {
-    case '\n':
-      pos_.row += 1;
-      pos_.col = 1;
-      break;
-    default:
-      pos_.col += 1;
+      case '\n':
+        pos_.row += 1;
+        pos_.col = 1;
+        break;
+      default:
+        pos_.col += 1;
     }
     return static_cast<char>(next);
   }
 
-  inline auto InvalidToken(const char token) -> const Token & {
+  inline auto InvalidToken(const char token) -> const Token& {
     return current_token_ = {
                .kind = Token::kInvalidToken,
                .start = pos_,
@@ -78,8 +82,7 @@ private:
            };
   }
 
-  inline auto NextToken(const Token::Kind kind, const char token)
-      -> const Token & {
+  inline auto NextToken(const Token::Kind kind, const char token) -> const Token& {
     return current_token_ = {
                .kind = kind,
                .start = pos_,
@@ -87,8 +90,7 @@ private:
            };
   }
 
-  inline auto NextToken(const Token::Kind kind, const SourcePos start,
-                        const SourcePos end) -> const Token & {
+  inline auto NextToken(const Token::Kind kind, const SourcePos start, const SourcePos end) -> const Token& {
     return current_token_ = {
                .kind = kind,
                .start = std::move(start),
@@ -96,7 +98,7 @@ private:
            };
   }
 
-public:
+ public:
   Lexer() = default;
   ~Lexer() = default;
 
@@ -105,9 +107,9 @@ public:
     return idx < data_.size();
   }
 
-  auto Next() -> const Token &;
+  auto Next() -> const Token&;
 };
 
-} // namespace kura
+}  // namespace kura
 
-#endif // KURA_LEXER_H
+#endif  // KURA_LEXER_H

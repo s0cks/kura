@@ -1,30 +1,35 @@
 #ifndef KURA_PARSER_H
 #define KURA_PARSER_H
 
-#include "lexer.h"
 #include <cstdint>
 #include <ostream>
 #include <stdarg.h>
 #include <string>
+
+#include "common.h"
+#include "lexer.h"
 
 namespace kura {
 struct ParseResult {
   bool success = false;
   std::string message{};
 
-  friend auto operator<<(std::ostream &stream, const ParseResult &rhs)
-      -> std::ostream & {
+  friend auto operator<<(std::ostream& stream, const ParseResult& rhs) -> std::ostream& {
     if (rhs)
       return stream << "Success";
     return stream << rhs.message;
   }
 
-  operator bool() const { return success; }
+  operator bool() const {
+    return success;
+  }
 };
 
 class Parser {
-private:
-  static inline auto Failed(const char *fmt, ...) -> ParseResult {
+  DEFINE_NON_COPYABLE_TYPE(Parser);
+
+ private:
+  static inline auto Failed(const char* fmt, ...) -> ParseResult {
     va_list args{};
     va_start(args, fmt);
 
@@ -47,24 +52,27 @@ private:
     return {.success = false, .message = result};
   }
 
-private:
+ private:
   Lexer lexer_{};
 
-  auto lexer() -> Lexer & { return lexer_; }
-  auto lexer() const -> const Lexer & { return lexer_; }
+  auto lexer() -> Lexer& {
+    return lexer_;
+  }
 
-public:
+  auto lexer() const -> const Lexer& {
+    return lexer_;
+  }
+
+ public:
   Parser() = default;
-  Parser(const Parser &rhs) = delete;
-  Parser(Parser &&rhs) = delete;
   ~Parser() = default;
 
-  auto operator=(Parser &&rhs) = delete;
-  auto operator=(const Parser &rhs) = delete;
+  auto operator=(Parser&& rhs) = delete;
+  auto operator=(const Parser& rhs) = delete;
 
-public:
+ public:
   static void Init();
 };
-} // namespace kura
+}  // namespace kura
 
-#endif // KURA_PARSER_H
+#endif  // KURA_PARSER_H

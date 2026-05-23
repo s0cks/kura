@@ -1,8 +1,16 @@
 #ifndef KURA_COMPILER_H
 #define KURA_COMPILER_H
 
-namespace kura {
-class Compiler {};
-} // namespace kura
+#include "common.h"
 
-#endif // KURA_COMPILER_H
+namespace kura {
+class Compiler {
+  DEFINE_NON_COPYABLE_TYPE(Compiler);
+
+ public:
+  Compiler() = default;
+  ~Compiler() = default;
+};
+}  // namespace kura
+
+#endif  // KURA_COMPILER_H
