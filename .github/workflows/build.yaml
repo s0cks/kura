@@ -12,7 +12,7 @@ jobs:
         id: runvcpkg
         with:
           vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          vcpkgGitCommitId: '2026.04.12'
+          vcpkgGitCommitId: 'aa40adda5352e87655b8583cfb2451d5e9e276fd'
         env:
           # Instructs vcpkg to use the exported GitHub Actions cache variables
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
