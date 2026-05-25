@@ -10,10 +10,7 @@ jobs:
       - name: Install llvm
         run: |
           sudo apt-get update
-          wget https://llvm.org
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y llvm-22-dev
+          bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)" -- 22
       - name: Configure CMake
         run: |
           cmake --preset=clang-debug .
