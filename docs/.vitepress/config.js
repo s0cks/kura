@@ -14,7 +14,7 @@ export default defineConfig({
       scanStartPath: "posts",
       resolvePath: "/posts/",
       useTitleFromFileHeading: true,
-      convertEndingToHTML = false,
+      convertEndingToHTML: false,
     }),
     socialLinks: [
       { icon: 'github', link: 'https://github.com/s0cks/kura' }
