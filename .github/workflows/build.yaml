@@ -10,7 +10,12 @@ jobs:
       - name: Install llvm
         run: |
           sudo apt-get update
-          bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)" -- 22
+          # Download and run the official LLVM installation script for version 22
+          wget https://llvm.org
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          # Install extra development packages if needed (optional)
+          sudo apt-get install -y libclang-22-dev llvm-22-dev
       - name: Configure CMake
         run: |
           cmake --preset=clang-debug .
