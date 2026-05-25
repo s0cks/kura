@@ -6,8 +6,7 @@
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 #include <stdlib.h>
-#include <yoga/YGNode.h>
-#include <yoga/YGNodeStyle.h>
+#include <yoga/Yoga.h>
 
 #include "dom.h"
 #include "dom_compiler.h"

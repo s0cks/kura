@@ -7,7 +7,7 @@
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 #include <print>
-#include <yoga/YGNode.h>
+#include <yoga/Yoga.h>
 
 namespace kura::dom {
 static llvm::StructType* BoxClassType = nullptr;

@@ -6,7 +6,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <yoga/YGNode.h>
 #include <yoga/Yoga.h>
 
 #include "common.h"
