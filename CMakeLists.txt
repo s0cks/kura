@@ -11,6 +11,4 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 
-# include(Antlr4)
-
 add_subdirectory(Sources/)

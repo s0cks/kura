@@ -7,4 +7,8 @@ namespace kura::expr {
   }
 FOR_EACH_EXPR(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
+
+auto Expr::VisitChildren(ExprVisitor* vis) -> bool {
+  return true;
+}
 }  // namespace kura::expr
