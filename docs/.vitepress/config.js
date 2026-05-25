@@ -1,31 +1,23 @@
 import { defineConfig } from 'vitepress'
+import { generateSidebar } from 'vitepress-sidebar'
 
 export default defineConfig({
   base: '/kura/', 
-
-  // 2. Global Site SEO Meta
   title: 'Kura',
   description: 'A blog for Kura',
-
-  // 3. Default Theme Customizations
   themeConfig: {
-    // Top Right Navigation Links
     nav: [
       { text: 'Home', link: '/' },
-      { text: 'Posts', link: '/posts/hello-world' }
     ],
-
-    // Sidebar Links
-    sidebar: [
-      {
-        text: 'Recent Posts',
-        items: []
-      }
-    ],
-
-    // Social Media Quick-links
+    sidebar: generateSidebar({
+      documentRootPath: "docs",
+      scanStartPath: "posts",
+      resolvePath: "/posts/",
+      useTitleFromFileHeading: true,
+      convertEndingToHTML = false,
+    }),
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/s0cks' }
+      { icon: 'github', link: 'https://github.com/s0cks/kura' }
     ]
   }
 })
