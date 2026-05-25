@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: friendlyanon/setup-vcpkg@v1
+        with: {committish: 63aa65e65b9d2c08772ea15d25fb8fdb0d32e557}
       - name: Install llvm
         run: |
           sudo apt-get update
