@@ -1,0 +1,12 @@
+find_program(ANTLR NAMES "antlr4")
+if(ANTLR)
+  execute_process(
+    COMMAND ${ANTLR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE ANTLR_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  string(REGEX MATCH "[0-9]+\.[0-9]+\.[0-9]+" ANTLR_VERSION "${ANTLR_VERSION}")
+
+  message(STATUS "found antlr4 v${ANTLR_VERSION}: ${ANTLR}")
+endif()

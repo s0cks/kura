@@ -1,0 +1,21 @@
+name: Build Kura
+on:
+  push:
+    branches: [main]
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install llvm
+        run: |
+          sudo apt-get update
+          wget https://llvm.org
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y llvm-22-dev
+      - name: Configure CMake
+        run: |
+          cmake --preset=clang-debug .
+      - name: Build kura
+        run: cmake --build build

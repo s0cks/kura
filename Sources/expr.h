@@ -9,144 +9,95 @@
 #include "type.h"
 
 namespace kura::expr {
-#define FOR_EACH_EXPR_TYPE(V) \
-  V(Binding)                  \
-  V(For)                      \
-  V(If)                       \
-  V(Invoke)                   \
-  V(Literal)                  \
-  V(BinaryOp)                 \
-  V(UnaryOp)                  \
-  V(Match)                    \
-  V(SpreadArg)                \
-  V(NamedArg)
+#define FOR_EACH_EXPR(V) \
+  V(Literal)             \
+  V(UnaryOp)             \
+  V(BinaryOp)            \
+  V(Match)
 
-struct Expr;
+class Expr;
 // clang-format off
 #define DECLARE_EXPR(Name) \
-  struct Name##Expr;
-FOR_EACH_EXPR_TYPE(DECLARE_EXPR)
+  class Name##Expr;
+FOR_EACH_EXPR(DECLARE_EXPR)
 #undef DECLARE_EXPR
-
-enum ExprType : uint8_t {
-  kInvalidExpr = 0,
-#define DEFINE_TYPE(Name) k##Name##Expr,
-  FOR_EACH_EXPR_TYPE(DEFINE_TYPE)
-#undef DEFINE_TYPE
-  kTotalNumberOfExprNodes,
-};
 // clang-format on
-using ExprPtr = std::shared_ptr<Expr>;
-using ExprList = std::vector<ExprPtr>;
 
-struct Expr {
-  ExprType type;
+class ExprVisitor {
+ public:
+  ExprVisitor() = default;
+  virtual ~ExprVisitor() = default;
 
-  constexpr Expr(const ExprType t) :
-    type(t) {}
-  constexpr Expr(const Expr& rhs) = default;
-  constexpr Expr(Expr&& rhs) = default;
-  ~Expr() = default;
-
-  auto operator=(const Expr& rhs) -> Expr& = default;
-  auto operator=(Expr&& rhs) -> Expr& = default;
+  // clang-format off
+#define DEFINE_VISIT(Name) \
+  virtual auto Visit##Name(Name##Expr*) -> bool = 0;
+  FOR_EACH_EXPR(DEFINE_VISIT)
+#undef DEFINE_VISIT
+  // clang-format on
 };
 
-struct BindingExpr : Expr {
-  constexpr BindingExpr() :
-    Expr(kBindingExpr) {}
-  ~BindingExpr() = default;
+#define DECLARE_EXPR_TYPE(Name)                       \
+ public:                                              \
+  auto GetName() const -> std::string_view override { \
+    return #Name;                                     \
+  }                                                   \
+  auto Accept(ExprVisitor* vis) -> bool override;     \
+  auto As##Name() -> Name##Expr* override {           \
+    return this;                                      \
+  }
 
-  DEFINE_DEFAULT_COPYABLE_TYPE(BindingExpr);
+class Expr {
+ protected:
+  Expr() = default;
+
+ public:
+  virtual ~Expr() = default;
+
+  virtual auto GetName() const -> std::string_view = 0;
+  virtual auto Accept(ExprVisitor* vis) -> bool = 0;
+  virtual auto VisitChildren(ExprVisitor* vis) -> bool;
+#define DEFINE_TYPE_CHECK(Name)            \
+  virtual auto As##Name() -> Name##Expr* { \
+    return nullptr;                        \
+  }                                        \
+  auto Is##Name() -> bool {                \
+    return As##Name() != nullptr;          \
+  }
+  FOR_EACH_EXPR(DEFINE_TYPE_CHECK)
+#undef DEFINE_TYPE_CHECK
 };
 
-struct ForExpr : Expr {};
+class LiteralExpr : public Expr {
+ public:
+  explicit LiteralExpr() :
+    Expr() {}
+  ~LiteralExpr() override = default;
 
-struct IfExpr : Expr {};
-
-struct MatchExpr : Expr {};
-
-struct UnaryOpExpr : Expr {
-  ExprPtr value;
-
-  constexpr UnaryOpExpr() :
-    Expr(kUnaryOpExpr) {}
-  constexpr UnaryOpExpr(const ExprPtr v) :
-    Expr(kUnaryOpExpr),
-    value(std::move(v)) {}
-  ~UnaryOpExpr() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(UnaryOpExpr);
+  DECLARE_EXPR_TYPE(Literal);
 };
 
-struct BinaryOpExpr : Expr {
-  ExprPtr left{};
-  ExprPtr right{};
+class UnaryOpExpr : public Expr {
+ public:
+  UnaryOpExpr() = default;
+  ~UnaryOpExpr() override = default;
 
-  constexpr BinaryOpExpr() :
-    Expr(kBinaryOpExpr) {}
-  constexpr BinaryOpExpr(const ExprPtr l, const ExprPtr r) :
-    Expr(kBinaryOpExpr),
-    left(std::move(l)),
-    right(std::move(r)) {}
-  ~BinaryOpExpr() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(BinaryOpExpr);
+  DECLARE_EXPR_TYPE(UnaryOp);
 };
 
-struct InvokeExpr : Expr {
-  ExprList args{};
+class BinaryOpExpr : public Expr {
+ public:
+  BinaryOpExpr() = default;
+  ~BinaryOpExpr() override = default;
 
-  constexpr InvokeExpr() :
-    Expr(kInvokeExpr) {}
-  InvokeExpr(const ExprList a) :
-    Expr(kInvokeExpr),
-    args(std::move(a)) {}
-  ~InvokeExpr() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(InvokeExpr);
+  DECLARE_EXPR_TYPE(BinaryOp);
 };
 
-struct LiteralExpr : Expr {
-  kura::Value* value;
+class MatchExpr : public Expr {
+ public:
+  MatchExpr() = default;
+  ~MatchExpr() override = default;
 
-  constexpr LiteralExpr(kura::Value* v) :
-    Expr(kLiteralExpr),
-    value(v) {}
-  constexpr LiteralExpr(const LiteralExpr& rhs) = default;
-  constexpr LiteralExpr(LiteralExpr&& rhs) = default;
-  ~LiteralExpr() = default;
-
-  auto operator=(const LiteralExpr& rhs) -> LiteralExpr& = default;
-  auto operator=(LiteralExpr&& rhs) -> LiteralExpr& = default;
-};
-
-struct SpreadArgExpr : Expr {
-  ExprPtr value{};
-
-  constexpr SpreadArgExpr() :
-    Expr(kSpreadArgExpr) {}
-  constexpr SpreadArgExpr(const ExprPtr v) :
-    Expr(kSpreadArgExpr),
-    value(std::move(v)) {}
-  ~SpreadArgExpr() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(SpreadArgExpr);
-};
-
-struct NamedArgExpr : Expr {
-  std::string name;
-  ExprPtr value{};
-
-  constexpr NamedArgExpr() :
-    Expr(kNamedArgExpr) {}
-  constexpr NamedArgExpr(const std::string n, const ExprPtr v) :
-    Expr(kNamedArgExpr),
-    name(std::move(n)),
-    value(std::move(v)) {}
-  ~NamedArgExpr() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(NamedArgExpr);
+  DECLARE_EXPR_TYPE(Match);
 };
 }  // namespace kura::expr
 

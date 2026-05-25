@@ -67,9 +67,6 @@ class Parser {
   Parser() = default;
   ~Parser() = default;
 
-  auto operator=(Parser&& rhs) = delete;
-  auto operator=(const Parser& rhs) = delete;
-
  public:
   static void Init();
 };
