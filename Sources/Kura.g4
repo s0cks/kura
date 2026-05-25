@@ -1,13 +1,51 @@
 grammar Kura;
 
-kura
+screen
   : funcDef*
   ;
 
 expression
   : literal
+  | functionCall
   | expression op=('+' | '-' | '*' | '/' | '%' | '&' | '^') expression
   | op=('+' | '-') expression
+  | markup
+  | expression '.' IDENTIFIER
+  | expression '?.' IDENTIFIER
+  | IDENTIFIER
+  | matchExpr
+  ;
+
+expressionList
+  : expression expression*
+  ;
+
+matchExpr
+  : 'match' expression caseExpr* defaultExpr?
+  ;
+
+caseExpr
+  : (literal | IDENTIFIER) '->' expressionList
+  ;
+
+defaultExpr
+  : '_' '->' expressionList
+  ;
+
+markup
+  : '#' IDENTIFIER '(' arguments? ')' ('[' markupList? ']')?
+  ;
+
+markupList
+  : markup+
+  ;
+
+functionCall
+  : IDENTIFIER '(' arguments? ')'
+  ;
+
+arguments
+  : expression (',' expression)*
   ;
 
 funcDef
@@ -19,20 +57,22 @@ funcArgsList
   ;
 
 listDef
-  : '(' literal (',' literal)* ','? ')'
+  : '(' expression (',' expression)* ','? ')'
   ;
 
 literal
   : STRING
   | NIL
+  | NONE
+  | NUMBER
   | bool
   | recordDef
   | listDef
+  | MEASUREMENT
   ;
 
 recordDef
-  : '{' propertyList '}'
-  | '{' '}'
+  : '{' propertyList? '}'
   ;
 
 propertyList
@@ -48,22 +88,52 @@ bool
   | FALSE
   ;
 
+MEASUREMENT
+  : WholeNumber 'px'
+  | (WholeNumber | Decimal) 'fr'
+  ;
 
-NIL   : 'nil' ;
-TRUE  : 'true' ;
-FALSE : 'false' ;
+fragment WholeNumber
+  : '0'
+  | [1-9] [0-9]*
+  ;
+
+fragment Decimal
+  : [0-9]+ '.' [0-9]+
+  ;
+
+NUMBER
+  : WholeNumber
+  | Decimal
+  ;
+
+NONE
+  : 'none'
+  ;
+
+NIL
+  : 'nil'
+  ;
+
+TRUE
+  : 'true'
+  ;
+
+FALSE
+  : 'false'
+  ;
 
 STRING
   : '"' StringChar* '"'
   | '\'' StringChar* '\''
   ;
 
-fragment StringChar
-  : ~[\\\r\n]
-  ;
-
 IDENTIFIER
   : NonDigit (NonDigit | Digit)*
+  ;
+
+fragment StringChar
+  : ~[\\\r\n]
   ;
 
 fragment NonDigit
@@ -75,7 +145,7 @@ fragment Digit
   ;
 
 LineComment
-  : '#' ~[\r\n]* -> channel(HIDDEN)
+  : '//' ~[\r\n]* -> channel(HIDDEN)
   ;
 
 Newline

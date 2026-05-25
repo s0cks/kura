@@ -10,6 +10,10 @@
 #include "common.h"
 
 namespace kura {
+namespace expr {
+class Expr;
+}
+
 #define FOR_EACH_TYPE(V) \
   V(Object)              \
   V(Number)              \
@@ -121,6 +125,49 @@ struct String : Value {
   ~String() = default;
 
   DEFINE_DEFAULT_COPYABLE_TYPE(String);
+};
+
+class Function;
+class Module {
+ private:
+  std::string name_;
+  std::unordered_map<std::string, Function*> functions_{};
+
+ public:
+  explicit Module(const std::string name) :
+    name_(std::move(name)) {}
+  ~Module() = default;
+
+  auto GetName() const -> const std::string& {
+    return name_;
+  }
+};
+
+class Function {
+ private:
+  std::string name_;
+  expr::Expr* body_ = nullptr;
+
+ public:
+  explicit Function(const std::string& name) :
+    name_(std::move(name)) {}
+  ~Function() = default;
+
+  auto GetName() const -> const std::string& {
+    return name_;
+  }
+
+  void SetBody(expr::Expr* rhs) {
+    body_ = rhs;
+  }
+
+  auto GetBody() const -> expr::Expr* {
+    return body_;
+  }
+
+  inline auto HasBody() const -> bool {
+    return GetBody() != nullptr;
+  }
 };
 }  // namespace kura
 

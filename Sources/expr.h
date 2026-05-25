@@ -11,8 +11,8 @@
 namespace kura::expr {
 #define FOR_EACH_EXPR(V) \
   V(Literal)             \
-  V(UnaryOp)             \
-  V(BinaryOp)            \
+  V(Unary)               \
+  V(Binary)              \
   V(Match)
 
 class Expr;
@@ -76,20 +76,114 @@ class LiteralExpr : public Expr {
   DECLARE_EXPR_TYPE(Literal);
 };
 
-class UnaryOpExpr : public Expr {
- public:
-  UnaryOpExpr() = default;
-  ~UnaryOpExpr() override = default;
+#define FOR_EACH_UNARY_OP(V) V(Negate)
 
-  DECLARE_EXPR_TYPE(UnaryOp);
+class UnaryExpr : public Expr {
+ public:
+  enum UnaryOp {
+#define DEFINE_OP(Name) k##Name,
+    FOR_EACH_UNARY_OP(DEFINE_OP)
+#undef DEFINE_OP
+  };
+
+ private:
+  UnaryOp op_;
+  Expr* value_;
+
+ public:
+  UnaryExpr(const UnaryOp op, Expr* value) :
+    op_(op),
+    value_(value) {}
+  ~UnaryExpr() override = default;
+
+  auto GetOp() const -> UnaryOp {
+    return op_;
+  }
+
+#define DEFINE_OP_CHECK(Name)            \
+  inline auto Is##Name() const -> bool { \
+    return GetOp() == UnaryOp::k##Name;  \
+  }
+  FOR_EACH_UNARY_OP(DEFINE_OP_CHECK)
+#undef DEFINE_OP_CHECK
+
+  auto GetValue() const -> Expr* {
+    return value_;
+  }
+
+  DECLARE_EXPR_TYPE(Unary);
+
+ public:
+  static inline auto New(const UnaryOp op, Expr* value) -> Expr* {
+    return new UnaryExpr(op, value);
+  }
+
+#define DEFINE_NEW(Name)                               \
+  static inline auto New##Name(Expr* value) -> Expr* { \
+    return New(UnaryOp::k##Name, value);               \
+  }
+  FOR_EACH_UNARY_OP(DEFINE_NEW)
+#undef DEFINE_NEW
 };
 
-class BinaryOpExpr : public Expr {
- public:
-  BinaryOpExpr() = default;
-  ~BinaryOpExpr() override = default;
+#define FOR_EACH_BINARY_OP(V) \
+  V(Add)                      \
+  V(Subtract)                 \
+  V(Multiply)                 \
+  V(Divide)
 
-  DECLARE_EXPR_TYPE(BinaryOp);
+class BinaryExpr : public Expr {
+ public:
+  enum BinaryOp {
+#define DEFINE_BINARY_OP(Name) k##Name,
+    FOR_EACH_BINARY_OP(DEFINE_BINARY_OP)
+#undef DEFINE_BINARY_OP
+  };
+
+ private:
+  BinaryOp op_;
+  Expr* left_;
+  Expr* right_;
+
+ public:
+  BinaryExpr(const BinaryOp op, Expr* left, Expr* right) :
+    op_(op),
+    left_(left),
+    right_(right) {}
+  ~BinaryExpr() override = default;
+
+  auto GetOp() const -> BinaryOp {
+    return op_;
+  }
+
+#define DEFINE_OP_CHECK(Name)            \
+  inline auto Is##Name() const -> bool { \
+    return GetOp() != BinaryOp::k##Name; \
+  }
+  FOR_EACH_BINARY_OP(DEFINE_OP_CHECK)
+#undef DEFINE_OP_CHECK
+
+  auto GetLeft() const -> Expr* {
+    return left_;
+  }
+
+  auto GetRight() const -> Expr* {
+    return right_;
+  }
+
+  DECLARE_EXPR_TYPE(Binary);
+
+ public:
+  static inline auto New(const BinaryOp op, Expr* lhs, Expr* rhs) -> Expr* {
+    return new BinaryExpr(op, lhs, rhs);
+  }
+
+#define DEFINE_NEW(Name)                                        \
+  static inline auto New##Name(Expr* lhs, Expr* rhs) -> Expr* { \
+    return New(BinaryOp::k##Name, lhs, rhs);                    \
+  }
+  FOR_EACH_BINARY_OP(DEFINE_NEW)
+#undef DEFINE_NEW
 };
 
 class MatchExpr : public Expr {
