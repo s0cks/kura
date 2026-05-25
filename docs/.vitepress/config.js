@@ -12,9 +12,10 @@ export default defineConfig({
     sidebar: generateSidebar({
       documentRootPath: "docs",
       scanStartPath: "posts",
-      resolvePath: "/posts/",
+      resolvePath: "/kura/posts/",
       useTitleFromFileHeading: true,
       convertEndingToHTML: false,
+      basePath: '/kura/'
     }),
     socialLinks: [
       { icon: 'github', link: 'https://github.com/s0cks/kura' }
