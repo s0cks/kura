@@ -1,7 +1,11 @@
 name: Build Kura
 on:
   push:
-    branches: [main]
+    tags:
+      - "v*"
+      - "release/v*"
+permissions:
+  contents: write
 jobs:
   build-linux:
     runs-on: ubuntu-latest
