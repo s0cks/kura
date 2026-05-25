@@ -7,8 +7,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: friendlyanon/setup-vcpkg@v1
-        with: {committish: 63aa65e65b9d2c08772ea15d25fb8fdb0d32e557}
+      - name: Run vcpkg Setup
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgGitCommitId: '2026.04.12'
+        env:
+          # Instructs vcpkg to use the exported GitHub Actions cache variables
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
       - name: Install llvm
         run: |
           sudo apt-get update
