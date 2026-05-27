@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 import { generateSidebar } from 'vitepress-sidebar'
 
 export default defineConfig({
-  base: '/kura/', 
+  base: '/', 
   title: 'Kura',
   description: 'A blog for Kura',
   themeConfig: {
@@ -14,6 +14,9 @@ export default defineConfig({
       resolvePath: "/posts/", 
       useTitleFromFileHeading: true,
       convertEndingToHTML: false,
+      useTitleFromFrontmatter: true,
+      collapsed: false,
+      capitalizeEachWords: true,
       basePath: '/posts/',
     }),
     socialLinks: [

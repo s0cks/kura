@@ -53,7 +53,7 @@ const toggleTag = (tag) => {
     <!-- Dynamic Post List -->
     <div class="posts-list">
       <article v-for="post in filteredPosts" :key="post.url" class="post-card">
-        <h2><a :href="'/kura' + post.url">{{ post.title }}</a></h2>
+        <h2><a :href="post.url">{{ post.title }}</a></h2>
         <p class="post-meta">{{ formatDate(post.date) }}</p>
         <p class="post-desc">{{ post.description }}</p>
         <div class="post-tags">
