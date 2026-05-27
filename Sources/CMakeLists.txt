@@ -19,7 +19,9 @@ llvm_map_components_to_libnames(llvm_libs
 find_package(yoga CONFIG REQUIRED)
 
 set(GRAMMAR_NAME "Kura")
-set(GRAMMAR_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}.g4")
+list(APPEND GRAMMAR_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}Parser.g4"
+  "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}Lexer.g4")
 
 set(GEN_SOURCES
   "${CMAKE_CURRENT_BINARY_DIR}/${GRAMMAR_NAME}Lexer.cpp"
@@ -28,8 +30,8 @@ set(GEN_SOURCES
 
 add_custom_command(
   OUTPUT ${GEN_SOURCES}
-  COMMAND ${ANTLR} ${ANTLR_ARGS} ${GRAMMAR_FILE}
-  DEPENDS ${GRAMMAR_FILE}
+  COMMAND ${ANTLR} ${ANTLR_ARGS} ${GRAMMAR_SOURCES}
+  DEPENDS ${GRAMMAR_SOURCES}
   COMMENT "Generating c++ parser from ${GRAMMAR_NAME}.g4"
   VERBATIM
 )
@@ -39,6 +41,7 @@ add_library(kura-runtime SHARED
   dom.cc
   dom_compiler.cc
   expr.cc
+  expr_builder.cc
   layout.cc
   lexer.cc
   parser.cc

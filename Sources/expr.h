@@ -68,10 +68,18 @@ class Expr {
 };
 
 class LiteralExpr : public Expr {
+ private:
+  Value* value_;
+
  public:
-  explicit LiteralExpr() :
-    Expr() {}
+  explicit LiteralExpr(Value* value) :
+    Expr(),
+    value_(value) {}
   ~LiteralExpr() override = default;
+
+  auto GetValue() const -> Value* {
+    return value_;
+  }
 
   DECLARE_EXPR_TYPE(Literal);
 };

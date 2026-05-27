@@ -1,16 +1,19 @@
-init =
+type Message = Tick | Hover
+
+fn init() =>
   {
     count: 0,
   }
 
-view msg state =
+fn view(msg, state) =>
   #text(state.count)
 
-update msg state =
-  match msg
-    Increment ->
+fn update(msg, state) =>
+  match msg {
+    Increment =>
       { count: state.count + 1 }
-    Decrement ->
+    Decrement =>
       { count: state.count - 1 }
-    _ ->
+    _ =>
       { count: 0 }
+  }

@@ -18,6 +18,7 @@
 #include "KuraParser.h"
 #include "dom.h"
 #include "dom_compiler.h"
+#include "expr_builder.h"
 
 using namespace kura;
 
@@ -42,10 +43,25 @@ auto main(int argc, char** argv) -> int {
   KuraLexer lexer(&stream);
   antlr4::CommonTokenStream tokens(&lexer);
   KuraParser parser(&tokens);
-  auto* tree = parser.kura();
+  auto* tree = parser.source();
 
   std::cout << "--- Parse Tree ---" << std::endl;
   std::cout << tree->toStringTree(&parser) << std::endl;
+  std::cout << std::endl;
+
+  expr::ExprBuilder expr_builder{};
+  const auto m = std::any_cast<Module*>(expr_builder.visit(tree));
+  if (!m)
+    return EXIT_FAILURE;
+  std::cout << "Module: " << m->GetName() << std::endl;
+  const auto vis = [](Function* func) {
+    std::cout << " - " << func->GetName() << std::endl;
+    return true;
+  };
+  if (!m->VisitFunctions(vis)) {
+    std::cerr << "failed to visit functions" << std::endl;
+    return EXIT_FAILURE;
+  }
 
   // llvm::InitLLVM x(argc, argv);
   // llvm::InitializeNativeTarget();

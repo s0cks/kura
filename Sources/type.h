@@ -2,6 +2,7 @@
 #define KURA_TYPE_H
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
@@ -12,7 +13,8 @@
 namespace kura {
 namespace expr {
 class Expr;
-}
+class ExprBuilder;
+}  // namespace expr
 
 #define FOR_EACH_TYPE(V) \
   V(Object)              \
@@ -128,10 +130,21 @@ struct String : Value {
 };
 
 class Function;
+class FunctionVisitor {
+ public:
+  FunctionVisitor() = default;
+  virtual ~FunctionVisitor() = default;
+  virtual auto VisitFunction(Function* func) -> bool = 0;
+};
+
 class Module {
+  friend class expr::ExprBuilder;
+
  private:
   std::string name_;
   std::unordered_map<std::string, Function*> functions_{};
+
+  void AddFunction(Function* func);
 
  public:
   explicit Module(const std::string name) :
@@ -141,12 +154,26 @@ class Module {
   auto GetName() const -> const std::string& {
     return name_;
   }
+
+  auto VisitFunctions(FunctionVisitor* vis) -> bool;
+  auto VisitFunctions(const std::function<bool(Function*)>& vis) -> bool;
+
+ public:
+  static inline auto New(const std::string name) -> Module* {
+    return new Module(std::move(name));
+  }
 };
 
 class Function {
+  friend class expr::ExprBuilder;
+
  private:
   std::string name_;
   expr::Expr* body_ = nullptr;
+
+  void SetBody(expr::Expr* rhs) {
+    body_ = rhs;
+  }
 
  public:
   explicit Function(const std::string& name) :
@@ -157,16 +184,17 @@ class Function {
     return name_;
   }
 
-  void SetBody(expr::Expr* rhs) {
-    body_ = rhs;
-  }
-
   auto GetBody() const -> expr::Expr* {
     return body_;
   }
 
   inline auto HasBody() const -> bool {
     return GetBody() != nullptr;
+  }
+
+ public:
+  static inline auto New(const std::string name) -> Function* {
+    return new Function(std::move(name));
   }
 };
 }  // namespace kura
