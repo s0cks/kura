@@ -69,15 +69,15 @@ class Expr {
 
 class LiteralExpr : public Expr {
  private:
-  Value* value_;
+  Type* value_;
 
  public:
-  explicit LiteralExpr(Value* value) :
+  explicit LiteralExpr(Type* value) :
     Expr(),
     value_(value) {}
   ~LiteralExpr() override = default;
 
-  auto GetValue() const -> Value* {
+  auto GetValue() const -> Type* {
     return value_;
   }
 

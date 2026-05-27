@@ -18,7 +18,11 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitImportDecl(KuraParser::ImportDeclContext* ctx) -> std::any override;
   auto visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any override;
   auto visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any override;
+  auto visitLiteral(KuraParser::LiteralContext* ctx) -> std::any override;
   auto visitIfExpr(KuraParser::IfExprContext* ctx) -> std::any override;
+  // ╭───────────────────╮
+  // │ Match Expressions │
+  // ╰───────────────────╯
   auto visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any override;
   auto visitMatchArm(KuraParser::MatchArmContext* ctx) -> std::any override;
   auto visitPattern(KuraParser::PatternContext* ctx) -> std::any override;
@@ -31,7 +35,6 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitPatternField(KuraParser::PatternFieldContext* ctx) -> std::any override;
   auto visitListPattern(KuraParser::ListPatternContext* ctx) -> std::any override;
   auto visitPatternList(KuraParser::PatternListContext* ctx) -> std::any override;
-  auto visitLiteral(KuraParser::LiteralContext* ctx) -> std::any override;
 };
 }  // namespace kura::expr
 

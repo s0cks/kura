@@ -1,56 +1,64 @@
 #include "type.h"
 
+#include <sstream>
+
 namespace kura {
-auto Object::VisitAllProperties(PropertyVisitor* vis) -> bool {
-  for (auto& prop : properties) {
-    if (!vis->VisitProperty(prop.first, prop.second))
-      return false;
-  }
-  return true;
+auto Bool::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Bool(";
+  ss << "value=" << (GetValue() ? "true" : "false");
+  ss << ")";
+  return ss.str();
 }
 
-auto Object::VisitAllPropertyValues(ValueVisitor* vis) -> bool {
-  for (auto& prop : properties) {
-    if (!vis->Visit(prop.second))
-      return false;
-  }
-  return true;
+auto Number::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Number(";
+  ss << "value=" << GetValue();
+  ss << ")";
+  return ss.str();
 }
 
-auto Object::VisitAllPropertyKeys(PropertyKeyVisitor* vis) -> bool {
-  for (auto& prop : properties) {
-    if (!vis->Visit(prop.first))
-      return false;
-  }
-  return true;
+auto String::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "String(";
+  ss << "value=" << GetValue();
+  ss << ")";
+  return ss.str();
 }
 
-auto Object::AddProperty(const std::string name, ValuePtr value) -> bool {
-  return properties.insert({name, value}).second;
+auto Seq::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Seq(";
+  ss << ")";
+  return ss.str();
 }
 
-auto Object::GetProperty(const std::string name) const -> ValuePtr {
-  const auto pos = properties.find(name);
-  return pos != std::end(properties) ? pos->second : nullptr;
+auto Record::ToString() const -> std::string {
+  return {};
 }
 
-void Module::AddFunction(Function* func) {
-  functions_.insert({func->GetName(), func});
+auto UnionType::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Union(";
+  ss << "name=" << GetName();
+  ss << ")";
+  return ss.str();
 }
 
-auto Module::VisitFunctions(FunctionVisitor* vis) -> bool {
-  for (const auto& func : functions_) {
-    if (!vis->VisitFunction(func.second))
-      return false;
-  }
-  return true;
+auto Function::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Function(";
+  ss << "name=" << GetName();
+  ss << ")";
+  return ss.str();
 }
 
-auto Module::VisitFunctions(const std::function<bool(Function*)>& vis) -> bool {
-  for (const auto& func : functions_) {
-    if (!vis(func.second))
-      return false;
-  }
-  return true;
+auto Module::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Module(";
+  ss << "name=" << GetName();
+  ss << ")";
+  return ss.str();
 }
 }  // namespace kura

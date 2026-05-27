@@ -16,185 +16,312 @@ class Expr;
 class ExprBuilder;
 }  // namespace expr
 
-#define FOR_EACH_TYPE(V) \
-  V(Object)              \
-  V(Number)              \
-  V(String)              \
-  V(Bool)
+class Type;
+using TypeList = std::vector<Type*>;
 
-struct Value;
-#define DECLARE_TYPE(Name) struct Name;
-FOR_EACH_TYPE(DECLARE_TYPE)
-#undef DECLARE_TYPE
-using ValuePtr = std::shared_ptr<Value>;
-using ValueList = std::vector<ValuePtr>;
+typedef uint64_t TypeId;
 
-enum ValueType : uint8_t {
-  kUnknownType = 0,
+#define FOR_EACH_PRIMITIVE_TYPE(V) \
+  V(Bool)                          \
+  V(Number)                        \
+  V(String)                        \
+  V(Seq)                           \
+  V(Record)                        \
+  V(Union)                         \
+  V(Module)                        \
+  V(Function)
+
+enum BuiltinTypes : TypeId {
+  kInvalidType = 0,
 #define DEFINE_TYPE(Name) k##Name##Type,
-  FOR_EACH_TYPE(DEFINE_TYPE)
+  FOR_EACH_PRIMITIVE_TYPE(DEFINE_TYPE)
 #undef DEFINE_TYPE
 };
 
-struct Value {
-  ValueType type;
+class Type {
+ private:
+  TypeId id_;
 
-  constexpr Value(const ValueType t) :
-    type(t) {}
-  constexpr Value(const Value& rhs) = default;
-  constexpr Value(Value&& rhs) = default;
-  ~Value() = default;
-
-  auto operator=(const Value& rhs) -> Value& = default;
-  auto operator=(Value&& rhs) -> Value& = default;
-};
-
-class ValueVisitor {
  public:
-  ValueVisitor() = default;
-  virtual ~ValueVisitor() = default;
-  virtual auto Visit(ValuePtr& value) -> bool = 0;
+  explicit Type(const TypeId id) :
+    id_(id) {}
+  virtual ~Type() = default;
+
+  auto GetTypeId() const -> TypeId {
+    return id_;
+  }
+
+  constexpr auto IsBuiltinType() const -> bool {
+    // clang-format off
+    switch (id_) {
+#define DEFINE_CHECK(Name) \
+      case k##Name##Type:  \
+        return true;
+      FOR_EACH_PRIMITIVE_TYPE(DEFINE_CHECK)
+      default:
+        return false;
+    }
+    // clang-format on
+  }
+
+#define DEFINE_TYPE_CHECK(Name)             \
+  constexpr auto Is##Name() const -> bool { \
+    return id_ == k##Name##Type;            \
+  }
+  FOR_EACH_PRIMITIVE_TYPE(DEFINE_TYPE_CHECK)
+#undef DEFINE_TYPE_CHECK
+
+  virtual auto GetTypeName() const -> std::string_view = 0;
+  virtual auto ToString() const -> std::string = 0;
+
+  virtual auto Equals(const Type& rhs) const -> bool {
+    return GetTypeId() == rhs.GetTypeId();
+  }
 };
 
-using PropertyMap = std::unordered_map<std::string, ValuePtr>;
+template <const TypeId Id>
+class TypeTemplate : public Type {
+ protected:
+  TypeTemplate() :
+    Type(Id) {}
 
-class PropertyKeyVisitor {
  public:
-  PropertyKeyVisitor() = default;
-  virtual ~PropertyKeyVisitor() = default;
-  virtual auto Visit(const std::string& key) -> bool = 0;
+  ~TypeTemplate() override = default;
 };
 
-class PropertyVisitor {
+#define DECLARE_TYPE(Name)                                \
+ public:                                                  \
+  auto GetTypeName() const -> std::string_view override { \
+    return #Name;                                         \
+  }                                                       \
+  auto ToString() const -> std::string override;
+
+class Bool : public TypeTemplate<kBoolType> {
+ private:
+  bool value_;
+
  public:
-  PropertyVisitor() = default;
-  virtual ~PropertyVisitor() = default;
-  virtual auto VisitProperty(const std::string& name, ValuePtr& value) -> bool = 0;
-};
+  explicit Bool(const bool value) :
+    TypeTemplate<kBoolType>(),
+    value_(value) {}
+  ~Bool() override = default;
 
-struct Object : Value {
-  PropertyMap properties{};
+  auto GetValue() const -> bool {
+    return value_;
+  }
 
-  constexpr Object() :
-    Value(kObjectType) {}
-  Object(const PropertyMap props) :
-    Value(kObjectType),
-    properties(std::move(props)) {}
-  ~Object() = default;
+  DECLARE_TYPE(Bool);
 
-  auto AddProperty(const std::string name, ValuePtr value) -> bool;
-  auto GetProperty(const std::string name) const -> ValuePtr;
-  auto VisitAllPropertyKeys(PropertyKeyVisitor* vis) -> bool;
-  auto VisitAllPropertyValues(ValueVisitor* vis) -> bool;
-  auto VisitAllProperties(PropertyVisitor* vis) -> bool;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(Object);
-};
-
-struct Bool : Value {
-  bool value = false;
-
-  constexpr Bool(const bool val = false) :
-    Value(kBoolType),
-    value(val) {}
-  ~Bool() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(Bool);
-};
-
-struct Number : Value {
-  double value = 0.0;
-
-  constexpr Number(const double val) :
-    Value(kNumberType),
-    value(val) {}
-  ~Number() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(Number);
-};
-
-struct String : Value {
-  std::string value{};
-
-  constexpr String() :
-    Value(kStringType) {}
-  String(const std::string val) :
-    Value(kStringType),
-    value(val) {}
-  constexpr String(const std::string_view val) :
-    Value(kStringType),
-    value(val) {}
-  ~String() = default;
-
-  DEFINE_DEFAULT_COPYABLE_TYPE(String);
-};
-
-class Function;
-class FunctionVisitor {
  public:
-  FunctionVisitor() = default;
-  virtual ~FunctionVisitor() = default;
-  virtual auto VisitFunction(Function* func) -> bool = 0;
+  static inline auto New(const bool value) -> Bool* {
+    return new Bool(value);
+  }
+
+  static auto True() -> Bool*;
+  static auto False() -> Bool*;
 };
 
-class Module {
-  friend class expr::ExprBuilder;
+class String : public TypeTemplate<kStringType> {
+ private:
+  std::string value_;
 
+ public:
+  explicit String(const std::string value) :
+    TypeTemplate<kStringType>(),
+    value_(std::move(value)) {}
+  ~String() override = default;
+
+  auto GetValue() const -> const std::string& {
+    return value_;
+  }
+
+  DECLARE_TYPE(String);
+
+ public:
+  static inline auto New(const std::string value) -> String* {
+    return new String(std::move(value));
+  }
+};
+
+class Number : public TypeTemplate<kNumberType> {
+ private:
+  double value_;
+
+ public:
+  explicit Number(double value) :
+    TypeTemplate<kNumberType>(),
+    value_(value) {}
+  ~Number() override = default;
+
+  auto GetValue() const -> double {
+    return value_;
+  }
+
+  DECLARE_TYPE(Number);
+
+ public:
+  static inline auto New(const double value) -> Number* {
+    return new Number(value);
+  }
+};
+
+class Seq : public TypeTemplate<kSeqType> {
+ public:
+  Seq() = default;
+  ~Seq() override = default;
+
+  DECLARE_TYPE(Seq);
+
+ public:
+  static inline auto New() -> Seq* {
+    return new Seq();
+  }
+};
+
+class UnionType : public TypeTemplate<kUnionType> {
  private:
   std::string name_;
-  std::unordered_map<std::string, Function*> functions_{};
-
-  void AddFunction(Function* func);
+  TypeList variants_{};
 
  public:
-  explicit Module(const std::string name) :
-    name_(std::move(name)) {}
-  ~Module() = default;
+  UnionType(const std::string name, const TypeList variants) :
+    TypeTemplate<kUnionType>(),
+    name_(std::move(name)),
+    variants_(std::move(variants)) {}
+  ~UnionType() override = default;
 
   auto GetName() const -> const std::string& {
     return name_;
   }
 
-  auto VisitFunctions(FunctionVisitor* vis) -> bool;
-  auto VisitFunctions(const std::function<bool(Function*)>& vis) -> bool;
+  auto GetVariants() const -> const TypeList& {
+    return variants_;
+  }
+
+  DECLARE_TYPE(Union);
 
  public:
-  static inline auto New(const std::string name) -> Module* {
-    return new Module(std::move(name));
+  static inline auto New(const std::string name, const TypeList variants = {}) -> UnionType* {
+    return new UnionType(std::move(name), std::move(variants));
   }
 };
 
-class Function {
-  friend class expr::ExprBuilder;
+class Record : public TypeTemplate<kRecordType> {
+ public:
+  struct Property {
+    std::string name;
+    Type* type;
+  };
+
+  using PropertyMap = std::unordered_map<std::string, Property*>;
 
  private:
-  std::string name_;
-  expr::Expr* body_ = nullptr;
-
-  void SetBody(expr::Expr* rhs) {
-    body_ = rhs;
-  }
+  PropertyMap properties_{};
 
  public:
-  explicit Function(const std::string& name) :
-    name_(std::move(name)) {}
-  ~Function() = default;
+  explicit Record(const PropertyMap properties) :
+    TypeTemplate<kRecordType>(),
+    properties_(std::move(properties)) {}
+  ~Record() override = default;
+
+  auto GetProperties() const -> const PropertyMap& {
+    return properties_;
+  }
+
+  DECLARE_TYPE(Record);
+
+ public:
+  static inline auto New(const PropertyMap properties) -> Record* {
+    return new Record(std::move(properties));
+  }
+};
+
+class Function : public TypeTemplate<kFunctionType> {
+ private:
+  std::string name_;
+
+ public:
+  explicit Function(const std::string name) :
+    TypeTemplate<kFunctionType>(),
+    name_(name) {}
+  ~Function() override = default;
 
   auto GetName() const -> const std::string& {
     return name_;
   }
 
-  auto GetBody() const -> expr::Expr* {
-    return body_;
-  }
-
-  inline auto HasBody() const -> bool {
-    return GetBody() != nullptr;
-  }
+  DECLARE_TYPE(Function);
 
  public:
   static inline auto New(const std::string name) -> Function* {
     return new Function(std::move(name));
+  }
+};
+
+class FunctionVisitor {
+ protected:
+  FunctionVisitor() = default;
+
+ public:
+  virtual ~FunctionVisitor() = default;
+  virtual auto VisitFunction(Function* func) -> bool = 0;
+};
+
+class Module : public TypeTemplate<kModuleType> {
+  friend class expr::ExprBuilder;
+
+ public:
+  using FunctionMap = std::unordered_map<std::string, Function*>;
+
+ private:
+  std::string name_;
+  FunctionMap functions_{};
+
+  auto AddFunction(Function* rhs) -> bool {
+    const auto pos = functions_.insert({rhs->GetName(), rhs});
+    return pos.second;
+  }
+
+ public:
+  explicit Module(const std::string name) :
+    TypeTemplate<kModuleType>(),
+    name_(std::move(name)) {}
+  ~Module() override = default;
+
+  auto GetName() const -> const std::string& {
+    return name_;
+  }
+
+  auto GetFunctions() const -> const FunctionMap& {
+    return functions_;
+  }
+
+  auto GetFunction(const std::string name) const -> Function* {
+    const auto pos = functions_.find(name);
+    return pos->second;
+  }
+
+  auto VisitFunctions(const std::function<bool(Function*)> vis) -> bool {
+    for (const auto& func : functions_) {
+      if (!vis(func.second))
+        return false;
+    }
+    return true;
+  }
+
+  auto VisitFunctions(FunctionVisitor* vis) -> bool {
+    for (const auto& func : functions_) {
+      if (!vis->VisitFunction(func.second))
+        return false;
+    }
+    return true;
+  }
+
+  DECLARE_TYPE(Name);
+
+ public:
+  static inline auto New(const std::string name) -> Module* {
+    return new Module(std::move(name));
   }
 };
 }  // namespace kura
