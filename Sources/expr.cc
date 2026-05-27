@@ -11,4 +11,8 @@ FOR_EACH_EXPR(DEFINE_ACCEPT)
 auto Expr::VisitChildren(ExprVisitor* vis) -> bool {
   return true;
 }
+
+auto Expr::VisitChildren(const std::function<bool(Expr*)> vis) -> bool {
+  return true;
+}
 }  // namespace kura::expr

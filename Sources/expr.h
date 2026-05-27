@@ -13,6 +13,8 @@ namespace kura::expr {
   V(Literal)             \
   V(Unary)               \
   V(Binary)              \
+  V(Seq)                 \
+  V(If)                  \
   V(Match)
 
 class Expr;
@@ -55,6 +57,7 @@ class Expr {
 
   virtual auto GetName() const -> std::string_view = 0;
   virtual auto Accept(ExprVisitor* vis) -> bool = 0;
+  virtual auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool;
   virtual auto VisitChildren(ExprVisitor* vis) -> bool;
 #define DEFINE_TYPE_CHECK(Name)            \
   virtual auto As##Name() -> Name##Expr* { \
@@ -65,6 +68,62 @@ class Expr {
   }
   FOR_EACH_EXPR(DEFINE_TYPE_CHECK)
 #undef DEFINE_TYPE_CHECK
+};
+
+using ExprList = std::vector<Expr*>;
+
+class SeqExpr : public Expr {
+ private:
+  ExprList children_{};
+
+ public:
+  explicit SeqExpr(const ExprList children) :
+    Expr(),
+    children_(children) {}
+  ~SeqExpr() override = default;
+
+  auto GetChildren() const -> const ExprList& {
+    return children_;
+  }
+
+  inline auto HasChildren() const -> bool {
+    return !children_.empty();
+  }
+
+  auto GetNumberOfChildren() -> const size_t {
+    return children_.size();
+  }
+
+  auto GetChildAt(const size_t idx) const -> Expr* {
+    return children_[idx];
+  }
+
+  inline auto HasChildAt(const size_t idx) const -> bool {
+    return idx <= children_.size() && children_[idx] != nullptr;
+  }
+
+  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override {
+    for (const auto& child : children_) {
+      if (!vis(child))
+        return false;
+    }
+    return true;
+  }
+
+  auto VisitChildren(ExprVisitor* vis) -> bool override {
+    for (const auto& child : children_) {
+      if (!child->Accept(vis))
+        return false;
+    }
+    return true;
+  }
+
+  DECLARE_EXPR_TYPE(Seq);
+
+ public:
+  static inline auto New(const ExprList children) -> Expr* {
+    return new SeqExpr(std::move(children));
+  }
 };
 
 class LiteralExpr : public Expr {
@@ -192,6 +251,44 @@ class BinaryExpr : public Expr {
   }
   FOR_EACH_BINARY_OP(DEFINE_NEW)
 #undef DEFINE_NEW
+};
+
+class IfExpr : public Expr {
+ private:
+  Expr* condition_;
+  Expr* then_;
+  Expr* else_;
+
+ public:
+  IfExpr(Expr* condition, Expr* then_expr, Expr* else_expr) :
+    Expr(),
+    condition_(condition),
+    then_(then_expr),
+    else_(else_expr) {}
+  ~IfExpr() override = default;
+
+  auto GetConditionExpr() const -> Expr* {
+    return condition_;
+  }
+
+  auto GetThenExpr() const -> Expr* {
+    return then_;
+  }
+
+  auto GetElseExpr() const -> Expr* {
+    return else_;
+  }
+
+  inline auto HasElseExpr() const -> bool {
+    return else_ != nullptr;
+  }
+
+  DECLARE_EXPR_TYPE(If);
+
+ public:
+  static inline auto New(Expr* condition, Expr* then_expr, Expr* else_expr) -> Expr* {
+    return new IfExpr(condition, then_expr, else_expr);
+  }
 };
 
 class MatchExpr : public Expr {
