@@ -213,10 +213,24 @@ class Record : public TypeTemplate<kRecordType> {
     Type* type;
   };
 
+  class PropertyVisitor {
+   protected:
+    PropertyVisitor() = default;
+
+   public:
+    virtual ~PropertyVisitor() = default;
+    virtual auto VisitProperty(Property* property) -> bool = 0;
+  };
+
   using PropertyMap = std::unordered_map<std::string, Property*>;
 
  private:
   PropertyMap properties_{};
+
+  auto AddProperty(Property* prop) -> bool {
+    const auto pos = properties_.insert({prop->name, prop});
+    return pos.second;
+  }
 
  public:
   explicit Record(const PropertyMap properties) :
@@ -226,6 +240,27 @@ class Record : public TypeTemplate<kRecordType> {
 
   auto GetProperties() const -> const PropertyMap& {
     return properties_;
+  }
+
+  auto GetProperty(const std::string name) const -> Property* {
+    const auto pos = properties_.find(name);
+    return pos->second;
+  }
+
+  auto VisitProperties(const std::function<bool(Property*)> vis) const -> bool {
+    for (const auto& prop : properties_) {
+      if (!vis(prop.second))
+        return false;
+    }
+    return true;
+  }
+
+  auto VisitProperties(PropertyVisitor* vis) const -> bool {
+    for (const auto& prop : properties_) {
+      if (!vis->VisitProperty(prop.second))
+        return false;
+    }
+    return true;
   }
 
   DECLARE_TYPE(Record);

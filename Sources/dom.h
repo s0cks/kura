@@ -262,6 +262,7 @@ class Document : public Node {
  public:
   Document() = default;
   ~Document() override = default;
+
   DECLARE_DOM_NODE_TYPE(Document);
 };
 
@@ -269,6 +270,7 @@ class Line : public Node {
  public:
   Line() = default;
   ~Line() override = default;
+
   DECLARE_DOM_NODE_TYPE(Line);
 };
 
@@ -276,6 +278,7 @@ class Block : public Node {
  public:
   Block() = default;
   ~Block() override = default;
+
   DECLARE_DOM_NODE_TYPE(Block);
 };
 
@@ -283,6 +286,7 @@ class Text : public Block {
  public:
   Text() = default;
   ~Text() override = default;
+
   DECLARE_DOM_NODE_TYPE(Text);
 };
 
@@ -290,6 +294,7 @@ class List : public Block {
  public:
   List() = default;
   ~List() override = default;
+
   DECLARE_DOM_NODE_TYPE(List);
 };
 

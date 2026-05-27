@@ -15,11 +15,20 @@ class ExprBuilder : public KuraParserBaseVisitor {
   ~ExprBuilder() override = default;
 
   auto visitSource(KuraParser::SourceContext* ctx) -> std::any override;
+
+  // ╭──────────────╮
+  // │ Declarations │
+  // ╰──────────────╯
   auto visitImportDecl(KuraParser::ImportDeclContext* ctx) -> std::any override;
   auto visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any override;
   auto visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any override;
+
+  // ╭─────────────╮
+  // │ Expressions │
+  // ╰─────────────╯
   auto visitLiteral(KuraParser::LiteralContext* ctx) -> std::any override;
   auto visitIfExpr(KuraParser::IfExprContext* ctx) -> std::any override;
+
   // ╭───────────────────╮
   // │ Match Expressions │
   // ╰───────────────────╯
