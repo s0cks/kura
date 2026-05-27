@@ -43,10 +43,7 @@ add_library(kura-runtime SHARED
   expr.cc
   expr_builder.cc
   layout.cc
-  lexer.cc
   parser.cc
-  source_pos.cc
-  token.cc
   type.cc
   ${GEN_SOURCES}
 )

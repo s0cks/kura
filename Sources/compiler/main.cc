@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -10,49 +11,30 @@
 #include <stdlib.h>
 #include <yoga/Yoga.h>
 
-// clang-format off
-#include <antlr4-runtime.h>
-// clang-format on
-
-#include "KuraLexer.h"
-#include "KuraParser.h"
 #include "dom.h"
 #include "dom_compiler.h"
-#include "expr_builder.h"
+#include "parser.h"
 
 using namespace kura;
 
 auto main(int argc, char** argv) -> int {
-  std::string source{};
-  {
-    FILE* file = fopen(argv[1], "r");
-    if (!file)
-      return EXIT_FAILURE;
-    fseek(file, 0, SEEK_END);
-    const auto size = ftell(file);
-    source.resize(size);
-    rewind(file);
-    fread(source.data(), sizeof(char), size, file);
-    fclose(file);
+  if (argc < 2)
+    return EXIT_FAILURE;
+
+  const std::string filename(argv[1]);
+
+  Module* m = nullptr;
+  Parser parser{};
+  if (!parser.ParseModuleFromFile(filename, &m)) {
+    std::cerr << "failed to parse Module from " << filename;
+    return EXIT_FAILURE;
   }
 
-  std::cout << "source:" << std::endl << source << std::endl;
-
-  antlr4::ANTLRInputStream stream(source);
-
-  KuraLexer lexer(&stream);
-  antlr4::CommonTokenStream tokens(&lexer);
-  KuraParser parser(&tokens);
-  auto* tree = parser.source();
-
-  std::cout << "--- Parse Tree ---" << std::endl;
-  std::cout << tree->toStringTree(&parser) << std::endl;
-  std::cout << std::endl;
-
-  expr::ExprBuilder expr_builder{};
-  const auto m = std::any_cast<Module*>(expr_builder.visit(tree));
-  if (!m)
+  if (!m) {
+    std::cerr << "failed to parse Module from " << filename;
     return EXIT_FAILURE;
+  }
+
   std::cout << "Module: " << m->GetName() << std::endl;
   const auto vis = [](Function* func) {
     std::cout << " - " << func->GetName() << std::endl;
