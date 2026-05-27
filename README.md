@@ -108,6 +108,14 @@ Kura aims to become a modern foundation for UI composition in game engines:
 - practical for real-time systems
 - lightweight enough for native engines
 
+## Wiki
+
+See the [wiki](https://github.com/s0cks/kura/wiki) for more information.
+
+## Blog
+
+Check the [development blog](https://kura.tazz.codes) for updates, architectural discussions and more information.
+
 ## License
 
 See [LICENSE](LICENSE).
