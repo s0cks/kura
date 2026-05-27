@@ -114,7 +114,7 @@ See the [wiki](https://github.com/s0cks/kura/wiki) for more information.
 
 ## Blog
 
-Check the [development blog](https://kura.tazz.codes) for updates, architectural discussions and more information.
+Check the development [blog](https://kura.tazz.codes) for updates, architectural discussions and more information.
 
 ## License
 
