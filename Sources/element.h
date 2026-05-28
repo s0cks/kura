@@ -10,181 +10,9 @@
 #include <yoga/Yoga.h>
 
 #include "common.h"
+#include "element_property.h"
 
 namespace kura::elem {
-#define FOR_EACH_ELEMENT_PROPERTY(V) \
-  V(Width)                           \
-  V(Height)
-
-class Property;
-// clang-format off
-#define DECLARE_PROPERTY(Name) \
-  class Name##Property;
-FOR_EACH_ELEMENT_PROPERTY(DECLARE_PROPERTY)
-#undef DECLARE_PROPERTY
-
-enum PropertyType : uint64_t {
-  kUnknownProperty = 0,
-#define DEFINE_PROPERTY_TYPE(Name) k##Name##Property,
-  FOR_EACH_ELEMENT_PROPERTY(DEFINE_PROPERTY_TYPE)
-#undef DEFINE_PROPERTY_TYPE
-  kTotalNumberOfPropertyTypes,
-};
-// clang-format on
-
-class PropertyVisitor {
- protected:
-  PropertyVisitor() = default;
-
- public:
-  virtual ~PropertyVisitor() = default;
-  virtual auto VisitProperty(Property* prop) -> bool = 0;
-};
-
-class Property {
-  DEFINE_NON_COPYABLE_TYPE(Property);
-
- private:
-  PropertyType type_;
-  Property* next_ = nullptr;
-
- protected:
-  explicit Property(const PropertyType type) :
-    type_(type) {}
-
- public:
-  ~Property() = default;
-
-  auto GetPropertyType() const -> PropertyType {
-    return type_;
-  }
-
-  auto GetNext() const -> Property* {
-    return next_;
-  }
-
-  inline auto HasNext() const -> bool {
-    return next_ != nullptr;
-  }
-
-  void SetNext(Property* rhs) {
-    next_ = rhs;
-  }
-
-  auto Accept(PropertyVisitor* vis) -> bool {
-    return vis->VisitProperty(this);
-  }
-
-  auto VisitNextProperty(PropertyVisitor* vis) -> bool {
-    return next_ ? next_->Accept(vis) : true;
-  }
-
- public:
-  static inline void Append(Property** props, Property* value) {
-    const auto head = (*props);
-    if (!head) {
-      (*props) = value;
-      return;
-    }
-
-    auto current = head;
-    while (current->next_ && current->next_->type_ < value->type_)
-      current = current->next_;
-    current->next_ = value;
-  }
-
-  static inline auto Find(Property** props, const PropertyType type) -> Property* {
-    auto current = (*props);
-    while (current != nullptr && current->type_ <= type) {
-      if (current->type_ == type)
-        return current;
-      current = current->next_;
-    }
-    return nullptr;
-  }
-
-  static inline void Remove(Property** props, const PropertyType type) {
-    const auto head = (*props);
-    if (head->type_ == type) {
-      (*props) = head->next_;
-      return;
-    }
-
-    auto current = head;
-    while (current->next_ && current->next_->type_ != type) {
-      if (current->next_->type_ > type)
-        return;
-      current = current->next_;
-    }
-
-    if (current->next_) {
-      current->next_ = current->next_->next_;
-      return;
-    }
-  }
-};
-
-template <typename T>
-class PropertyTemplate : public Property {
-  DEFINE_NON_COPYABLE_TYPE(PropertyTemplate<T>);
-
- private:
-  T value_{};
-
- protected:
-  explicit PropertyTemplate(const PropertyType type) :
-    Property(type) {}
-  PropertyTemplate(const PropertyType type, const T value) :
-    Property(type),
-    value_(std::move(value)) {}
-
- public:
-  ~PropertyTemplate() = default;
-
-  auto GetValue() const -> const T& {
-    return value_;
-  }
-
-  void SetValue(const T value) {
-    value_ = std::move(value);
-  }
-};
-
-#define FOR_EACH_BASIC_ELEMENT_PROPERTY(V) \
-  V(Width, double, 0.0)                    \
-  V(Height, double, 0.0)
-
-#define DEFINE_BASIC_ELEMENT_PROPERTY(Name, Type, InitValue) \
-  class Name##Property : public PropertyTemplate<Type> {     \
-   public:                                                   \
-    explicit Name##Property(const Type value = InitValue) :  \
-      PropertyTemplate(k##Name##Property, value) {}          \
-    ~Name##Property() = default;                             \
-  };
-
-FOR_EACH_BASIC_ELEMENT_PROPERTY(DEFINE_BASIC_ELEMENT_PROPERTY)
-#undef DEFINE_BASIC_ELEMENT_PROPERTY
-
-class PropertyIterator {
- private:
-  Property* prop_;
-
- public:
-  explicit PropertyIterator(Property* prop) :
-    prop_(prop) {}
-  ~PropertyIterator() = default;
-
-  auto HasNext() const -> bool {
-    return prop_ != nullptr;
-  }
-
-  auto Next() -> Property* {
-    auto current = prop_;
-    prop_ = current->GetNext();
-    return current;
-  }
-};
-
 #define FOR_EACH_ELEMENT_NODE(V) \
   V(Document)                    \
   V(Fragment)                    \
@@ -230,6 +58,16 @@ class Node {
   virtual auto GetName() const -> std::string_view = 0;
   virtual auto VisitChildren(NodeVisitor* vis) -> bool = 0;
   virtual auto VisitChildren(std::function<bool(Node*)> vis) -> bool = 0;
+
+#define DEFINE_TYPE_CHECK(Name)      \
+  inline auto Is##Name() -> bool {   \
+    return As##Name() != nullptr;    \
+  }                                  \
+  virtual auto As##Name() -> Name* { \
+    return nullptr;                  \
+  }
+  FOR_EACH_ELEMENT_NODE(DEFINE_TYPE_CHECK)
+#undef DEFINE_TYPE_CHECK
 };
 
 class Container : public Node {
@@ -268,6 +106,46 @@ class Container : public Node {
   auto VisitChildren(std::function<bool(Node*)> vis) -> bool override;
 };
 
+#define DECLARE_ELEMENT_NODE_TYPE(Name)               \
+  DEFINE_NON_COPYABLE_TYPE(Name);                     \
+                                                      \
+ public:                                              \
+  auto Accept(NodeVisitor* vis) -> bool override;     \
+  auto GetName() const -> std::string_view override { \
+    return #Name;                                     \
+  }                                                   \
+  auto As##Name() -> Name* override {                 \
+    return this;                                      \
+  }
+
+class Document : public Container {
+ public:
+  explicit Document(const NodeList children) :
+    Container(std::move(children)) {}
+  ~Document() override = default;
+
+  DECLARE_ELEMENT_NODE_TYPE(Document);
+
+ public:
+  static inline auto New(const NodeList children = {}) -> Document* {
+    return new Document(children);
+  }
+};
+
+class Fragment : public Container {
+ public:
+  explicit Fragment(const NodeList children) :
+    Container(std::move(children)) {}
+  ~Fragment() override = default;
+
+  DECLARE_ELEMENT_NODE_TYPE(Fragment);
+
+ public:
+  static inline auto New(const NodeList children = {}) -> Fragment* {
+    return new Fragment(children);
+  }
+};
+
 class Box : public Container {
  private:
   YGNodeRef node_ = nullptr;
@@ -299,52 +177,11 @@ class Box : public Container {
     return properties_;
   }
 
-  auto Accept(NodeVisitor* vis) -> bool override;
-#define DEFINE_TYPE_CHECK(Name)      \
-  inline auto Is##Name() -> bool {   \
-    return As##Name() != nullptr;    \
-  }                                  \
-  virtual auto As##Name() -> Name* { \
-    return nullptr;                  \
-  }
-  FOR_EACH_ELEMENT_NODE(DEFINE_TYPE_CHECK)
-#undef DEFINE_TYPE_CHECK
-};
-
-#define DECLARE_ELEMENT_NODE_TYPE(Name)               \
-  DEFINE_NON_COPYABLE_TYPE(Name);                     \
-                                                      \
- public:                                              \
-  auto Accept(NodeVisitor* vis) -> bool override;     \
-  auto GetName() const -> std::string_view override { \
-    return #Name;                                     \
-  }
-
-class Document : public Container {
- public:
-  explicit Document(const NodeList children) :
-    Container(std::move(children)) {}
-  ~Document() override = default;
-
-  DECLARE_ELEMENT_NODE_TYPE(Document);
+  DECLARE_ELEMENT_NODE_TYPE(Box);
 
  public:
-  static inline auto New(const NodeList children = {}) -> Document* {
-    return new Document(children);
-  }
-};
-
-class Fragment : public Container {
- public:
-  explicit Fragment(const NodeList children) :
-    Container(std::move(children)) {}
-  ~Fragment() override = default;
-
-  DECLARE_ELEMENT_NODE_TYPE(Fragment);
-
- public:
-  static inline auto New(const NodeList children = {}) -> Fragment* {
-    return new Fragment(children);
+  static inline auto New() -> Box* {
+    return new Box();
   }
 };
 
