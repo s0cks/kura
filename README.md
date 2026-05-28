@@ -26,7 +26,8 @@ fn init() => { message: "Hello World" }
 
 fn view(msg, state) =>
   #text(state.message)
-  #button(on-click: Close){ // Send a Close Message to the runtime to close the UI
+  // Send a Close Message to the runtime to close the UI
+  #button(on-click: Close){
     #text("Close")
   }
 ```
