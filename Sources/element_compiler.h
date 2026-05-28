@@ -1,5 +1,5 @@
-#ifndef KURA_DOM_COMPILER_H
-#define KURA_DOM_COMPILER_H
+#ifndef KURA_ELEMENT_COMPILER_H
+#define KURA_ELEMENT_COMPILER_H
 
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/IR/IRBuilder.h>
@@ -7,11 +7,11 @@
 #include <llvm/IR/Module.h>
 
 #include "common.h"
-#include "dom.h"
+#include "element.h"
 
-namespace kura::dom {
-class DOMCompiler {
-  DEFINE_NON_COPYABLE_TYPE(DOMCompiler);
+namespace kura::elem {
+class ElementCompiler {
+  DEFINE_NON_COPYABLE_TYPE(ElementCompiler);
 
  private:
   llvm::LLVMContext* ctx_;
@@ -47,14 +47,14 @@ class DOMCompiler {
   }
 
  public:
-  DOMCompiler(llvm::LLVMContext* ctx);
-  ~DOMCompiler();
+  ElementCompiler(llvm::LLVMContext* ctx);
+  ~ElementCompiler();
 
   auto Compile() -> std::unique_ptr<llvm::Module>;
 
  public:
   static void Init();
 };
-}  // namespace kura::dom
+}  // namespace kura::elem
 
-#endif  // KURA_DOM_COMPILER_H
+#endif  // KURA_ELEMENT_COMPILER_H

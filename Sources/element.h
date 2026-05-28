@@ -1,5 +1,5 @@
-#ifndef KURA_DOM_H
-#define KURA_DOM_H
+#ifndef KURA_ELEMENT_H
+#define KURA_ELEMENT_H
 
 #include <cstdint>
 #include <cstring>
@@ -11,22 +11,22 @@
 
 #include "common.h"
 
-namespace kura::dom {
-#define FOR_EACH_DOM_PROPERTY(V) \
-  V(Width)                       \
+namespace kura::elem {
+#define FOR_EACH_ELEMENT_PROPERTY(V) \
+  V(Width)                           \
   V(Height)
 
 class Property;
 // clang-format off
 #define DECLARE_PROPERTY(Name) \
   class Name##Property;
-FOR_EACH_DOM_PROPERTY(DECLARE_PROPERTY)
+FOR_EACH_ELEMENT_PROPERTY(DECLARE_PROPERTY)
 #undef DECLARE_PROPERTY
 
 enum PropertyType : uint64_t {
   kUnknownProperty = 0,
 #define DEFINE_PROPERTY_TYPE(Name) k##Name##Property,
-  FOR_EACH_DOM_PROPERTY(DEFINE_PROPERTY_TYPE)
+  FOR_EACH_ELEMENT_PROPERTY(DEFINE_PROPERTY_TYPE)
 #undef DEFINE_PROPERTY_TYPE
   kTotalNumberOfPropertyTypes,
 };
@@ -150,20 +150,20 @@ class PropertyTemplate : public Property {
   }
 };
 
-#define FOR_EACH_BASIC_DOM_PROPERTY(V) \
-  V(Width, double, 0.0)                \
+#define FOR_EACH_BASIC_ELEMENT_PROPERTY(V) \
+  V(Width, double, 0.0)                    \
   V(Height, double, 0.0)
 
-#define DEFINE_BASIC_DOM_PROPERTY(Name, Type, InitValue)    \
-  class Name##Property : public PropertyTemplate<Type> {    \
-   public:                                                  \
-    explicit Name##Property(const Type value = InitValue) : \
-      PropertyTemplate(k##Name##Property, value) {}         \
-    ~Name##Property() = default;                            \
+#define DEFINE_BASIC_ELEMENT_PROPERTY(Name, Type, InitValue) \
+  class Name##Property : public PropertyTemplate<Type> {     \
+   public:                                                   \
+    explicit Name##Property(const Type value = InitValue) :  \
+      PropertyTemplate(k##Name##Property, value) {}          \
+    ~Name##Property() = default;                             \
   };
 
-FOR_EACH_BASIC_DOM_PROPERTY(DEFINE_BASIC_DOM_PROPERTY)
-#undef DEFINE_BASIC_DOM_PROPERTY
+FOR_EACH_BASIC_ELEMENT_PROPERTY(DEFINE_BASIC_ELEMENT_PROPERTY)
+#undef DEFINE_BASIC_ELEMENT_PROPERTY
 
 class PropertyIterator {
  private:
@@ -185,25 +185,25 @@ class PropertyIterator {
   }
 };
 
-#define FOR_EACH_DOM_NODE(V) \
-  V(Document)                \
-  V(Fragment)                \
-  V(Box)                     \
-  V(Button)                  \
-  V(List)                    \
-  V(Text)                    \
-  V(Image)                   \
-  V(Viewport)                \
-  V(Canvas)                  \
-  V(Input)                   \
+#define FOR_EACH_ELEMENT_NODE(V) \
+  V(Document)                    \
+  V(Fragment)                    \
+  V(Box)                         \
+  V(Button)                      \
+  V(List)                        \
+  V(Text)                        \
+  V(Image)                       \
+  V(Viewport)                    \
+  V(Canvas)                      \
+  V(Input)                       \
   V(Scroll)
 
 class Node;
 // clang-format off
-#define DECLARE_DOM_TYPE(Name) \
+#define DECLARE_ELEMENT_TYPE(Name) \
   class Name;
-FOR_EACH_DOM_NODE(DECLARE_DOM_TYPE)
-#undef DECLARE_DOM_TYPE
+FOR_EACH_ELEMENT_NODE(DECLARE_ELEMENT_TYPE)
+#undef DECLARE_ELEMENT_TYPE
 // clang-format on
 
 using NodeList = std::vector<Node*>;
@@ -214,7 +214,7 @@ class NodeVisitor {
   virtual ~NodeVisitor() = default;
 
 #define DEFINE_VISIT_NODE(Name) virtual auto Visit##Name(Name* value) -> bool = 0;
-  FOR_EACH_DOM_NODE(DEFINE_VISIT_NODE);
+  FOR_EACH_ELEMENT_NODE(DEFINE_VISIT_NODE);
 #undef DEFINE_VISIT_NODE
 };
 
@@ -307,11 +307,11 @@ class Box : public Container {
   virtual auto As##Name() -> Name* { \
     return nullptr;                  \
   }
-  FOR_EACH_DOM_NODE(DEFINE_TYPE_CHECK)
+  FOR_EACH_ELEMENT_NODE(DEFINE_TYPE_CHECK)
 #undef DEFINE_TYPE_CHECK
 };
 
-#define DECLARE_DOM_NODE_TYPE(Name)                   \
+#define DECLARE_ELEMENT_NODE_TYPE(Name)               \
   DEFINE_NON_COPYABLE_TYPE(Name);                     \
                                                       \
  public:                                              \
@@ -326,7 +326,7 @@ class Document : public Container {
     Container(std::move(children)) {}
   ~Document() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Document);
+  DECLARE_ELEMENT_NODE_TYPE(Document);
 
  public:
   static inline auto New(const NodeList children = {}) -> Document* {
@@ -340,7 +340,7 @@ class Fragment : public Container {
     Container(std::move(children)) {}
   ~Fragment() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Fragment);
+  DECLARE_ELEMENT_NODE_TYPE(Fragment);
 
  public:
   static inline auto New(const NodeList children = {}) -> Fragment* {
@@ -353,7 +353,7 @@ class Button : public Box {
   Button() = default;
   ~Button() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Button);
+  DECLARE_ELEMENT_NODE_TYPE(Button);
 
  public:
   static inline auto New() -> Button* {
@@ -375,7 +375,7 @@ class Text : public Box {
     return value_;
   }
 
-  DECLARE_DOM_NODE_TYPE(Text);
+  DECLARE_ELEMENT_NODE_TYPE(Text);
 
  public:
   static inline auto New(const std::string value) -> Text* {
@@ -388,7 +388,7 @@ class Image : public Box {
   Image() = default;
   ~Image() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Image);
+  DECLARE_ELEMENT_NODE_TYPE(Image);
 
  public:
   static inline auto New() -> Image* {
@@ -401,7 +401,7 @@ class Canvas : public Box {
   Canvas() = default;
   ~Canvas() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Canvas);
+  DECLARE_ELEMENT_NODE_TYPE(Canvas);
 
  public:
   static inline auto New() -> Canvas* {
@@ -414,7 +414,7 @@ class Input : public Box {
   Input() = default;
   ~Input() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Input);
+  DECLARE_ELEMENT_NODE_TYPE(Input);
 
  public:
   static inline auto New() -> Input* {
@@ -427,7 +427,7 @@ class Scroll : public Box {
   Scroll() = default;
   ~Scroll() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Scroll);
+  DECLARE_ELEMENT_NODE_TYPE(Scroll);
 
  public:
   static inline auto New() -> Scroll* {
@@ -440,7 +440,7 @@ class List : public Box {
   List() = default;
   ~List() override = default;
 
-  DECLARE_DOM_NODE_TYPE(List);
+  DECLARE_ELEMENT_NODE_TYPE(List);
 
  public:
   static inline auto New() -> List* {
@@ -453,58 +453,13 @@ class Viewport : public Box {
   Viewport() = default;
   ~Viewport() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Viewport);
+  DECLARE_ELEMENT_NODE_TYPE(Viewport);
 
  public:
   static inline auto New() -> Viewport* {
     return new Viewport();
   }
 };
+}  // namespace kura::elem
 
-class DOMPrinter : public NodeVisitor {
- private:
-  uint64_t indent_;
-
-  inline void IncrementIndent() {
-    indent_ += 1;
-  }
-
-  inline void DecrementIndent() {
-    indent_ -= 1;
-  }
-
-  inline void PrintNode(const std::string_view& name, YGNodeRef node) {
-    std::string indent(' ', indent_ * 2);
-    const auto top = YGNodeLayoutGetWidth(node);
-    const auto left = YGNodeLayoutGetLeft(node);
-    const auto width = YGNodeLayoutGetWidth(node);
-    const auto height = YGNodeLayoutGetHeight(node);
-    std::printf("%s%s{ top: %lf, left: %lf, width: %lf, height: %lf }\n", indent.data(), name.data(), top, left, width,
-                height);
-  }
-
- public:
-  explicit DOMPrinter(const uint64_t indent = 0) :
-    NodeVisitor(),
-    indent_(indent) {}
-  ~DOMPrinter() = default;
-
-  auto GetIndent() const -> uint64_t {
-    return indent_;
-  }
-
-  // clang-format off
-#define DEFINE_VISIT_NODE(Name) \
-  auto Visit##Name(Name* value) -> bool override;
-  FOR_EACH_DOM_NODE(DEFINE_VISIT_NODE);
-#undef DEFINE_VISIT_NODE
-  // clang-format on
- public:
-  static auto Print(Node* node, const uint64_t indent = 0) -> bool {
-    DOMPrinter printer(indent);
-    return node->Accept(&printer);
-  }
-};
-}  // namespace kura::dom
-
-#endif  // KURA_DOM_H
+#endif  // KURA_ELEMENT_H

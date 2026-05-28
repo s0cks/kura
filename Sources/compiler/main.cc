@@ -11,8 +11,7 @@
 #include <stdlib.h>
 #include <yoga/Yoga.h>
 
-#include "dom.h"
-#include "dom_compiler.h"
+#include "element_compiler.h"
 #include "kura.h"
 #include "parser.h"
 

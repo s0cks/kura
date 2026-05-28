@@ -1,4 +1,4 @@
-#include "dom_compiler.h"
+#include "element_compiler.h"
 
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -9,11 +9,11 @@
 #include <print>
 #include <yoga/Yoga.h>
 
-namespace kura::dom {
+namespace kura::elem {
 static llvm::StructType* BoxClassType = nullptr;
 static llvm::PointerType* BoxPtrType = nullptr;
 
-DOMCompiler::DOMCompiler(llvm::LLVMContext* ctx) :
+ElementCompiler::ElementCompiler(llvm::LLVMContext* ctx) :
   ctx_(ctx),
   builder_(*ctx) {
   ret_type_ = builder_.getVoidTy();
@@ -25,9 +25,9 @@ DOMCompiler::DOMCompiler(llvm::LLVMContext* ctx) :
   set_height_func_type_ = GetYogaSetterFunctionType(float_type_);
 }
 
-DOMCompiler::~DOMCompiler() {}
+ElementCompiler::~ElementCompiler() {}
 
-auto DOMCompiler::Compile() -> std::unique_ptr<llvm::Module> {
+auto ElementCompiler::Compile() -> std::unique_ptr<llvm::Module> {
   auto m = std::make_unique<llvm::Module>("jit", *ctx_);
   const auto new_node_func = m->getOrInsertFunction("YGNodeNew", new_node_func_type_);
   const auto set_width_func = m->getOrInsertFunction("YGNodeStyleSetWidth", set_width_func_type_);
@@ -61,5 +61,5 @@ auto DOMCompiler::Compile() -> std::unique_ptr<llvm::Module> {
   return m;
 }
 
-void DOMCompiler::Init() {}
-}  // namespace kura::dom
+void ElementCompiler::Init() {}
+}  // namespace kura::elem

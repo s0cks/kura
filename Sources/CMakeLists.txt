@@ -38,10 +38,12 @@ add_custom_command(
 
 add_library(kura-runtime SHARED
   compiler.cc
-  dom.cc
-  dom_compiler.cc
+  element.cc
+  element_compiler.cc
+  element_printer.cc
   expr.cc
   expr_builder.cc
+  ir.cc
   layout.cc
   parser.cc
   type.cc
