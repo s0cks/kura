@@ -46,9 +46,9 @@ Check the development [blog](https://kura.tazz.codes) for updates, architectural
 
 ## Influenced By
 
-- Functional languages like: Elm, Haskell and Jsonnet
-- UI Frameworks like: Flutter, React, ImGui
-- Typesetting languages like: Typst
+- ***Functional Languages*** like: Elm, Haskell and Jsonnet
+- ***Typesetting Languages*** like: Typst
+- ***UI Frameworks*** like: Flutter, React, ImGui
 
 ## License
 
