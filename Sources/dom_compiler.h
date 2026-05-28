@@ -26,13 +26,6 @@ class DOMCompiler {
   llvm::FunctionType* set_width_func_type_ = nullptr;
   llvm::FunctionType* set_height_func_type_ = nullptr;
 
-  // clang-format off
-#define DEFINE_COMPILE_PROPERTY(Name) \
-  void Compile##Name##Property(llvm::Value* node_ref, Name##Property* prop);
-  FOR_EACH_DOM_PROPERTY(DEFINE_COMPILE_PROPERTY)
-#undef DEFINE_COMPILE_PROPERTY
-  // clang-format on
-
   inline void SetValueWithSetter(llvm::FunctionCallee setter, llvm::Value* this_ptr, const float value) {
     std::vector<llvm::Value*> args = {
         this_ptr,
@@ -43,6 +36,14 @@ class DOMCompiler {
 
   inline auto CreateNewYGNode(llvm::FunctionCallee ctor, const std::string_view name) -> llvm::Value* {
     return builder_.CreateCall(ctor, {}, name);
+  }
+
+  inline auto GetYogaSetterFunctionType(llvm::Type* rhs) -> llvm::FunctionType* {
+    llvm::SmallVector<llvm::Type*> params = {
+        ptr_type_,
+        rhs,
+    };
+    return llvm::FunctionType::get(builder_.getVoidTy(), params, false);
   }
 
  public:

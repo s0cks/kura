@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <print>
 
 namespace kura::dom {
 #define DEFINE_ACCEPT(Name)                     \
@@ -12,7 +13,7 @@ namespace kura::dom {
 FOR_EACH_DOM_NODE(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
 
-auto Node::VisitChildren(NodeVisitor* vis) -> bool {
+auto Container::VisitChildren(NodeVisitor* vis) -> bool {
   for (auto& child : children_) {
     if (!child->Accept(vis))
       return false;
@@ -20,8 +21,16 @@ auto Node::VisitChildren(NodeVisitor* vis) -> bool {
   return true;
 }
 
+auto Container::VisitChildren(const std::function<bool(Node*)> vis) -> bool {
+  for (auto& child : children_) {
+    if (!vis(child))
+      return false;
+  }
+  return true;
+}
+
 auto DOMPrinter::VisitDocument(Document* node) -> bool {
-  PrintNode(node);
+  std::println("Document");
   {
     IncrementIndent();
     if (!node->VisitChildren(this))
@@ -31,8 +40,8 @@ auto DOMPrinter::VisitDocument(Document* node) -> bool {
   return true;
 }
 
-auto DOMPrinter::VisitLine(Line* node) -> bool {
-  PrintNode(node);
+auto DOMPrinter::VisitFragment(Fragment* node) -> bool {
+  std::println("Fragment");
   {
     IncrementIndent();
     if (!node->VisitChildren(this))
@@ -42,36 +51,26 @@ auto DOMPrinter::VisitLine(Line* node) -> bool {
   return true;
 }
 
-auto DOMPrinter::VisitList(List* node) -> bool {
-  PrintNode(node);
-  {
-    IncrementIndent();
-    if (!node->VisitChildren(this))
-      return false;
-    DecrementIndent();
+#define DEFINE_VISIT(Name)                         \
+  auto DOMPrinter::Visit##Name(Name* node)->bool { \
+    PrintNode(node->GetName(), node->node());      \
+    {                                              \
+      IncrementIndent();                           \
+      if (!node->VisitChildren(this))              \
+        return false;                              \
+      DecrementIndent();                           \
+    }                                              \
+    return true;                                   \
   }
-  return true;
-}
 
-auto DOMPrinter::VisitText(Text* node) -> bool {
-  PrintNode(node);
-  {
-    IncrementIndent();
-    if (!node->VisitChildren(this))
-      return false;
-    DecrementIndent();
-  }
-  return true;
-}
-
-auto DOMPrinter::VisitBlock(Block* node) -> bool {
-  PrintNode(node);
-  {
-    IncrementIndent();
-    if (!node->VisitChildren(this))
-      return false;
-    DecrementIndent();
-  }
-  return true;
-}
+DEFINE_VISIT(Image);
+DEFINE_VISIT(Button);
+DEFINE_VISIT(List);
+DEFINE_VISIT(Scroll);
+DEFINE_VISIT(Viewport);
+DEFINE_VISIT(Canvas);
+DEFINE_VISIT(Input);
+DEFINE_VISIT(Box);
+DEFINE_VISIT(Text);
+#undef DEFINE_VISIT
 }  // namespace kura::dom

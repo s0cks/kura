@@ -17,20 +17,9 @@ Kura natively combines compositional functional programming with expressive layo
 
 ***Warning***: Under active development. Expect breaking changes and evolving ABIs
 
-```kui
-view Main =
-  #column[
-    text title "Kura"
+## Examples
 
-    button[
-      text "Start Game"
-    ]
-
-    button[
-      text "Settings"
-    ]
-  ]
-```
+See [examples/](examples/)
 
 ## Wiki
 

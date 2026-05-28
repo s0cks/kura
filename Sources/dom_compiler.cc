@@ -21,25 +21,11 @@ DOMCompiler::DOMCompiler(llvm::LLVMContext* ctx) :
   float_type_ = builder_.getFloatTy();
 
   new_node_func_type_ = llvm::FunctionType::get(ptr_type_, {}, false);
-  set_width_func_type_ = llvm::FunctionType::get(builder_.getVoidTy(),
-                                                 {
-                                                     ptr_type_,
-                                                     float_type_,
-                                                 },
-                                                 false);
-  set_height_func_type_ = llvm::FunctionType::get(builder_.getVoidTy(),
-                                                  {
-                                                      ptr_type_,
-                                                      float_type_,
-                                                  },
-                                                  false);
+  set_width_func_type_ = GetYogaSetterFunctionType(float_type_);
+  set_height_func_type_ = GetYogaSetterFunctionType(float_type_);
 }
 
 DOMCompiler::~DOMCompiler() {}
-
-void DOMCompiler::CompileWidthProperty(llvm::Value* node_ref, WidthProperty* prop) {}
-
-void DOMCompiler::CompileHeightProperty(llvm::Value* node_ref, HeightProperty* prop) {}
 
 auto DOMCompiler::Compile() -> std::unique_ptr<llvm::Module> {
   auto m = std::make_unique<llvm::Module>("jit", *ctx_);

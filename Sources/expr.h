@@ -15,7 +15,8 @@ namespace kura::expr {
   V(Binary)              \
   V(Seq)                 \
   V(If)                  \
-  V(Match)
+  V(Match)               \
+  V(Element)
 
 class Expr;
 // clang-format off
@@ -76,8 +77,12 @@ class SeqExpr : public Expr {
  private:
   ExprList children_{};
 
+  void Append(Expr* child) {
+    children_.push_back(child);
+  }
+
  public:
-  explicit SeqExpr(const ExprList children) :
+  explicit SeqExpr(const ExprList children = {}) :
     Expr(),
     children_(children) {}
   ~SeqExpr() override = default;
@@ -102,26 +107,12 @@ class SeqExpr : public Expr {
     return idx <= children_.size() && children_[idx] != nullptr;
   }
 
-  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override {
-    for (const auto& child : children_) {
-      if (!vis(child))
-        return false;
-    }
-    return true;
-  }
-
-  auto VisitChildren(ExprVisitor* vis) -> bool override {
-    for (const auto& child : children_) {
-      if (!child->Accept(vis))
-        return false;
-    }
-    return true;
-  }
-
+  auto VisitChildren(ExprVisitor* vis) -> bool override;
+  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override;
   DECLARE_EXPR_TYPE(Seq);
 
  public:
-  static inline auto New(const ExprList children) -> Expr* {
+  static inline auto New(const ExprList children = {}) -> Expr* {
     return new SeqExpr(std::move(children));
   }
 };
@@ -141,6 +132,11 @@ class LiteralExpr : public Expr {
   }
 
   DECLARE_EXPR_TYPE(Literal);
+
+ public:
+  static inline auto New(Type* value) -> Expr* {
+    return new LiteralExpr(value);
+  }
 };
 
 #define FOR_EACH_UNARY_OP(V) V(Negate)
@@ -178,6 +174,8 @@ class UnaryExpr : public Expr {
     return value_;
   }
 
+  auto VisitChildren(ExprVisitor* vis) -> bool override;
+  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override;
   DECLARE_EXPR_TYPE(Unary);
 
  public:
@@ -238,6 +236,8 @@ class BinaryExpr : public Expr {
     return right_;
   }
 
+  auto VisitChildren(ExprVisitor* vis) -> bool override;
+  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override;
   DECLARE_EXPR_TYPE(Binary);
 
  public:
@@ -283,20 +283,153 @@ class IfExpr : public Expr {
     return else_ != nullptr;
   }
 
+  auto VisitChildren(ExprVisitor* vis) -> bool override;
+  auto VisitChildren(const std::function<bool(Expr*)> vis) -> bool override;
   DECLARE_EXPR_TYPE(If);
 
  public:
-  static inline auto New(Expr* condition, Expr* then_expr, Expr* else_expr) -> Expr* {
+  static inline auto New(Expr* condition, Expr* then_expr, Expr* else_expr = nullptr) -> Expr* {
     return new IfExpr(condition, then_expr, else_expr);
   }
 };
 
-class MatchExpr : public Expr {
+#define FOR_EACH_PATTERN(V) \
+  V(Literal)                \
+  V(Default)
+
+class Pattern;
+#define DECLARE_PATTERN(Name) class Name##Pattern;
+FOR_EACH_PATTERN(DECLARE_PATTERN)
+#undef DECLARE_PATTERN
+
+class PatternVisitor {
+ protected:
+  PatternVisitor() = default;
+
  public:
-  MatchExpr() = default;
+  virtual ~PatternVisitor() = default;
+#define DEFINE_VISIT(Name) virtual auto Visit##Name(Name##Pattern* pattern) -> bool = 0;
+  FOR_EACH_PATTERN(DEFINE_VISIT);
+#undef DEFINE_VISIT
+};
+
+class Pattern {
+ protected:
+  Pattern() = default;
+
+ public:
+  virtual ~Pattern() = default;
+
+  virtual auto Accept(PatternVisitor* vis) -> bool = 0;
+  virtual auto GetPatternName() const -> std::string_view = 0;
+#define DEFINE_PATTERN_TYPE_CHECK(Name)       \
+  virtual auto As##Name() -> Name##Pattern* { \
+    return nullptr;                           \
+  }                                           \
+  inline auto Is##Name() -> bool {            \
+    return As##Name() != nullptr;             \
+  }
+  FOR_EACH_PATTERN(DEFINE_PATTERN_TYPE_CHECK)
+#undef DEFINE_PATTERN_TYPE_CHECK
+};
+
+#define DECLARE_PATTERN_TYPE(Name)                           \
+ public:                                                     \
+  auto Accept(PatternVisitor* vis) -> bool override;         \
+  auto GetPatternName() const -> std::string_view override { \
+    return #Name;                                            \
+  }                                                          \
+  auto As##Name() -> Name##Pattern* override {               \
+    return this;                                             \
+  }
+
+class LiteralPattern : public Pattern {
+ public:
+  LiteralPattern() = default;
+  ~LiteralPattern() override = default;
+
+  DECLARE_PATTERN_TYPE(Literal);
+
+ public:
+  static inline auto New() -> LiteralPattern* {
+    return new LiteralPattern();
+  }
+};
+
+class DefaultPattern : public Pattern {
+ public:
+  DefaultPattern() = default;
+  ~DefaultPattern() override = default;
+
+  DECLARE_PATTERN_TYPE(Default);
+
+ public:
+  static inline auto New() -> DefaultPattern* {
+    return new DefaultPattern();
+  }
+};
+
+using PatternList = std::vector<Pattern*>;
+
+class MatchExpr : public Expr {
+ private:
+  PatternList patterns_{};
+
+ public:
+  explicit MatchExpr(const PatternList patterns) :
+    Expr(),
+    patterns_(std::move(patterns)) {}
   ~MatchExpr() override = default;
 
+  auto GetPatterns() const -> const PatternList& {
+    return patterns_;
+  }
+
+  auto GetNumberOfPatterns() const -> size_t {
+    return patterns_.size();
+  }
+
+  auto HasPatterns() const -> bool {
+    return !patterns_.empty();
+  }
+
+  auto GetPatternAt(const size_t idx) const -> Pattern* {
+    return patterns_[idx];
+  }
+
+  auto HasPatternAt(const size_t idx) const -> bool {
+    return idx < patterns_.size() && patterns_[idx] != nullptr;
+  }
+
+  auto HasDefaultPattern() const -> bool {
+    for (const auto& pattern : patterns_) {
+      if (pattern->IsDefault())
+        return true;
+    }
+    return false;
+  }
+
+  auto VisitPatterns(PatternVisitor* vis) -> bool;
+  auto VisitPatterns(const std::function<bool(Pattern*)> vis) -> bool;
   DECLARE_EXPR_TYPE(Match);
+
+ public:
+  static inline auto New(const PatternList patterns = {}) -> MatchExpr* {
+    return new MatchExpr(std::move(patterns));
+  }
+};
+
+class ElementExpr : public Expr {
+ public:
+  ElementExpr() = default;
+  ~ElementExpr() override = default;
+
+  DECLARE_EXPR_TYPE(Element);
+
+ public:
+  static inline auto New() -> Expr* {
+    return new ElementExpr();
+  }
 };
 }  // namespace kura::expr
 

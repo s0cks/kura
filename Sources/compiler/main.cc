@@ -13,11 +13,13 @@
 
 #include "dom.h"
 #include "dom_compiler.h"
+#include "kura.h"
 #include "parser.h"
 
 using namespace kura;
 
 auto main(int argc, char** argv) -> int {
+  std::println("running kurac v{}", KURA_VERSION);
   if (argc < 2)
     return EXIT_FAILURE;
 

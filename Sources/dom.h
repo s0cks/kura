@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -15,10 +16,10 @@ namespace kura::dom {
   V(Width)                       \
   V(Height)
 
-struct Property;
+class Property;
 // clang-format off
 #define DECLARE_PROPERTY(Name) \
-  struct Name##Property;
+  class Name##Property;
 FOR_EACH_DOM_PROPERTY(DECLARE_PROPERTY)
 #undef DECLARE_PROPERTY
 
@@ -30,6 +31,15 @@ enum PropertyType : uint64_t {
   kTotalNumberOfPropertyTypes,
 };
 // clang-format on
+
+class PropertyVisitor {
+ protected:
+  PropertyVisitor() = default;
+
+ public:
+  virtual ~PropertyVisitor() = default;
+  virtual auto VisitProperty(Property* prop) -> bool = 0;
+};
 
 class Property {
   DEFINE_NON_COPYABLE_TYPE(Property);
@@ -59,6 +69,14 @@ class Property {
 
   void SetNext(Property* rhs) {
     next_ = rhs;
+  }
+
+  auto Accept(PropertyVisitor* vis) -> bool {
+    return vis->VisitProperty(this);
+  }
+
+  auto VisitNextProperty(PropertyVisitor* vis) -> bool {
+    return next_ ? next_->Accept(vis) : true;
   }
 
  public:
@@ -132,19 +150,20 @@ class PropertyTemplate : public Property {
   }
 };
 
-class WidthProperty : public PropertyTemplate<double> {
- public:
-  explicit WidthProperty(const double value = 0.0) :
-    PropertyTemplate(kWidthProperty, value) {}
-  ~WidthProperty() = default;
-};
+#define FOR_EACH_BASIC_DOM_PROPERTY(V) \
+  V(Width, double, 0.0)                \
+  V(Height, double, 0.0)
 
-class HeightProperty : public PropertyTemplate<double> {
- public:
-  explicit HeightProperty(const double value = 0.0) :
-    PropertyTemplate(kHeightProperty, value) {}
-  ~HeightProperty() = default;
-};
+#define DEFINE_BASIC_DOM_PROPERTY(Name, Type, InitValue)    \
+  class Name##Property : public PropertyTemplate<Type> {    \
+   public:                                                  \
+    explicit Name##Property(const Type value = InitValue) : \
+      PropertyTemplate(k##Name##Property, value) {}         \
+    ~Name##Property() = default;                            \
+  };
+
+FOR_EACH_BASIC_DOM_PROPERTY(DEFINE_BASIC_DOM_PROPERTY)
+#undef DEFINE_BASIC_DOM_PROPERTY
 
 class PropertyIterator {
  private:
@@ -168,10 +187,16 @@ class PropertyIterator {
 
 #define FOR_EACH_DOM_NODE(V) \
   V(Document)                \
-  V(Block)                   \
-  V(Line)                    \
+  V(Fragment)                \
+  V(Box)                     \
+  V(Button)                  \
   V(List)                    \
-  V(Text)
+  V(Text)                    \
+  V(Image)                   \
+  V(Viewport)                \
+  V(Canvas)                  \
+  V(Input)                   \
+  V(Scroll)
 
 class Node;
 // clang-format off
@@ -181,8 +206,7 @@ FOR_EACH_DOM_NODE(DECLARE_DOM_TYPE)
 #undef DECLARE_DOM_TYPE
 // clang-format on
 
-using NodePtr = std::shared_ptr<Node>;
-using NodeList = std::vector<NodePtr>;
+using NodeList = std::vector<Node*>;
 
 class NodeVisitor {
  public:
@@ -195,14 +219,63 @@ class NodeVisitor {
 };
 
 class Node {
+  DEFINE_NON_COPYABLE_TYPE(Node);
+
+ protected:
+  Node() = default;
+
+ public:
+  virtual ~Node() = default;
+  virtual auto Accept(NodeVisitor* vis) -> bool = 0;
+  virtual auto GetName() const -> std::string_view = 0;
+  virtual auto VisitChildren(NodeVisitor* vis) -> bool = 0;
+  virtual auto VisitChildren(std::function<bool(Node*)> vis) -> bool = 0;
+};
+
+class Container : public Node {
+ private:
+  NodeList children_{};
+
+ protected:
+  explicit Container(const NodeList children = {}) :
+    Node(),
+    children_(children) {}
+
+  void AddChild(Node* node) {
+    children_.push_back(node);
+  }
+
+ public:
+  ~Container() override = default;
+
+  auto GetChildren() const -> const NodeList& {
+    return children_;
+  }
+
+  auto GetNumberOfChildren() const -> size_t {
+    return children_.size();
+  }
+
+  auto HasChildren() const -> bool {
+    return !children_.empty();
+  }
+
+  auto GetChildAt(const size_t idx) const -> Node* {
+    return children_[idx];
+  }
+
+  auto VisitChildren(NodeVisitor* vis) -> bool override;
+  auto VisitChildren(std::function<bool(Node*)> vis) -> bool override;
+};
+
+class Box : public Container {
  private:
   YGNodeRef node_ = nullptr;
   Property* properties_ = nullptr;
-  std::vector<Node*> children_{};
 
  public:
-  Node() = default;
-  virtual ~Node() = default;
+  Box() = default;
+  ~Box() override = default;
 
   // TODO(@s0cks): reduce visibility
   inline auto node() const -> const YGNodeRef& {
@@ -226,14 +299,7 @@ class Node {
     return properties_;
   }
 
-  virtual auto Accept(NodeVisitor* vis) -> bool = 0;
-  virtual auto GetName() const -> std::string_view = 0;
-  virtual auto VisitChildren(NodeVisitor* vis) -> bool;
-
-  void AddChild(Node* rhs) {
-    children_.push_back(rhs);
-  }
-
+  auto Accept(NodeVisitor* vis) -> bool override;
 #define DEFINE_TYPE_CHECK(Name)      \
   inline auto Is##Name() -> bool {   \
     return As##Name() != nullptr;    \
@@ -246,56 +312,153 @@ class Node {
 };
 
 #define DECLARE_DOM_NODE_TYPE(Name)                   \
+  DEFINE_NON_COPYABLE_TYPE(Name);                     \
+                                                      \
  public:                                              \
   auto Accept(NodeVisitor* vis) -> bool override;     \
   auto GetName() const -> std::string_view override { \
     return #Name;                                     \
-  }                                                   \
-  auto As##Name() -> Name* override {                 \
-    return this;                                      \
   }
 
-class Document : public Node {
- private:
-  NodeList children_{};
-
+class Document : public Container {
  public:
-  Document() = default;
+  explicit Document(const NodeList children) :
+    Container(std::move(children)) {}
   ~Document() override = default;
 
   DECLARE_DOM_NODE_TYPE(Document);
+
+ public:
+  static inline auto New(const NodeList children = {}) -> Document* {
+    return new Document(children);
+  }
 };
 
-class Line : public Node {
+class Fragment : public Container {
  public:
-  Line() = default;
-  ~Line() override = default;
+  explicit Fragment(const NodeList children) :
+    Container(std::move(children)) {}
+  ~Fragment() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Line);
+  DECLARE_DOM_NODE_TYPE(Fragment);
+
+ public:
+  static inline auto New(const NodeList children = {}) -> Fragment* {
+    return new Fragment(children);
+  }
 };
 
-class Block : public Node {
+class Button : public Box {
  public:
-  Block() = default;
-  ~Block() override = default;
+  Button() = default;
+  ~Button() override = default;
 
-  DECLARE_DOM_NODE_TYPE(Block);
+  DECLARE_DOM_NODE_TYPE(Button);
+
+ public:
+  static inline auto New() -> Button* {
+    return new Button();
+  }
 };
 
-class Text : public Block {
+class Text : public Box {
+ private:
+  std::string value_;
+
  public:
-  Text() = default;
+  Text(const std::string value) :
+    Box(),
+    value_(std::move(value)) {}
   ~Text() override = default;
 
+  auto GetValue() const -> const std::string& {
+    return value_;
+  }
+
   DECLARE_DOM_NODE_TYPE(Text);
+
+ public:
+  static inline auto New(const std::string value) -> Text* {
+    return new Text(std::move(value));
+  }
 };
 
-class List : public Block {
+class Image : public Box {
+ public:
+  Image() = default;
+  ~Image() override = default;
+
+  DECLARE_DOM_NODE_TYPE(Image);
+
+ public:
+  static inline auto New() -> Image* {
+    return new Image();
+  }
+};
+
+class Canvas : public Box {
+ public:
+  Canvas() = default;
+  ~Canvas() override = default;
+
+  DECLARE_DOM_NODE_TYPE(Canvas);
+
+ public:
+  static inline auto New() -> Canvas* {
+    return new Canvas();
+  }
+};
+
+class Input : public Box {
+ public:
+  Input() = default;
+  ~Input() override = default;
+
+  DECLARE_DOM_NODE_TYPE(Input);
+
+ public:
+  static inline auto New() -> Input* {
+    return new Input();
+  }
+};
+
+class Scroll : public Box {
+ public:
+  Scroll() = default;
+  ~Scroll() override = default;
+
+  DECLARE_DOM_NODE_TYPE(Scroll);
+
+ public:
+  static inline auto New() -> Scroll* {
+    return new Scroll();
+  }
+};
+
+class List : public Box {
  public:
   List() = default;
   ~List() override = default;
 
   DECLARE_DOM_NODE_TYPE(List);
+
+ public:
+  static inline auto New() -> List* {
+    return new List();
+  }
+};
+
+class Viewport : public Box {
+ public:
+  Viewport() = default;
+  ~Viewport() override = default;
+
+  DECLARE_DOM_NODE_TYPE(Viewport);
+
+ public:
+  static inline auto New() -> Viewport* {
+    return new Viewport();
+  }
 };
 
 class DOMPrinter : public NodeVisitor {
@@ -310,13 +473,12 @@ class DOMPrinter : public NodeVisitor {
     indent_ -= 1;
   }
 
-  inline void PrintNode(Node* node) {
+  inline void PrintNode(const std::string_view& name, YGNodeRef node) {
     std::string indent(' ', indent_ * 2);
-    const auto top = YGNodeLayoutGetWidth(node->node());
-    const auto left = YGNodeLayoutGetLeft(node->node());
-    const auto width = YGNodeLayoutGetWidth(node->node());
-    const auto height = YGNodeLayoutGetHeight(node->node());
-    const auto name = node->GetName();
+    const auto top = YGNodeLayoutGetWidth(node);
+    const auto left = YGNodeLayoutGetLeft(node);
+    const auto width = YGNodeLayoutGetWidth(node);
+    const auto height = YGNodeLayoutGetHeight(node);
     std::printf("%s%s{ top: %lf, left: %lf, width: %lf, height: %lf }\n", indent.data(), name.data(), top, left, width,
                 height);
   }
