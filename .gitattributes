@@ -3,4 +3,5 @@
 
 CMakeLists.txt   linguist-vendored
 CMakePresets.txt linguist-vendored
+*.cmake          linguist-vendored
 *.g4             linguist-vendored
