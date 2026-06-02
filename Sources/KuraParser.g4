@@ -83,40 +83,20 @@ macroDecl
 // ╰────────────╯
 
 expression
-  : assignmentExpr
+  : binaryOpExpr
   ;
 
-assignmentExpr
-  : pipelineExpr (ASSIGN assignmentExpr)?
-  ;
-
-pipelineExpr
-  : logicalOrExpr (PIPE logicalOrExpr)*
-  ;
-
-logicalOrExpr
-  : logicalAndExpr (OR logicalAndExpr)*
-  ;
-
-logicalAndExpr
-  : equalityExpr (AND equalityExpr)*
-  ;
-
-equalityExpr
-  : comparisonExpr ((EQ | NEQ) comparisonExpr)*
-  ;
-
-comparisonExpr
-  : additiveExpr ((LT | LTE | GT | GTE) additiveExpr)*
-  ;
-
-additiveExpr
-  : multiplicativeExpr ((PLUS | MINUS) multiplicativeExpr)*
-  ;
-
-multiplicativeExpr
-  : unaryExpr ((STAR | SLASH | PERCENT) unaryExpr)*
-  ;
+binaryOpExpr
+    : binaryOpExpr (STAR | SLASH | PERCENT) binaryOpExpr
+    | binaryOpExpr (PLUS | MINUS) binaryOpExpr
+    | binaryOpExpr (LT | LTE | GT | GTE) binaryOpExpr
+    | binaryOpExpr (EQ | NEQ) binaryOpExpr
+    | binaryOpExpr AND binaryOpExpr
+    | binaryOpExpr OR binaryOpExpr
+    | binaryOpExpr PIPE binaryOpExpr
+    | <assoc=right> binaryOpExpr ASSIGN binaryOpExpr
+    | unaryExpr
+    ;
 
 unaryExpr
   : (BANG | PLUS | MINUS) unaryExpr
@@ -163,6 +143,7 @@ primaryExpr
   | ifExpr
   | matchExpr
   | uiExpr
+  | LPAREN expression RPAREN
   ;
 
 // ╭────────────╮
@@ -318,11 +299,11 @@ patternList
 // ╰────────────╯
 
 literal
-  : NUMBER
-  | STRING
-  | TRUE
-  | FALSE
-  | NULL
-  | NONE
-  | MEASUREMENT
+  : NUMBER      # LiteralNumber
+  | STRING      # LiteralString
+  | TRUE        # LiteralTrue
+  | FALSE       # LiteralFalse
+  | NULL        # LiteralNull
+  | NONE        # LiteralNone
+  | MEASUREMENT # LiteralMeasurement
   ;

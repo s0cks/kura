@@ -8,6 +8,7 @@
 #include "KuraLexer.h"
 #include "KuraParser.h"
 #include "expr_builder.h"
+#include "module.h"
 
 namespace kura {
 
@@ -41,7 +42,7 @@ auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> bool
   std::cout << tree->toStringTree(&parser) << std::endl;
   std::cout << std::endl;
 
-  expr::ExprBuilder expr_builder{};
+  expr::ExprBuilder expr_builder(GetScope());
   (*m) = std::any_cast<Module*>(expr_builder.visit(tree));
   return true;
 }

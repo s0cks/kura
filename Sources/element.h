@@ -16,7 +16,7 @@ namespace kura::elem {
 #define FOR_EACH_ELEMENT_NODE(V) \
   V(Document)                    \
   V(Fragment)                    \
-  V(Box)                         \
+  V(Block)                       \
   V(Button)                      \
   V(List)                        \
   V(Text)                        \
@@ -52,12 +52,42 @@ class Node {
  protected:
   Node() = default;
 
+  virtual void AddChild(Node* node) {
+    // do nothing
+  }
+
+  virtual void SetChildAt(const size_t idx, Node* value) {
+    // do nothing
+  }
+
  public:
   virtual ~Node() = default;
   virtual auto Accept(NodeVisitor* vis) -> bool = 0;
   virtual auto GetName() const -> std::string_view = 0;
-  virtual auto VisitChildren(NodeVisitor* vis) -> bool = 0;
-  virtual auto VisitChildren(std::function<bool(Node*)> vis) -> bool = 0;
+
+  virtual auto GetNumberOfChildren() const -> size_t {
+    return 0;
+  }
+
+  virtual auto GetChildAt(const size_t idx) const -> Node* {
+    return nullptr;
+  }
+
+  inline auto HasChildAt(const size_t idx) const -> bool {
+    return GetChildAt(idx) != nullptr;
+  }
+
+  virtual auto HasChildren() const -> bool {
+    return false;
+  }
+
+  virtual auto VisitChildren(NodeVisitor* vis) -> bool {
+    return true;
+  }
+
+  virtual auto VisitChildren(std::function<bool(Node*)> vis) -> bool {
+    return true;
+  }
 
 #define DEFINE_TYPE_CHECK(Name)      \
   inline auto Is##Name() -> bool {   \
@@ -70,35 +100,38 @@ class Node {
 #undef DEFINE_TYPE_CHECK
 };
 
-class Container : public Node {
+class StructuralNode : public Node {
  private:
   NodeList children_{};
 
  protected:
-  explicit Container(const NodeList children = {}) :
-    Node(),
+  explicit StructuralNode(const NodeList children = {}) :
     children_(children) {}
 
-  void AddChild(Node* node) {
+  void AddChild(Node* node) override {
     children_.push_back(node);
   }
 
+  void SetChildAt(const size_t idx, Node* value) override {
+    children_.at(idx) = value;
+  }
+
  public:
-  ~Container() override = default;
+  ~StructuralNode() = default;
 
   auto GetChildren() const -> const NodeList& {
     return children_;
   }
 
-  auto GetNumberOfChildren() const -> size_t {
+  auto GetNumberOfChildren() const -> size_t override {
     return children_.size();
   }
 
-  auto HasChildren() const -> bool {
+  auto HasChildren() const -> bool override {
     return !children_.empty();
   }
 
-  auto GetChildAt(const size_t idx) const -> Node* {
+  auto GetChildAt(const size_t idx) const -> Node* override {
     return children_[idx];
   }
 
@@ -118,10 +151,10 @@ class Container : public Node {
     return this;                                      \
   }
 
-class Document : public Container {
+class Document : public StructuralNode {
  public:
   explicit Document(const NodeList children) :
-    Container(std::move(children)) {}
+    StructuralNode(std::move(children)) {}
   ~Document() override = default;
 
   DECLARE_ELEMENT_NODE_TYPE(Document);
@@ -132,10 +165,10 @@ class Document : public Container {
   }
 };
 
-class Fragment : public Container {
+class Fragment : public StructuralNode {
  public:
   explicit Fragment(const NodeList children) :
-    Container(std::move(children)) {}
+    StructuralNode(std::move(children)) {}
   ~Fragment() override = default;
 
   DECLARE_ELEMENT_NODE_TYPE(Fragment);
@@ -146,14 +179,14 @@ class Fragment : public Container {
   }
 };
 
-class Box : public Container {
+class LayoutNode : public Node {
  private:
   YGNodeRef node_ = nullptr;
   Property* properties_ = nullptr;
 
  public:
-  Box() = default;
-  ~Box() override = default;
+  LayoutNode() = default;
+  ~LayoutNode() override = default;
 
   // TODO(@s0cks): reduce visibility
   inline auto node() const -> const YGNodeRef& {
@@ -176,35 +209,117 @@ class Box : public Container {
   auto GetPropertyList() const -> Property* {
     return properties_;
   }
+};
 
-  DECLARE_ELEMENT_NODE_TYPE(Box);
+template <const uint64_t NumberOfChildren>
+class TemplateLayoutNode : public LayoutNode {
+ private:
+  Node* children_[NumberOfChildren];
+
+ protected:
+  TemplateLayoutNode() = default;
+
+  void AddChild(Node* node) override {
+    // do nothing
+  }
 
  public:
-  static inline auto New() -> Box* {
-    return new Box();
+  ~TemplateLayoutNode() override = default;
+
+  auto GetNumberOfChildren() const -> size_t override {
+    return NumberOfChildren;
+  }
+
+  auto HasChildren() const -> bool override {
+    for (auto idx = 0; idx < NumberOfChildren; idx++) {
+      if (children_[idx] != nullptr)
+        return true;
+    }
+    return false;
+  }
+
+  auto GetChildAt(const size_t idx) const -> Node* override {
+    return children_[idx];
+  }
+
+  auto VisitChildren(NodeVisitor* vis) -> bool override {
+    for (auto idx = 0; idx < NumberOfChildren; idx++) {
+      if (!children_[idx])
+        continue;
+      if (!children_[idx]->Accept(vis))
+        return false;
+    }
+    return true;
+  }
+
+  auto VisitChildren(std::function<bool(Node*)> vis) -> bool override {
+    for (auto idx = 0; idx < NumberOfChildren; idx++) {
+      if (!children_[idx])
+        continue;
+      if (!vis(children_[idx]))
+        return false;
+    }
+    return true;
   }
 };
 
-class Button : public Box {
- public:
-  Button() = default;
-  ~Button() override = default;
+class DynamicLayoutNode : public LayoutNode {
+ private:
+  NodeList children_{};
 
-  DECLARE_ELEMENT_NODE_TYPE(Button);
+ protected:
+  explicit DynamicLayoutNode(const NodeList children) :
+    LayoutNode(),
+    children_(std::move(children)) {}
+
+  void AddChild(Node* node) override {
+    children_.push_back(node);
+  }
 
  public:
-  static inline auto New() -> Button* {
-    return new Button();
+  ~DynamicLayoutNode() override = default;
+
+  auto GetChildren() const -> const NodeList& {
+    return children_;
+  }
+
+  auto GetNumberOfChildren() const -> size_t override {
+    return children_.size();
+  }
+
+  auto GetChildAt(const size_t idx) const -> Node* override {
+    return children_.at(idx);
+  }
+
+  auto HasChildren() const -> bool override {
+    return !children_.empty();
+  }
+
+  auto VisitChildren(NodeVisitor* vis) -> bool override;
+  auto VisitChildren(std::function<bool(Node*)> vis) -> bool override;
+};
+
+class Block : public DynamicLayoutNode {
+ public:
+  explicit Block(const NodeList children) :
+    DynamicLayoutNode(std::move(children)) {}
+  ~Block() override = default;
+
+  DECLARE_ELEMENT_NODE_TYPE(Block);
+
+ public:
+  static inline auto New(const NodeList children = {}) -> Block* {
+    return new Block(std::move(children));
   }
 };
 
-class Text : public Box {
+class Text : public LayoutNode {
  private:
   std::string value_;
 
  public:
   Text(const std::string value) :
-    Box(),
+    LayoutNode(),
     value_(std::move(value)) {}
   ~Text() override = default;
 
@@ -220,7 +335,38 @@ class Text : public Box {
   }
 };
 
-class Image : public Box {
+class Button : public TemplateLayoutNode<1> {
+  static constexpr const size_t kTextPos = 0;
+
+ private:
+  inline void SetText(Text* value) {
+    SetChildAt(kTextPos, value);
+  }
+
+ public:
+  explicit Button(Text* text) {
+    SetText(text);
+  }
+  ~Button() override = default;
+
+  auto GetText() const -> Text* {
+    const auto text = GetChildAt(kTextPos);
+    return text ? text->AsText() : nullptr;
+  }
+
+  inline auto HasText() const -> bool {
+    return GetText() != nullptr;
+  }
+
+  DECLARE_ELEMENT_NODE_TYPE(Button);
+
+ public:
+  static inline auto New(Text* text = nullptr) -> Button* {
+    return new Button(text);
+  }
+};
+
+class Image : public LayoutNode {
  public:
   Image() = default;
   ~Image() override = default;
@@ -233,7 +379,7 @@ class Image : public Box {
   }
 };
 
-class Canvas : public Box {
+class Canvas : public LayoutNode {
  public:
   Canvas() = default;
   ~Canvas() override = default;
@@ -246,7 +392,7 @@ class Canvas : public Box {
   }
 };
 
-class Input : public Box {
+class Input : public LayoutNode {
  public:
   Input() = default;
   ~Input() override = default;
@@ -259,7 +405,7 @@ class Input : public Box {
   }
 };
 
-class Scroll : public Box {
+class Scroll : public LayoutNode {
  public:
   Scroll() = default;
   ~Scroll() override = default;
@@ -272,20 +418,21 @@ class Scroll : public Box {
   }
 };
 
-class List : public Box {
+class List : public DynamicLayoutNode {
  public:
-  List() = default;
+  explicit List(const NodeList children) :
+    DynamicLayoutNode(std::move(children)) {}
   ~List() override = default;
 
   DECLARE_ELEMENT_NODE_TYPE(List);
 
  public:
-  static inline auto New() -> List* {
-    return new List();
+  static inline auto New(const NodeList children = {}) -> List* {
+    return new List(std::move(children));
   }
 };
 
-class Viewport : public Box {
+class Viewport : public LayoutNode {
  public:
   Viewport() = default;
   ~Viewport() override = default;

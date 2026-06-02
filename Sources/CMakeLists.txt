@@ -17,6 +17,7 @@ llvm_map_components_to_libnames(llvm_libs
 )
 
 find_package(yoga CONFIG REQUIRED)
+pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
 
 set(GRAMMAR_NAME "Kura")
 list(APPEND GRAMMAR_SOURCES
@@ -43,8 +44,15 @@ add_library(kura-runtime SHARED
   element_printer.cc
   expr.cc
   expr_builder.cc
+  expr_printer.cc
+  function.cc
+  flow_graph.cc
+  flow_graph_builder.cc
   ir.cc
   layout.cc
+  local_scope.cc
+  module.cc
+  object.cc
   parser.cc
   type.cc
   ${GEN_SOURCES}
@@ -58,6 +66,7 @@ target_include_directories(kura-runtime
 )
 target_link_libraries(kura-runtime
   PUBLIC LLVM
+         PkgConfig::XXHASH
          yogacore
          antlr::antlr4
 )

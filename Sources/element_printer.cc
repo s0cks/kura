@@ -44,7 +44,7 @@ DEFINE_VISIT(Scroll);
 DEFINE_VISIT(Viewport);
 DEFINE_VISIT(Canvas);
 DEFINE_VISIT(Input);
-DEFINE_VISIT(Box);
+DEFINE_VISIT(Block);
 DEFINE_VISIT(Text);
 #undef DEFINE_VISIT
 }  // namespace kura::elem

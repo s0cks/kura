@@ -5,15 +5,3 @@ fn init() =>
     count: 0,
   }
 
-fn view(msg, state) =>
-  #text(state.count)
-
-fn update(msg, state) =>
-  match msg {
-    Increment =>
-      { count: state.count + 1 }
-    Decrement =>
-      { count: state.count - 1 }
-    _ =>
-      { count: 0 }
-  }

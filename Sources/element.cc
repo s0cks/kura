@@ -13,7 +13,7 @@ namespace kura::elem {
 FOR_EACH_ELEMENT_NODE(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
 
-auto Container::VisitChildren(NodeVisitor* vis) -> bool {
+auto StructuralNode::VisitChildren(NodeVisitor* vis) -> bool {
   for (auto& child : children_) {
     if (!child->Accept(vis))
       return false;
@@ -21,7 +21,23 @@ auto Container::VisitChildren(NodeVisitor* vis) -> bool {
   return true;
 }
 
-auto Container::VisitChildren(const std::function<bool(Node*)> vis) -> bool {
+auto StructuralNode::VisitChildren(const std::function<bool(Node*)> vis) -> bool {
+  for (auto& child : children_) {
+    if (!vis(child))
+      return false;
+  }
+  return true;
+}
+
+auto DynamicLayoutNode::VisitChildren(NodeVisitor* vis) -> bool {
+  for (auto& child : children_) {
+    if (!child->Accept(vis))
+      return false;
+  }
+  return true;
+}
+
+auto DynamicLayoutNode::VisitChildren(std::function<bool(Node*)> vis) -> bool {
   for (auto& child : children_) {
     if (!vis(child))
       return false;
