@@ -702,7 +702,7 @@ class ReturnInstr : public TemplateDefinition<1> {
   }
 };
 
-class PhiInstr : public Instruction {
+class PhiInstr : public Definition {
  public:
   struct Incoming {
     TargetEntryInstr* predecessor;
@@ -721,7 +721,7 @@ class PhiInstr : public Instruction {
 
  public:
   explicit PhiInstr(JoinEntryInstr* join) :
-    Instruction(),
+    Definition(),
     join_(join) {}
   ~PhiInstr() override = default;
 

@@ -187,7 +187,6 @@ auto ExprBuilder::visitBinaryOpExpr(KuraParser::BinaryOpExprContext* ctx) -> std
     return nullptr;
   }
 
-  std::cout << "creating binaryOpExpr: " << op << std::endl;
   auto lhs_node = std::any_cast<Expr*>(lhs_any);
   auto rhs_node = std::any_cast<Expr*>(rhs_any);
   return BinaryExpr::New(op, lhs_node, rhs_node);
@@ -200,12 +199,9 @@ auto ExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {
 
 auto ExprBuilder::visitQualifiedName(KuraParser::QualifiedNameContext* ctx) -> std::any {
   const auto ident = ctx->IDENTIFIER(0)->getText();
-  std::cout << "looking for " << ident << " in scope." << std::endl;
   const auto local = GetScope()->GetLocalRecursive(ident);
-  if (local) {
-    std::cout << "found: " << local->ToString() << std::endl;
+  if (local)
     return LoadLocalExpr::New(local);
-  }
 
   std::cerr << "failed to find " << ident << std::endl;
   std::stringstream ss{};
@@ -248,24 +244,52 @@ auto ExprBuilder::visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::an
   return nullptr;
 }
 
+class ArgListBuilder : public ExprBuilder {
+ private:
+  ExprList results_{};
+
+ public:
+  explicit ArgListBuilder(ModuleBuilder* owner) :
+    ExprBuilder(owner) {}
+  ~ArgListBuilder() override = default;
+
+  auto GetResults() const -> const ExprList& {
+    return results_;
+  }
+
+  inline auto HasResults() const -> bool {
+    return !results_.empty();
+  }
+
+  auto visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any override {
+    if (!ctx)
+      goto finished;
+
+    for (const auto& arg : ctx->expression()) {
+      const auto value = VisitExpr(arg);
+      if (!value)
+        throw std::runtime_error("failed to visit argument");
+
+      results_.push_back(value);
+    }
+
+  finished:
+    return nullptr;
+  }
+};
+
 auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::any {
+  const auto target = VisitExpr(ctx->primaryExpr());
+  if (!target)
+    throw std::runtime_error("failed to visit target");
+
   for (const auto& part : ctx->postfixPart()) {
     if (part->functionCall()) {
-      const auto target = VisitExpr(ctx->primaryExpr());
-      if (!target)
-        throw std::runtime_error("failed to visit target");
+      const auto call = part->functionCall();
 
-      ExprList args{};
-      if (part->functionCall()->argumentList()) {
-        for (const auto& arg : part->functionCall()->argumentList()->expression()) {
-          const auto a = VisitExpr(arg);
-          if (!a)
-            throw std::runtime_error("failed to visit argument");
-          args.push_back(a);
-        }
-      }
-
-      return CallExpr::New(target, std::move(args));
+      ArgListBuilder args(GetOwner());
+      args.visitArgumentList(call->argumentList());
+      return CallExpr::New(target, std::move(args.GetResults()));
     }
   }
 

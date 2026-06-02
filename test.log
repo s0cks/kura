@@ -1,0 +1,43 @@
+running kurac v0.0.1
+source:
+fn init() => [ 1, 2, 3, ]
+
+fn init2(x) => [ x, 4, 5, ]
+
+fn init3() => [ init(), 4, 5, ]
+
+--- Parse Tree ---
+(source (declaration (funcDecl fn init (parameterList ( )) => (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (listExpr [ (argumentList (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 1)))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 2)))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 3)))))) ,) ])))))))) (declaration (funcDecl fn init2 (parameterList ( (parameter x) )) => (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (listExpr [ (argumentList (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (qualifiedName x)))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 4)))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 5)))))) ,) ])))))))) (declaration (funcDecl fn init3 (parameterList ( )) => (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (listExpr [ (argumentList (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (qualifiedName init)) (postfixPart (functionCall ( ))))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 4)))))) , (expression (binaryOpExpr (unaryExpr (postfixExpr (primaryExpr (literal 5)))))) ,) ])))))))) <EOF>)
+
+Module: Module(name=Kura, functions=[Function(name=init, body=0x556c27c912c0),Function(name=init2, body=0x556c27c9a060),Function(name=init3, body=0x556c27c9bc40)])
+ - Function(name=init, body=0x556c27c912c0)
+      
+      HIR:
+      TargetEntryInstr()
+      ConstantInstr(value=Number(value=1))
+      ConstantInstr(value=Number(value=2))
+      ConstantInstr(value=Number(value=3))
+      NewListInstr(Value(defn=ConstantInstr(value=Number(value=1))), Value(defn=ConstantInstr(value=Number(value=2))), Value(defn=ConstantInstr(value=Number(value=3))))
+      ReturnInstr(value=Value(defn=NewListInstr(Value(defn=ConstantInstr(value=Number(value=1))), Value(defn=ConstantInstr(value=Number(value=2))), Value(defn=ConstantInstr(value=Number(value=3))))))
+      
+ - Function(name=init2, body=0x556c27c9a060)
+      
+      HIR:
+      TargetEntryInstr()
+      LoadLocal(local=LocalVariable(owner=0x556c27c99060, name=x))
+      ConstantInstr(value=Number(value=4))
+      ConstantInstr(value=Number(value=5))
+      NewListInstr(Value(defn=LoadLocal(local=LocalVariable(owner=0x556c27c99060, name=x))), Value(defn=ConstantInstr(value=Number(value=4))), Value(defn=ConstantInstr(value=Number(value=5))))
+      ReturnInstr(value=Value(defn=NewListInstr(Value(defn=LoadLocal(local=LocalVariable(owner=0x556c27c99060, name=x))), Value(defn=ConstantInstr(value=Number(value=4))), Value(defn=ConstantInstr(value=Number(value=5))))))
+      
+ - Function(name=init3, body=0x556c27c9bc40)
+      
+      HIR:
+      TargetEntryInstr()
+      LoadLocal(local=LocalVariable(owner=0x556c27c46430, name=init))
+      CallInstr(target=Value(defn=LoadLocal(local=LocalVariable(owner=0x556c27c46430, name=init))))
+      ConstantInstr(value=Number(value=4))
+      ConstantInstr(value=Number(value=5))
+      NewListInstr(Value(defn=CallInstr(target=Value(defn=LoadLocal(local=LocalVariable(owner=0x556c27c46430, name=init))))), Value(defn=ConstantInstr(value=Number(value=4))), Value(defn=ConstantInstr(value=Number(value=5))))
+      ReturnInstr(value=Value(defn=NewListInstr(Value(defn=CallInstr(target=Value(defn=LoadLocal(local=LocalVariable(owner=0x556c27c46430, name=init))))), Value(defn=ConstantInstr(value=Number(value=4))), Value(defn=ConstantInstr(value=Number(value=5))))))
+      

@@ -33,7 +33,7 @@ auto FlowGraphBuilder::Build() -> FlowGraph* {
 
 auto FlowGraphBuilder::Visit(expr::Expr* expr) -> VisitResult {
   // TODO(@s0cks): account for multiple expressions involved
-  ValueVisitor for_value(this);
+  EffectVisitor for_value(this);
   if (!expr->Accept(&for_value))
     return VisitResult::kStop;
 

@@ -9,22 +9,24 @@ void IRPrinter::PrintInstruction(Instruction* instr) {
     const auto branch = instr->AsBranch();
     {
       out() << "then: " << std::endl;
-      IndentScope indent_scope(indent_);
+      IndentScope then_scope(indent_);
       PrintInstructions(branch->GetThen());
     }
 
     if (branch->HasElse()) {
       out() << "else: " << std::endl;
-      IndentScope indent_scope(indent_);
+      IndentScope else_scope(indent_);
       PrintInstructions(branch->GetElse());
     }
 
-    PrintInstructions(branch->GetJoin());
-    return;
+    return PrintInstructions(branch->GetJoin());
   }
 }
 
 void IRPrinter::PrintInstructions(EntryInstr* entry) {
+  if (!entry)
+    return;
+
   ForwardInstructionIterator iter(entry);
   while (iter.HasNext()) {
     const auto next = iter.Next();
