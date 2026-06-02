@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+#include "common.h"
+
 namespace kura {
 static None* kNone = nullptr;
 
@@ -42,6 +44,10 @@ auto Bool::ToString() const -> std::string {
   return ss.str();
 }
 
+void Number::Init() {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+}
+
 auto Number::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "Number(";
@@ -50,12 +56,26 @@ auto Number::ToString() const -> std::string {
   return ss.str();
 }
 
+void String::Init() {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+}
+
 auto String::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "String(";
   ss << "value=" << GetValue();
   ss << ")";
   return ss.str();
+}
+
+auto String::GetHash() const -> String::HashType {
+  static constexpr const auto kHashSeed = 0;
+  const char* data = GetData().data();
+  return static_cast<size_t>(XXH64(data, GetLength(), kHashSeed));
+}
+
+void Seq::Init() {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
 }
 
 auto Seq::ToString() const -> std::string {
@@ -85,6 +105,10 @@ auto Seq::VisitChildren(ObjectVisitor* vis) -> VisitResult {
   return VisitResult::kContinue;
 }
 
+void Record::Init() {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+}
+
 auto Record::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "Record(";
@@ -108,6 +132,10 @@ auto Record::VisitChildren(ObjectVisitor* vis) -> VisitResult {
       return VisitResult::kStop;
   }
   return VisitResult::kContinue;
+}
+
+void Property::Init() {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
 }
 
 auto Property::ToString() const -> std::string {

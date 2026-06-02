@@ -6,6 +6,11 @@
 #include "object.h"
 
 namespace kura::expr {
+auto ModuleBuilder::Build(KuraParser::SourceContext* ctx) -> Module* {
+  expr::ExprBuilder builder(this);
+  return std::any_cast<Module*>(builder(ctx));
+}
+
 auto ExprBuilder::CreateFunctionInScope(const std::string name) -> Function* {
   const auto func = Function::New(std::move(name));
   const auto local = GetScope()->CreateLocal(func->name);
@@ -19,7 +24,7 @@ auto ExprBuilder::CreateFunctionInScope(const std::string name) -> Function* {
 
 auto ExprBuilder::visitSource(KuraParser::SourceContext* ctx) -> std::any {
   // TODO(@s0cks): get module name from parse tree
-  auto m = Module::New("KuraModule");
+  const auto m = Module::New("Kura");
   // m->span = makeSpan(ctx);
   for (auto d : ctx->declaration()) {
     const auto decl = visit(d);
@@ -79,12 +84,12 @@ auto ExprBuilder::visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any {
 }
 
 auto ExprBuilder::visitRecordExpr(KuraParser::RecordExprContext* ctx) -> std::any {
-  RecordExprBuilder builder(GetScope());
+  RecordExprBuilder builder(GetOwner());
   return builder(ctx);
 }
 
 auto ExprBuilder::visitBlockExpr(KuraParser::BlockExprContext* ctx) -> std::any {
-  BlockExprBuilder builder(GetScope());
+  BlockExprBuilder builder(GetOwner());
   return builder.visitBlockExpr(ctx);
 }
 
@@ -189,7 +194,7 @@ auto ExprBuilder::visitBinaryOpExpr(KuraParser::BinaryOpExprContext* ctx) -> std
 }
 
 auto ExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {
-  ListExprBuilder builder(GetScope());
+  ListExprBuilder builder(GetOwner());
   return builder(ctx);
 }
 

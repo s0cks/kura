@@ -22,6 +22,19 @@ class FlowGraphBuilder {
   inline auto operator()(expr::Expr* expr) -> VisitResult {
     return Visit(expr);
   }
+
+ public:
+  static inline auto BuildFlowGraph(expr::Expr* expr) -> FlowGraph* {
+    if (!expr)
+      return nullptr;
+    FlowGraphBuilder builder{};
+    const auto result = builder(expr);
+    if (!result) {
+      std::cerr << "failed to build flow graph: " << result;
+      return nullptr;
+    }
+    return builder.Build();
+  }
 };
 
 class ValueVisitor;

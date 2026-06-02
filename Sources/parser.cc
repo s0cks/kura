@@ -25,25 +25,31 @@ static inline auto ReadContentsFrom(const std::string filename, std::string& con
   return content.length() >= size;
 }
 
-auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> bool {
+auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> ParseResult {
   std::string source{};
   if (!ReadContentsFrom(filename, source)) {
-    std::cerr << "failed to read source from: " << filename;
-    return false;
+    std::stringstream ss{};
+    ss << "failed to read source from: " << filename;
+    return Fail(ss);
   }
+
+#ifdef KURA_DEBUG
   std::cout << "source:" << std::endl << source << std::endl;
+#endif  // KURA_DEBUG
 
   antlr4::ANTLRInputStream stream(source);
   KuraLexer lexer(&stream);
   antlr4::CommonTokenStream tokens(&lexer);
   KuraParser parser(&tokens);
   auto* tree = parser.source();
+#ifdef KURA_DEBUG
   std::cout << "--- Parse Tree ---" << std::endl;
   std::cout << tree->toStringTree(&parser) << std::endl;
   std::cout << std::endl;
+#endif  // KURA_DEBUG
 
-  expr::ExprBuilder expr_builder(GetScope());
-  (*m) = std::any_cast<Module*>(expr_builder.visit(tree));
-  return true;
+  expr::ModuleBuilder builder(GetScope());
+  (*m) = builder(tree);
+  return Success();
 }
 }  // namespace kura

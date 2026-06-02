@@ -60,6 +60,11 @@ class TemplateValueObject : public TemplateObject<Type> {
 };
 
 #define DECLARE_TYPE(Name) \
+  friend class Type;       \
+                           \
+ private:                  \
+  static void Init();      \
+                           \
  public:                   \
   auto ToString() const -> std::string override;
 
@@ -71,7 +76,6 @@ class None : public TemplateObject<kNoneType> {
   DECLARE_TYPE(None);
 
  public:
-  static void Init();
   static auto Get() -> None*;
   static inline auto New() -> None* {
     return new None();
@@ -91,7 +95,6 @@ class Bool : public TemplateValueObject<kBoolType, bool> {
     return new Bool(value);
   }
 
-  static void Init();
   static auto False() -> Bool*;
   static auto True() -> Bool*;
 };
@@ -112,10 +115,21 @@ class Number : public TemplateValueObject<kNumberType, double> {
 
 class String : public TemplateValueObject<kStringType, std::string> {
  public:
+  using HashType = uint64_t;  // TODO(@s0cks): merge with global hash type
+ public:
   explicit String(const std::string value) :
     TemplateValueObject(std::move(value)) {}
   ~String() override = default;
 
+  inline auto GetData() const -> std::string_view {
+    return GetValue().data();
+  }
+
+  inline auto GetLength() const -> uint64_t {
+    return GetValue().length();
+  }
+
+  auto GetHash() const -> HashType;
   DECLARE_TYPE(String);
 
  public:

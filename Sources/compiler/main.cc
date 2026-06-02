@@ -17,85 +17,84 @@
 #include "flow_graph.h"
 #include "flow_graph_builder.h"
 #include "ir.h"
+#include "ir_printer.h"
 #include "kura.h"
 #include "module.h"
 #include "parser.h"
 
 using namespace kura;
 
-static inline void PrintInstructions(EntryInstr* entry, Indent& indent);
-static inline void PrintInstruction(Instruction* instr, Indent& indent) {
-  if (instr->IsBranch()) {
-    const auto branch = instr->AsBranch();
-    std::cout << indent << " - " << instr->ToString() << std::endl;
-    indent.Increment();
+class ModulePrinter {
+ private:
+  std::ostream& stream_;
+  Indent indent_{};
 
-    std::cout << indent << " then: " << std::endl;
-    indent.Increment();
-    PrintInstructions(branch->GetThen(), indent);
-    indent.Decrement();
-
-    if (branch->HasElse()) {
-      std::cout << indent << " else: " << std::endl;
-      indent.Increment();
-      PrintInstructions(branch->GetElse(), indent);
-      indent.Decrement();
-    }
-
-    indent.Decrement();
-    PrintInstructions(branch->GetJoin(), indent);
-    return;
+  inline auto stream() const -> std::ostream& {
+    return stream_;
   }
-  std::cout << indent << " - " << instr->ToString() << std::endl;
-}
 
-static inline void PrintInstructions(EntryInstr* entry, Indent& indent) {
-  ForwardInstructionIterator iter(entry);
-  while (iter.HasNext()) {
-    const auto next = iter.Next();
-    PrintInstruction(next, indent);
+  inline auto indent() const -> const Indent& {
+    return indent_;
   }
-}
+
+  inline auto out() -> std::ostream& {
+    return stream() << indent();
+  }
+
+ public:
+  explicit ModulePrinter(std::ostream& stream, const Indent indent = 0) :
+    stream_(stream),
+    indent_(std::move(indent)) {}
+  ~ModulePrinter() = default;
+
+  auto PrintModule(Module* rhs) -> bool {
+    if (!rhs)
+      return true;
+
+    out() << "Module: " << rhs->ToString() << std::endl;
+    IndentScope indent_scope(indent_);
+    const auto vis = [&](Function* func) {
+      stream() << " - " << func->ToString() << std::endl;
+      const auto flow_graph = FlowGraphBuilder::BuildFlowGraph(func->body);
+      if (!flow_graph)
+        return false;
+
+      IRPrinter::Print(std::cout, flow_graph, indent() + 1);
+      return true;
+    };
+
+    return rhs->VisitFunctions(vis);
+  }
+
+  auto operator()(Module* rhs) -> bool {
+    return PrintModule(rhs);
+  }
+};
 
 auto main(int argc, char** argv) -> int {
   std::println("running kurac v{}", KURA_VERSION);
   if (argc < 2)
     return EXIT_FAILURE;
 
+  Type::Init();
+
   LocalScope* scope = LocalScope::New();
   const std::string filename(argv[1]);
 
   Module* m = nullptr;
   Parser parser(scope);
-  if (!parser.ParseModuleFromFile(filename, &m)) {
-    std::cerr << "failed to parse Module from " << filename;
-    return EXIT_FAILURE;
+
+  {
+    const auto result = parser.ParseModuleFromFile(filename, &m);
+    if (!result) {
+      std::cerr << "parse error: " << result;
+      return EXIT_FAILURE;
+    }
   }
 
-  if (!m) {
-    std::cerr << "failed to parse Module from " << filename;
+  ModulePrinter printer(std::cout);
+  if (!printer(m))
     return EXIT_FAILURE;
-  }
-
-  Indent indent{};
-  std::cout << "Module: " << m->name << std::endl;
-  indent.Increment();
-  const auto vis = [&](Function* func) {
-    std::cout << indent << "- " << func->ToString() << ": " << std::endl;
-    indent.Increment();
-
-    FlowGraphBuilder builder{};
-    const auto result = builder(func->body);
-    const FlowGraph* flow_graph = builder.Build();
-    std::cout << indent << "HIR: " << std::endl;
-    PrintInstructions(flow_graph->GetEntry()->GetTarget(), indent);
-    indent.Decrement();
-    return true;
-  };
-  if (!m->VisitFunctions(vis)) {
-    std::cerr << indent << "failed to visit functions" << std::endl;
-    return EXIT_FAILURE;
-  }
 
   // llvm::InitLLVM x(argc, argv);
   // llvm::InitializeNativeTarget();

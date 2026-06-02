@@ -6,15 +6,57 @@
 #include "KuraParser.h"
 #include "KuraParserBaseVisitor.h"
 // clang-format on
+
 #include "expr.h"
 #include "function.h"
 #include "local_scope.h"
 #include "object.h"
 
+namespace kura {
+class Module;
+}
+
 namespace kura::expr {
-class ExprBuilder : public KuraParserBaseVisitor {
+class ModuleBuilder {
+  friend class ExprBuilder;
+  DEFINE_NON_COPYABLE_TYPE(ModuleBuilder);
+
  private:
   LocalScope* scope_;
+
+  inline auto PushScope() -> LocalScope* {
+    const auto new_scope = LocalScope::New(scope_);
+    scope_ = new_scope;
+    return new_scope;
+  }
+
+  inline auto PopScope() -> LocalScope* {
+    if (scope_->IsRoot())
+      return nullptr;
+    const auto old_scope = scope_;
+    scope_ = old_scope->GetParent();
+    return old_scope;
+  }
+
+ public:
+  explicit ModuleBuilder(LocalScope* scope) :
+    scope_(scope) {}
+  ~ModuleBuilder() = default;
+
+  auto GetScope() const -> LocalScope* {
+    return scope_;
+  }
+
+  auto Build(KuraParser::SourceContext* ctx) -> Module*;
+
+  auto operator()(KuraParser::SourceContext* ctx) -> Module* {
+    return Build(ctx);
+  }
+};
+
+class ExprBuilder : public KuraParserBaseVisitor {
+ private:
+  ModuleBuilder* owner_;
 
  protected:
   template <typename C, class E = Expr>
@@ -37,17 +79,11 @@ class ExprBuilder : public KuraParserBaseVisitor {
   }
 
   inline auto PushScope() -> LocalScope* {
-    const auto new_scope = LocalScope::New(scope_);
-    scope_ = new_scope;
-    return new_scope;
+    return GetOwner()->PushScope();
   }
 
   inline auto PopScope() -> LocalScope* {
-    if (scope_->IsRoot())
-      return nullptr;
-    const auto old_scope = scope_;
-    scope_ = old_scope->GetParent();
-    return old_scope;
+    return GetOwner()->PopScope();
   }
 
   inline auto CreateFunctionInScope(const std::string name) -> Function*;
@@ -81,13 +117,17 @@ class ExprBuilder : public KuraParserBaseVisitor {
   }
 
  public:
-  explicit ExprBuilder(LocalScope* scope) :
+  explicit ExprBuilder(ModuleBuilder* owner) :
     KuraParserBaseVisitor(),
-    scope_(scope) {}
+    owner_(owner) {}
   ~ExprBuilder() override = default;
 
-  auto GetScope() const -> LocalScope* {
-    return scope_;
+  auto GetOwner() const -> ModuleBuilder* {
+    return owner_;
+  }
+
+  inline auto GetScope() const -> LocalScope* {
+    return GetOwner()->GetScope();
   }
 
   auto visitSource(KuraParser::SourceContext* ctx) -> std::any override;
@@ -128,6 +168,10 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any override;
   auto visitUiProp(KuraParser::UiPropContext* ctx) -> std::any override;
   auto visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any override;
+
+  auto operator()(KuraParser::SourceContext* ctx) -> std::any {
+    return visit(ctx);
+  }
 };
 
 class BlockExprBuilder : public ExprBuilder {
@@ -135,8 +179,8 @@ class BlockExprBuilder : public ExprBuilder {
   ExprList expressions_{};
 
  public:
-  explicit BlockExprBuilder(LocalScope* scope) :
-    ExprBuilder(scope) {}
+  explicit BlockExprBuilder(ModuleBuilder* owner) :
+    ExprBuilder(owner) {}
   ~BlockExprBuilder() override = default;
 
   auto visitBlockExpr(KuraParser::BlockExprContext* ctx) -> std::any override;
@@ -148,8 +192,8 @@ class RecordExprBuilder : public ExprBuilder {
   std::vector<SpreadExpr*> spreads_{};
 
  public:
-  explicit RecordExprBuilder(LocalScope* scope) :
-    ExprBuilder(scope) {}
+  explicit RecordExprBuilder(ModuleBuilder* owner) :
+    ExprBuilder(owner) {}
   ~RecordExprBuilder() override = default;
 
   auto visitRecordExpr(KuraParser::RecordExprContext* ctx) -> std::any override;
@@ -171,8 +215,8 @@ class MatchExprBuilder : public ExprBuilder {
   }
 
  public:
-  explicit MatchExprBuilder(LocalScope* scope) :
-    ExprBuilder(scope) {}
+  explicit MatchExprBuilder(ModuleBuilder* owner) :
+    ExprBuilder(owner) {}
   ~MatchExprBuilder() override = default;
 
   auto visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any override;
@@ -197,8 +241,8 @@ class ListExprBuilder : public ExprBuilder {
   ExprList values_{};
 
  public:
-  explicit ListExprBuilder(LocalScope* scope) :
-    ExprBuilder(scope) {}
+  explicit ListExprBuilder(ModuleBuilder* owner) :
+    ExprBuilder(owner) {}
   ~ListExprBuilder() override = default;
 
   auto visitListExpr(KuraParser::ListExprContext* ctx) -> std::any override;

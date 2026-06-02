@@ -7,6 +7,25 @@
 #include <limits>
 #include <string>
 
+// clang-format off
+#ifndef XXH_INLINE_ALL
+#define XXH_INLINE_ALL
+#endif  // XXH_INLINE_ALL
+#include <xxhash.h>
+// clang-format on
+
+#ifndef NOT_IMPLEMENTED
+
+// clang-format off
+#define _NOT_IMPLEMENTED(Name) \
+  std::cerr << Name << " is not implemented!" << std::endl;
+
+#define NOT_IMPLEMENTED \
+  _NOT_IMPLEMENTED(__PRETTY_FUNCTION__)
+// clang-format on
+
+#endif  // NOT_IMPLEMENTED
+
 namespace kura {
 #define DEFINE_NON_COPYABLE_TYPE(Name)             \
  public:                                           \
@@ -156,6 +175,10 @@ struct Indent {
     return value.data();
   }
 
+  auto operator+(const int rhs) const -> Indent {
+    return value.length() + rhs;
+  }
+
   auto operator=(Indent&& rhs) -> Indent& = default;
   auto operator=(const Indent& rhs) -> Indent& = default;
 
@@ -169,6 +192,38 @@ struct Indent {
     return *this;
   }
 };
+
+static inline auto operator+(const int lhs, const Indent& rhs) -> Indent {
+  return rhs.length + rhs;
+}
+
+template <const uint64_t Size>
+class TemplateIndentScope {
+  DEFINE_NON_COPYABLE_TYPE(TemplateIndentScope<Size>);
+
+ private:
+  Indent& indent_;
+
+ public:
+  explicit TemplateIndentScope(Indent& indent) :
+    indent_(indent) {
+    indent_.Increment(Size);
+  }
+  ~TemplateIndentScope() {
+    indent_.Decrement(Size);
+  }
+
+  operator Indent&() {
+    return indent_;
+  }
+
+  operator const Indent&() const {
+    return indent_;
+  }
+};
+
+using DefaultIndentScope = TemplateIndentScope<1>;
+using IndentScope = DefaultIndentScope;
 }  // namespace kura
 
 #endif  // KURA_COMMON_H

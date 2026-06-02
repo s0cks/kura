@@ -49,6 +49,7 @@ add_library(kura-runtime SHARED
   flow_graph.cc
   flow_graph_builder.cc
   ir.cc
+  ir_printer.cc
   layout.cc
   local_scope.cc
   module.cc
