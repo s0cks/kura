@@ -355,7 +355,10 @@ class StoreLocalExpr : public TemplateExpr<1> {
   }
 };
 
-#define FOR_EACH_UNARY_OP(V) V(Negate)
+#define FOR_EACH_UNARY_OP(V) \
+  V(Plus)                    \
+  V(Minus)                   \
+  V(Bang)
 
 enum UnaryOp {
 #define DEFINE_OP(Name) k##Name,
@@ -428,7 +431,10 @@ class UnaryExpr : public TemplateExpr<1> {
   V(GreaterThan)              \
   V(GreaterThanEqual)         \
   V(LessThan)                 \
-  V(LessThanEqual)
+  V(LessThanEqual)            \
+  V(BinaryAnd)                \
+  V(BinaryOr)                 \
+  V(Pipe)
 
 enum BinaryOp {
 #define DEFINE_BINARY_OP(Name) k##Name,

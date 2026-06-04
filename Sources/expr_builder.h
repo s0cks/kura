@@ -133,6 +133,7 @@ class ExprBuilder : public KuraParserBaseVisitor {
 
   auto visitSource(KuraParser::SourceContext* ctx) -> std::any override;
   auto visitBinaryOpExpr(KuraParser::BinaryOpExprContext* ctx) -> std::any override;
+  auto visitUnaryExpr(KuraParser::UnaryExprContext* ctx) -> std::any override;
   auto visitQualifiedName(KuraParser::QualifiedNameContext* ctx) -> std::any override;
   auto visitBlockExpr(KuraParser::BlockExprContext* ctx) -> std::any override;
   auto visitRecordExpr(KuraParser::RecordExprContext* ctx) -> std::any override;

@@ -1,5 +1,7 @@
 #include "expr_builder.h"
 
+#include <optional>
+
 #include "KuraParser.h"
 #include "function.h"
 #include "module.h"
@@ -129,6 +131,33 @@ auto ExprBuilder::visitLiteralMeasurement(KuraParser::LiteralMeasurementContext*
   return nullptr;
 }
 
+#define FOR_EACH_BINARY_OP_TOKEN(V) \
+  V(Add, "+")                       \
+  V(Subtract, "-")                  \
+  V(Multiply, "*")                  \
+  V(Divide, "/")                    \
+  V(Modulus, "%")                   \
+  V(Eq, "==")                       \
+  V(Neq, "!=")                      \
+  V(LessThan, "<")                  \
+  V(LessThanEqual, "<=")            \
+  V(GreaterThan, ">")               \
+  V(GreaterThanEqual, ">=")         \
+  V(BinaryAnd, "&&")                \
+  V(BinaryOr, "||")                 \
+  V(Pipe, "|")
+
+static inline auto GetBinaryOpFromText(const std::string& rhs) -> std::optional<BinaryOp> {
+#define DEFINE_CASE(Name, Token) \
+  if (rhs == (Token))            \
+    return {BinaryOp::k##Name};
+
+  FOR_EACH_BINARY_OP_TOKEN(DEFINE_CASE)
+#undef DEFINE_CASE
+
+  return std::nullopt;
+}
+
 auto ExprBuilder::visitBinaryOpExpr(KuraParser::BinaryOpExprContext* ctx) -> std::any {
   if (ctx->children.size() == 1)
     return visit(ctx->children.at(0));
@@ -150,46 +179,55 @@ auto ExprBuilder::visitBinaryOpExpr(KuraParser::BinaryOpExprContext* ctx) -> std
     return nullptr;
   }
 
-  std::string op_text = ctx->children.at(1)->getText();
-  BinaryOp op;
-  if (op_text == "+")
-    op = BinaryOp::kAdd;
-  else if (op_text == "-")
-    op = BinaryOp::kSubtract;
-  else if (op_text == "*")
-    op = BinaryOp::kMultiply;
-  else if (op_text == "/")
-    op = BinaryOp::kDivide;
-  else if (op_text == "%")
-    op = BinaryOp::kModulus;
-  else if (op_text == "==")
-    op = BinaryOp::kEq;
-  else if (op_text == "!=")
-    op = BinaryOp::kNeq;
-  else if (op_text == "<")
-    op = BinaryOp::kLessThan;
-  else if (op_text == "<=")
-    op = BinaryOp::kLessThanEqual;
-  else if (op_text == ">")
-    op = BinaryOp::kGreaterThan;
-  else if (op_text == ">=")
-    op = BinaryOp::kGreaterThanEqual;
-  // else if (op_text == "&&")
-  //   op = BinaryOp::kAnd;
-  // else if (op_text == "||")
-  //   op = BinaryOp::kOr;
-  // else if (op_text == "|")
-  //   op = BinaryOp::kPipe;
-  // else if (op_text == "=")
-  //   op = BinaryOp::kAssign;
-  else {
-    std::cerr << "Error: Unknown binary operator: " << op_text << std::endl;
-    return nullptr;
+  const auto op_token = ctx->children.at(1)->getText();
+  const auto op = GetBinaryOpFromText(op_token);
+  if (!op) {
+    std::stringstream ss{};
+    ss << "invalid BinaryOp token: " << op_token;
+    throw std::runtime_error(ss.str());
   }
 
   auto lhs_node = std::any_cast<Expr*>(lhs_any);
   auto rhs_node = std::any_cast<Expr*>(rhs_any);
-  return BinaryExpr::New(op, lhs_node, rhs_node);
+  return BinaryExpr::New(*op, lhs_node, rhs_node);
+}
+
+#define FOR_EACH_UNARY_OP_TOKEN(V) \
+  V(Plus, "+")                     \
+  V(Minus, "-")                    \
+  V(Bang, "!")
+
+static inline auto GetUnaryOpFromToken(const std::string& rhs) -> std::optional<UnaryOp> {
+#define DEFINE_CASE(Name, Token) \
+  if (rhs == (Token))            \
+    return {UnaryOp::k##Name};
+
+  FOR_EACH_UNARY_OP_TOKEN(DEFINE_CASE)
+#undef DEFINE_CASE
+  return std::nullopt;
+}
+
+auto ExprBuilder::visitUnaryExpr(KuraParser::UnaryExprContext* ctx) -> std::any {
+  const auto& children = ctx->children;
+  if (children.size() == 1)
+    return visitChildren(ctx);
+
+  const auto op_token = children.at(0)->getText();
+  const auto op = GetUnaryOpFromToken(op_token);
+  if (!op) {
+    std::stringstream ss{};
+    ss << "invalid UnaryOp token: " << op_token;
+    throw std::runtime_error(ss.str());
+  }
+
+  const auto value = VisitExpr(ctx->children.at(1));
+  if (!value) {
+    std::stringstream ss{};
+    ss << "failed to visit unary-expr child: " << children.at(1)->getText();
+    throw std::runtime_error(ss.str());
+  }
+
+  return UnaryExpr::New(*op, value);
 }
 
 auto ExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {
