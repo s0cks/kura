@@ -3,32 +3,63 @@
 
 #include <string>
 
-#include "expr.h"
-#include "ir.h"
+#include "common.h"
+#include "object.h"
 
 namespace kura {
-struct Function {
-  std::string name{};
-  expr::Expr* body = nullptr;
-  GraphEntryInstr* entry = nullptr;
+class GraphEntryInstr;
+namespace expr {
+class Expr;
+class ExprBuilder;
+}  // namespace expr
 
-  Function() = delete;
-  Function(const std::string n) :
-    name(std::move(n)) {}
-  ~Function() = delete;
+class Function {
+  friend class expr::ExprBuilder;
+  DEFINE_NON_COPYABLE_TYPE(Function);
+
+ private:
+  String* name_;
+  expr::Expr* body_ = nullptr;
+  GraphEntryInstr* entry_ = nullptr;
+
+  void SetBody(expr::Expr* rhs) {
+    body_ = rhs;
+  }
+
+ public:
+  explicit Function(String* name) :
+    name_(name) {}
+  ~Function() = default;
+
+  auto GetName() const -> String* {
+    return name_;
+  }
+
+  auto GetBody() const -> expr::Expr* {
+    return body_;
+  }
 
   inline auto HasBody() const -> bool {
-    return body != nullptr;
+    return GetBody() != nullptr;
+  }
+
+  auto GetEntry() const -> GraphEntryInstr* {
+    return entry_;
   }
 
   inline auto HasEntry() const -> bool {
-    return entry != nullptr;
+    return GetEntry() != nullptr;
   }
 
   auto ToString() const -> std::string;
 
+ public:
+  static inline auto New(String* name) -> Function* {
+    return new Function(name);
+  }
+
   static inline auto New(const std::string name) -> Function* {
-    return new Function(std::move(name));
+    return New(String::New(std::move(name)));
   }
 };
 }  // namespace kura

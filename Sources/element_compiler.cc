@@ -7,6 +7,7 @@
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 #include <print>
+#include <yoga/YGNodeStyle.h>
 #include <yoga/Yoga.h>
 
 namespace kura::elem {
@@ -25,23 +26,16 @@ ElementCompiler::ElementCompiler(llvm::LLVMContext* ctx) :
   set_height_func_type_ = GetYogaSetterFunctionType(float_type_);
 }
 
-ElementCompiler::~ElementCompiler() {}
+void ElementCompiler::InitYogaFunctions(llvm::Module* m) {
+  new_node_func_ = m->getOrInsertFunction("YGNodeNew", new_node_func_type_);
+#define INIT_YGFUNC(Name, Func) Name##_func_ = m->getOrInsertFunction(#Func, Name##_func_type_);
+  FOR_EACH_YGFUNC(INIT_YGFUNC)
+#undef INIT_YGFUNC
+}
 
 auto ElementCompiler::Compile() -> std::unique_ptr<llvm::Module> {
   auto m = std::make_unique<llvm::Module>("jit", *ctx_);
-  const auto new_node_func = m->getOrInsertFunction("YGNodeNew", new_node_func_type_);
-  const auto set_width_func = m->getOrInsertFunction("YGNodeStyleSetWidth", set_width_func_type_);
-  const auto set_height_func = m->getOrInsertFunction("YGNodeStyleSetHeight", set_height_func_type_);
-
-  std::vector<llvm::Type*> ParamTypes = {
-      ptr_type_,
-  };
-  llvm::FunctionType* ConstructorType = llvm::FunctionType::get(ret_type_, ParamTypes, false);
-  llvm::Function* ConstructorFunc =
-      llvm::Function::Create(ConstructorType, llvm::Function::ExternalLinkage, "Test_Constructor", m.get());
-
-  llvm::BasicBlock* entry = llvm::BasicBlock::Create(*ctx_, "entry", ConstructorFunc);
-  builder_.SetInsertPoint(entry);
+  InitYogaFunctions(m.get());
 
   llvm::StructType* DocumentType = llvm::StructType::create(*ctx_, "struct.dom::Document");
   DocumentType->setBody({
@@ -49,17 +43,18 @@ auto ElementCompiler::Compile() -> std::unique_ptr<llvm::Module> {
       ptr_type_,  // node_
       ptr_type_,  // props_
   });
+  llvm::FunctionType* ConstructorType = nullptr;
+  llvm::Function* Constructor = nullptr;
+  llvm::BasicBlock* ConstructorEntry = nullptr;
+  llvm::Value* ConstructorThisPtr = nullptr;
+  CreateConstructor(m.get(), ptr_type_, {ptr_type_}, DocumentType, &ConstructorType, &Constructor, &ConstructorEntry,
+                    &ConstructorThisPtr);
 
-  llvm::Value* ThisPtr = ConstructorFunc->getArg(0);
-  ThisPtr->setName("this");
-  llvm::Value* NodeFieldPtr = builder_.CreateStructGEP(DocumentType, ThisPtr, 1, "node_ptr");
-  auto new_node = CreateNewYGNode(new_node_func, "yoga_node");
-  SetValueWithSetter(set_width_func, new_node, 128.0);
-  SetValueWithSetter(set_height_func, new_node, 64.0);
-  builder_.CreateStore(new_node, NodeFieldPtr);
+  auto new_node = CreateNewYGNode(new_node_func_, "yoga_node");
+  SetWidth(new_node, 128.0f);
+  SetHeight(new_node, 64.0f);
+  builder_.CreateStore(new_node, ConstructorThisPtr);
   builder_.CreateRetVoid();
   return m;
 }
-
-void ElementCompiler::Init() {}
 }  // namespace kura::elem

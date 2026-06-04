@@ -3,6 +3,8 @@
 #include <sstream>
 
 #include "object.h"
+#include "property.h"
+#include "record.h"
 #include "type_id.h"
 
 namespace kura {
@@ -24,6 +26,7 @@ void Type::Init() {
   String::Init();
   Number::Init();
   Seq::Init();
+  Property::Init();
   Record::Init();
 }
 

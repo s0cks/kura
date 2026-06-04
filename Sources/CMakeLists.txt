@@ -45,9 +45,9 @@ add_library(kura-runtime SHARED
   expr.cc
   expr_builder.cc
   expr_printer.cc
-  function.cc
   flow_graph.cc
   flow_graph_builder.cc
+  function.cc
   ir.cc
   ir_printer.cc
   layout.cc
@@ -55,6 +55,8 @@ add_library(kura-runtime SHARED
   module.cc
   object.cc
   parser.cc
+  property.cc
+  record.cc
   type.cc
   ${GEN_SOURCES}
 )

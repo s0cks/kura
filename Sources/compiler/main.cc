@@ -55,7 +55,7 @@ class ModulePrinter {
     IndentScope indent_scope(indent_);
     const auto vis = [&](Function* func) {
       stream() << " - " << func->ToString() << std::endl;
-      const auto flow_graph = FlowGraphBuilder::BuildFlowGraph(func->body);
+      const auto flow_graph = FlowGraphBuilder::BuildFlowGraph(func->GetBody());
       if (!flow_graph)
         return false;
 
@@ -77,7 +77,6 @@ auto main(int argc, char** argv) -> int {
     return EXIT_FAILURE;
 
   Type::Init();
-
   LocalScope* scope = LocalScope::New();
   const std::string filename(argv[1]);
 
@@ -102,9 +101,6 @@ auto main(int argc, char** argv) -> int {
   // llvm::InitializeNativeTargetAsmParser();
   //
   // dom::Document* doc = new dom::Document();
-  // doc->AddProperty(new dom::WidthProperty(1024));
-  // doc->AddProperty(new dom::HeightProperty(680));
-  //
   // auto ctx = std::make_unique<llvm::LLVMContext>();
   // dom::DOMCompiler compiler(ctx.get());
   //

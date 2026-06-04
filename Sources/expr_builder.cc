@@ -13,7 +13,7 @@ auto ModuleBuilder::Build(KuraParser::SourceContext* ctx) -> Module* {
 
 auto ExprBuilder::CreateFunctionInScope(const std::string name) -> Function* {
   const auto func = Function::New(std::move(name));
-  const auto local = GetScope()->CreateLocal(func->name);
+  const auto local = GetScope()->CreateLocal(func->GetName());
   if (local)
     return func;
 
@@ -74,7 +74,7 @@ auto ExprBuilder::visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any {
         auto body_expr = std::any_cast<expr::Expr*>(body);
         if (!body_expr->IsSeq())
           body_expr = SeqExpr::New(body_expr);
-        func->body = body_expr;
+        func->SetBody(body_expr);
       }
     }
     PopScope();
@@ -244,39 +244,27 @@ auto ExprBuilder::visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::an
   return nullptr;
 }
 
-class ArgListBuilder : public ExprBuilder {
- private:
-  ExprList results_{};
-
- public:
-  explicit ArgListBuilder(ModuleBuilder* owner) :
-    ExprBuilder(owner) {}
-  ~ArgListBuilder() override = default;
-
-  auto GetResults() const -> const ExprList& {
-    return results_;
-  }
-
-  inline auto HasResults() const -> bool {
-    return !results_.empty();
-  }
-
-  auto visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any override {
-    if (!ctx)
+auto ArgListBuilder::visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any {
+  if (ctx) {
+    const auto expressions = ctx->expression();
+    if (expressions.empty())
       goto finished;
 
-    for (const auto& arg : ctx->expression()) {
+    ExprList results{};
+    results.reserve(expressions.size());
+    for (const auto& arg : expressions) {
       const auto value = VisitExpr(arg);
       if (!value)
         throw std::runtime_error("failed to visit argument");
-
-      results_.push_back(value);
+      results.push_back(value);
     }
 
-  finished:
-    return nullptr;
+    AddResults(std::move(results));
   }
-};
+
+finished:
+  return nullptr;
+}
 
 auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::any {
   const auto target = VisitExpr(ctx->primaryExpr());
@@ -439,15 +427,10 @@ auto RecordExprBuilder::visitRecordField(KuraParser::RecordFieldContext* ctx) ->
 }
 
 auto ListExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {
-  if (ctx->argumentList()) {
-    for (const auto& expr : ctx->argumentList()->expression()) {
-      const auto value = VisitExpr(expr);
-      if (value)
-        values_.push_back(std::any_cast<Expr*>(value));
-    }
-  }
-
-  return ListExpr::New(values_);
+  ArgListBuilder builder(GetOwner());
+  builder.visitArgumentList(ctx->argumentList());
+finished:
+  return ListExpr::New(builder.GetResults());
 }
 
 auto ListExprBuilder::visitListComprehensionExpr(KuraParser::ListComprehensionExprContext* ctx) -> std::any {

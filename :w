@@ -82,8 +82,8 @@ class ForwardInstructionIterator;
 // TODO(@s0cks): implement BackwardInstructionIterator
 class Instruction {
  private:
-  Instruction* previous_ = nullptr;
-  Instruction* next_ = nullptr;
+  Instruction* previous_;
+  Instruction* next_;
 
  protected:
   Instruction() = default;
@@ -94,10 +94,6 @@ class Instruction {
 
   void SetNext(Instruction* n) {
     next_ = n;
-  }
-
-  virtual void SetInputAt(const uint64_t idx, Value* rhs) {
-    // do nothing
   }
 
  public:
@@ -155,22 +151,6 @@ class Instruction {
       rhs->SetPrevious(lhs);
   }
 };
-
-#define HAS_NAMED_INPUT(Name, Pos)                  \
-  static constexpr const auto k##Name##Pos = (Pos); \
-                                                    \
- private:                                           \
-  inline void Set##Name(Value* rhs) {               \
-    return SetInputAt(k##Name##Pos, rhs);           \
-  }                                                 \
-                                                    \
- public:                                            \
-  inline auto Get##Name() const -> Value* {         \
-    return GetInputAt(k##Name##Pos);                \
-  }                                                 \
-  inline auto Has##Name() const -> bool {           \
-    return Get##Name() != nullptr;                  \
-  }
 
 #define DECLARE_INSTRUCTION_TYPE(Name)                           \
  public:                                                         \
@@ -230,7 +210,7 @@ class TemplateInstruction : public Instruction {
  protected:
   TemplateInstruction() = default;
 
-  void SetInputAt(const uint64_t idx, Value* value) override {
+  void SetInputAt(const uint64_t idx, Value* value) {
     inputs_[idx] = value;
   }
 
@@ -256,35 +236,35 @@ class TemplateInstruction : public Instruction {
 
 using ValueList = std::vector<Value*>;
 
-#define HAS_VALUE_LIST(Name, ListName)                     \
- private:                                                  \
-  ValueList ListName{};                                    \
-                                                           \
- protected:                                                \
-  void Set##Name##At(const uint64_t idx, Value* rhs) {     \
-    ListName.at(idx) = rhs;                                \
-  }                                                        \
-                                                           \
- public:                                                   \
-  auto Get##Name##s() const -> const ValueList& {          \
-    return ListName;                                       \
-  }                                                        \
-  inline auto Has##Name##s() const -> bool {               \
-    return !ListName.empty();                              \
-  }                                                        \
-  auto GetNumberOf##Name##s() const -> uint64_t {          \
-    return ListName.size();                                \
-  }                                                        \
-  auto Get##Name##At(const uint64_t idx) const -> Value* { \
-    if (idx >= ListName.size())                            \
-      return nullptr;                                      \
-    return ListName[idx];                                  \
-  }                                                        \
-  auto Has##Name##At(const uint64_t idx) const -> bool {   \
-    return Get##Name##At(idx) != nullptr;                  \
+#define HAS_VALUE_LIST(Name, ListName)                              \
+ private:                                                           \
+  ValueList ListName{};                                             \
+                                                                    \
+ protected:                                                         \
+  void Set##Name##At(const uint64_t idx, Value* rhs) {              \
+    ListName.at(idx) = rhs;                                         \
+  }                                                                 \
+                                                                    \
+ public:                                                            \
+  auto Get##Name##s() const -> const ValueList& {                   \
+    return ListName;                                                \
+  }                                                                 \
+  inline auto Has##Name##s() const -> bool {                        \
+    return !ListName.empty();                                       \
+  }                                                                 \
+  auto GetNumberOf##Name##s() const -> uint64_t override {          \
+    return ListName.size();                                         \
+  }                                                                 \
+  auto Get##Name##At(const uint64_t idx) const -> Value* override { \
+    if (idx >= ListName.size())                                     \
+      return nullptr;                                               \
+    return ListName[idx];                                           \
+  }                                                                 \
+  auto Has##Name##At(const uint64_t idx) const -> bool override {   \
+    return Get##Name##At(idx) != nullptr;                           \
   }
 
-#define HAS_INPUT_LIST                                           \
+#define HAS_INPUT_LIST()                                         \
  private:                                                        \
   ValueList inputs_{};                                           \
                                                                  \
@@ -342,7 +322,7 @@ class TemplateDefinition : public Definition {
  protected:
   TemplateDefinition() = default;
 
-  void SetInputAt(const uint64_t idx, Value* value) override {
+  void SetInputAt(const uint64_t idx, Value* value) {
     inputs_[idx] = value;
   }
 
@@ -399,11 +379,18 @@ class ConstantInstr : public Definition {
 };
 
 class UnaryOpInstr : public TemplateDefinition<1> {
+  static constexpr const auto kValuePos = 0;
+
  private:
   expr::UnaryOp op_;
 
+  inline void SetValue(Value* value) {
+    return SetInputAt(kValuePos, value);
+  }
+
  public:
   UnaryOpInstr(const expr::UnaryOp op, Value* value) :
+    TemplateDefinition<1>(),
     op_(op) {
     SetValue(value);
   }
@@ -413,7 +400,10 @@ class UnaryOpInstr : public TemplateDefinition<1> {
     return op_;
   }
 
-  HAS_NAMED_INPUT(Value, 0);
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
   DECLARE_INSTRUCTION_TYPE(UnaryOp);
 
  public:
@@ -423,8 +413,19 @@ class UnaryOpInstr : public TemplateDefinition<1> {
 };
 
 class BinaryOpInstr : public TemplateDefinition<2> {
+  static constexpr const auto kLeftPos = 0;
+  static constexpr const auto kRightPos = 1;
+
  private:
   expr::BinaryOp op_;
+
+  inline void SetLeft(Value* value) {
+    SetInputAt(kLeftPos, value);
+  }
+
+  inline void SetRight(Value* value) {
+    SetInputAt(kRightPos, value);
+  }
 
  public:
   BinaryOpInstr(const expr::BinaryOp op, Value* left, Value* right) :
@@ -439,8 +440,14 @@ class BinaryOpInstr : public TemplateDefinition<2> {
     return op_;
   }
 
-  HAS_NAMED_INPUT(Left, 0);
-  HAS_NAMED_INPUT(Right, 1);
+  inline auto GetLeft() const -> Value* {
+    return GetInputAt(kLeftPos);
+  }
+
+  inline auto GetRight() const -> Value* {
+    return GetInputAt(kRightPos);
+  }
+
   DECLARE_INSTRUCTION_TYPE(BinaryOp);
 
  public:
@@ -575,8 +582,14 @@ class LoadIndexInstr : public Definition {
 };
 
 class StoreIndexInstr : public TemplateInstruction<1> {
+  static constexpr const auto kValuePos = 0;
+
  private:
   uint64_t index_;
+
+  inline void SetValue(Value* rhs) {
+    return SetInputAt(kValuePos, rhs);
+  }
 
  public:
   explicit StoreIndexInstr(const uint64_t index, Value* value) :
@@ -585,7 +598,18 @@ class StoreIndexInstr : public TemplateInstruction<1> {
   }
   ~StoreIndexInstr() override = default;
 
-  HAS_NAMED_INPUT(Value, 0);
+  auto GetIndex() const -> uint64_t {
+    return index_;
+  }
+
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
+  inline auto HasValue() const -> bool {
+    return GetValue() != nullptr;
+  }
+
   DECLARE_INSTRUCTION_TYPE(StoreIndex);
 
  public:
@@ -595,8 +619,14 @@ class StoreIndexInstr : public TemplateInstruction<1> {
 };
 
 class LoadPropertyInstr : public TemplateDefinition<1> {
+  static constexpr const auto kInstancePos = 0;
+
  private:
   Property* property_;
+
+  inline void SetInstance(Value* rhs) {
+    return SetInputAt(kInstancePos, rhs);
+  }
 
   inline void SetProperty(Property* property) {
     property_ = property;
@@ -609,7 +639,14 @@ class LoadPropertyInstr : public TemplateDefinition<1> {
   }
   ~LoadPropertyInstr() override = default;
 
-  HAS_NAMED_INPUT(Instance, 0);
+  inline auto GetInstance() const -> Value* {
+    return GetInputAt(kInstancePos);
+  }
+
+  auto GetProperty() const -> Property* {
+    return property_;
+  }
+
   DECLARE_INSTRUCTION_TYPE(LoadProperty);
 
  public:
@@ -619,8 +656,15 @@ class LoadPropertyInstr : public TemplateDefinition<1> {
 };
 
 class LoadPropertySafelyInstr : public TemplateDefinition<1> {
+  static constexpr const auto kInstancePos = 0;
+
  private:
+  Value* instance_;
   Property* property_;
+
+  inline void SetInstance(Value* rhs) {
+    return SetInputAt(kInstancePos, rhs);
+  }
 
   inline void SetProperty(Property* property) {
     property_ = property;
@@ -633,11 +677,14 @@ class LoadPropertySafelyInstr : public TemplateDefinition<1> {
   }
   ~LoadPropertySafelyInstr() override = default;
 
+  auto GetInstance() const -> Value* {
+    return GetInputAt(kInstancePos);
+  }
+
   auto GetProperty() const -> Property* {
     return property_;
   }
 
-  HAS_NAMED_INPUT(Instance, 0);
   DECLARE_INSTRUCTION_TYPE(LoadPropertySafely);
 
  public:
@@ -647,11 +694,22 @@ class LoadPropertySafelyInstr : public TemplateDefinition<1> {
 };
 
 class StorePropertyInstr : public TemplateInstruction<3> {
+  static constexpr const auto kInstancePos = 0;
+  static constexpr const auto kValuePos = 1;
+
  private:
   Property* property_;
 
   inline void SetProperty(Property* p) {
     property_ = p;
+  }
+
+  inline void SetInstance(Value* value) {
+    return SetInputAt(kInstancePos, value);
+  }
+
+  inline void SetValue(Value* value) {
+    return SetInputAt(kValuePos, value);
   }
 
  public:
@@ -662,12 +720,22 @@ class StorePropertyInstr : public TemplateInstruction<3> {
   }
   ~StorePropertyInstr() override = default;
 
+  inline auto GetInstane() const -> Value* {
+    return GetInputAt(kInstancePos);
+  }
+
   auto GetProperty() const -> Property* {
     return property_;
   }
 
-  HAS_NAMED_INPUT(Instance, 0);
-  HAS_NAMED_INPUT(Value, 1);
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
+  inline auto HasValue() const -> bool {
+    return GetValue() != nullptr;
+  }
+
   DECLARE_INSTRUCTION_TYPE(StoreProperty);
 
  public:
@@ -681,11 +749,7 @@ class CallInstr : public Definition {
   Value* target_;
 
  public:
-  explicit CallInstr(Value* target) :
-    target_(target) {}
-  CallInstr(Value* target, const ValueList args) :
-    target_(target),
-    args_(std::move(args)) {}
+  CallInstr(Value* target, const ValueList args);
   ~CallInstr() override = default;
 
   auto GetTarget() const -> Value* {
@@ -696,11 +760,7 @@ class CallInstr : public Definition {
   DECLARE_INSTRUCTION_TYPE(Call);
 
  public:
-  static inline auto New(Value* target) -> CallInstr* {
-    return new CallInstr(target);
-  }
-
-  static inline auto New(Value* target, const ValueList args) -> CallInstr* {
+  static inline auto New(Value* target, const ValueList args = {}) -> CallInstr* {
     return new CallInstr(target, std::move(args));
   }
 };
@@ -719,13 +779,23 @@ class PipeCallInstr : public Definition {
 };
 
 class ReturnInstr : public TemplateDefinition<1> {
+  static constexpr const auto kValuePos = 0;
+
+ private:
+  inline void SetValue(Value* value) {
+    return SetInputAt(kValuePos, value);
+  }
+
  public:
   explicit ReturnInstr(Value* value) {
     SetValue(value);
   }
   ~ReturnInstr() override = default;
 
-  HAS_NAMED_INPUT(Value, 0);
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
   DECLARE_INSTRUCTION_TYPE(Return);
 
  public:
@@ -803,10 +873,16 @@ class GotoInstr : public Instruction {
 };
 
 class BranchInstr : public TemplateInstruction<1> {
+  static constexpr const auto kConditionPos = 0;
+
  private:
   TargetEntryInstr* then_;
   TargetEntryInstr* else_;
   JoinEntryInstr* join_;
+
+  inline void SetCondition(Value* rhs) {
+    SetInputAt(kConditionPos, rhs);
+  }
 
  public:
   BranchInstr(Value* condition, TargetEntryInstr* then_target, TargetEntryInstr* else_target, JoinEntryInstr* join) :
@@ -816,6 +892,10 @@ class BranchInstr : public TemplateInstruction<1> {
     SetCondition(condition);
   }
   ~BranchInstr() override = default;
+
+  inline auto GetCondition() const -> Value* {
+    return GetInputAt(kConditionPos);
+  }
 
   auto GetThen() const -> TargetEntryInstr* {
     return then_;
@@ -833,7 +913,6 @@ class BranchInstr : public TemplateInstruction<1> {
     return join_;
   }
 
-  HAS_NAMED_INPUT(Condition, 0);
   DECLARE_INSTRUCTION_TYPE(Branch);
 
  public:
@@ -845,11 +924,17 @@ class BranchInstr : public TemplateInstruction<1> {
 
 class LocalVariable;
 class StoreLocalInstr : public TemplateInstruction<1> {
+  static constexpr const auto kValuePos = 0;
+
  private:
   LocalVariable* local_;
 
   inline void SetLocal(LocalVariable* local) {
     local_ = local;
+  }
+
+  inline void SetValue(Value* value) {
+    return SetInputAt(kValuePos, value);
   }
 
  public:
@@ -864,7 +949,14 @@ class StoreLocalInstr : public TemplateInstruction<1> {
     return local_;
   }
 
-  HAS_NAMED_INPUT(Value, 0);
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
+  inline auto HasValue() const -> bool {
+    return GetValue() != nullptr;
+  }
+
   DECLARE_INSTRUCTION_TYPE(StoreLocal);
 
  public:
@@ -1107,7 +1199,6 @@ class TargetEntryInstr : public EntryInstr {
   }
 };
 
-#undef HAS_NAMED_INPUT
 #undef HAS_SUCCESSOR_LIST
 #undef _HAS_SUCCESSOR_LIST
 #undef HAS_PREDECESSOR_LIST

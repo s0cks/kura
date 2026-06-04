@@ -138,6 +138,15 @@ class String : public TemplateValueObject<kStringType, std::string> {
   }
 };
 
+struct StringHash {
+  using is_transparent = void;
+
+  auto operator()(const String& k) const noexcept -> size_t {
+    const auto data = k.GetData().data();
+    return static_cast<size_t>(XXH64(data, k.GetLength(), 0));
+  }
+};
+
 class Seq : public TemplateObject<kSeqType> {
  private:
   std::vector<Object*> values_{};
@@ -168,60 +177,6 @@ class Seq : public TemplateObject<kSeqType> {
  public:
   static inline auto New(const std::vector<Object*> values = {}) -> Seq* {
     return new Seq(std::move(values));
-  }
-};
-
-class Property : public TemplateObject<kPropertyType> {
- private:
-  String* name_;
-  Object* value_;
-
- public:
-  Property(String* name, Object* value = nullptr) :
-    name_(name),
-    value_(value) {}
-
-  auto GetPropertyName() const -> String* {
-    return name_;
-  }
-
-  auto GetPropertyValue() const -> Object* {
-    return value_;
-  }
-
-  auto HasPropertyValue() const -> bool {
-    return GetPropertyValue() != nullptr;
-  }
-
-  auto VisitChildren(ObjectVisitor* vis) -> VisitResult override;
-  DECLARE_TYPE(Property);
-
- public:
-  static inline auto New(String* name, Object* value = nullptr) -> Property* {
-    return new Property(name, value);
-  }
-};
-
-class Record : public TemplateObject<kRecordType> {
-  using PropertyMap = std::unordered_map<std::string, Property*>;
-
- private:
-  PropertyMap properties_{};
-
- public:
-  explicit Record(const PropertyMap properties) :
-    properties_(std::move(properties)) {}
-
-  auto GetProperties() const -> const PropertyMap& {
-    return properties_;
-  }
-
-  auto VisitChildren(ObjectVisitor* vis) -> VisitResult override;
-  DECLARE_TYPE(Record);
-
- public:
-  static inline auto New(const PropertyMap properties) -> Record* {
-    return new Record(std::move(properties));
   }
 };
 }  // namespace kura

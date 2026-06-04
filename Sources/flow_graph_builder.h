@@ -27,12 +27,14 @@ class FlowGraphBuilder {
   static inline auto BuildFlowGraph(expr::Expr* expr) -> FlowGraph* {
     if (!expr)
       return nullptr;
+
     FlowGraphBuilder builder{};
     const auto result = builder(expr);
     if (!result) {
       std::cerr << "failed to build flow graph: " << result;
       return nullptr;
     }
+
     return builder.Build();
   }
 };
@@ -125,15 +127,16 @@ class EffectVisitor : public expr::ExprVisitor {
     // do nothing
   }
 
-  virtual void AddBranch(TargetEntryInstr* then_expr, TargetEntryInstr* else_expr, JoinEntryInstr* join) {
-    Add(BranchInstr::New(then_expr, else_expr, join));
-  }
-
-  auto Join(TargetEntryInstr* then_entry, TargetEntryInstr* else_entry = nullptr) -> JoinEntryInstr* {
+  virtual auto AddBranch(Value* condition, TargetEntryInstr* then_expr, TargetEntryInstr* else_expr)
+      -> JoinEntryInstr* {
     const auto join = JoinEntryInstr::New();
-    AddBranch(then_entry, else_entry, join);
+    Add(BranchInstr::New(condition, then_expr, else_expr, join));
     return join;
   }
+
+  auto ProcessValueList(const expr::ExprList& expressions, ValueList& values) -> VisitResult;
+  auto ProcessValueList(expr::DynamicTemplateExpr& expression, ValueList& values)
+      -> VisitResult;  // TODO(@s0cks): add const to expression parameter
 
  public:
   explicit EffectVisitor(FlowGraphBuilder* owner) :

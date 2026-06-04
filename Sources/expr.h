@@ -24,7 +24,6 @@ namespace kura::expr {
   V(If)                  \
   V(Match)               \
   V(Node)                \
-  V(Assignment)          \
   V(Pipeline)            \
   V(List)                \
   V(ListComprehension)   \
@@ -123,19 +122,19 @@ class Expr {
 using ExprList = std::vector<Expr*>;
 
 template <const size_t NumberOfChildren>
-class ExprTemplate : public Expr {
+class TemplateExpr : public Expr {
  private:
   Expr* children_[NumberOfChildren];
 
  protected:
-  ExprTemplate() = default;
+  TemplateExpr() = default;
 
   void SetChildAt(const uint64_t idx, Expr* value) override {
     children_[idx] = value;
   }
 
  public:
-  ~ExprTemplate() override = default;
+  ~TemplateExpr() override = default;
 
   auto GetChildAt(const uint64_t idx) const -> Expr* override {
     return children_[idx];
@@ -178,13 +177,12 @@ class ExprTemplate : public Expr {
   }
 };
 
-class ExprSequence : public Expr {
+class DynamicTemplateExpr : public Expr {
  private:
   ExprList children_{};
 
  protected:
-  explicit ExprSequence(const ExprList children = {}) :
-    Expr(),
+  explicit DynamicTemplateExpr(const ExprList children = {}) :
     children_(std::move(children)) {}
 
   void Append(Expr* child) {
@@ -192,7 +190,7 @@ class ExprSequence : public Expr {
   }
 
  public:
-  ~ExprSequence() override = default;
+  ~DynamicTemplateExpr() override = default;
 
   auto GetChildren() const -> const ExprList& {
     return children_;
@@ -231,10 +229,10 @@ class ExprSequence : public Expr {
   }
 };
 
-class SeqExpr : public ExprSequence {
+class SeqExpr : public DynamicTemplateExpr {
  public:
   explicit SeqExpr(const ExprList children = {}) :
-    ExprSequence(std::move(children)) {}
+    DynamicTemplateExpr(std::move(children)) {}
   ~SeqExpr() override = default;
 
   DECLARE_EXPR_TYPE(Seq);
@@ -255,7 +253,6 @@ class LiteralExpr : public Expr {
 
  public:
   explicit LiteralExpr(Object* value) :
-    Expr(),
     value_(value) {}
   ~LiteralExpr() override = default;
 
@@ -277,7 +274,6 @@ class LoadLocalExpr : public Expr {
 
  public:
   LoadLocalExpr(LocalVariable* local) :
-    Expr(),
     local_(local) {}
   ~LoadLocalExpr() override = default;
 
@@ -293,15 +289,43 @@ class LoadLocalExpr : public Expr {
   }
 };
 
-class StoreLocalExpr : public ExprTemplate<1> {
-  static constexpr const auto kValuePos = 0;
+#define _HAS_NAMED_INPUT(Name, Type, Position)           \
+  static constexpr const auto k##Name##Pos = (Position); \
+                                                         \
+ private:                                                \
+  inline void Set##Name(Type* rhs) {                     \
+    return SetChildAt(k##Name##Pos, rhs);                \
+  }                                                      \
+                                                         \
+ public:                                                 \
+  inline auto Get##Name() const -> Type* {               \
+    return GetChildAt(k##Name##Pos);                     \
+  }                                                      \
+  inline auto Has##Name() const -> bool {                \
+    return Get##Name() != nullptr;                       \
+  }
 
+#define HAS_NAMED_INPUT(Name, Position) _HAS_NAMED_INPUT(Name, Expr, Position)
+
+#define HAS_NAMED_TYPED_INPUT(Name, Position)            \
+  static constexpr const auto k##Name##Pos = (Position); \
+                                                         \
+ private:                                                \
+  inline void Set##Name(Name##Expr* rhs) {               \
+    return SetChildAt(k##Name##Pos, rhs);                \
+  }                                                      \
+                                                         \
+ public:                                                 \
+  inline auto Get##Name() const -> Name##Expr* {         \
+    return GetChildAt(k##Name##Pos)->As##Name();         \
+  }                                                      \
+  inline auto Has##Name() const -> bool {                \
+    return Get##Name() != nullptr;                       \
+  }
+
+class StoreLocalExpr : public TemplateExpr<1> {
  private:
   LocalVariable* local_;
-
-  inline void SetValue(Expr* value) {
-    return SetChildAt(kValuePos, value);
-  }
 
   inline void SetLocal(LocalVariable* local) {
     local_ = local;
@@ -318,10 +342,7 @@ class StoreLocalExpr : public ExprTemplate<1> {
     return local_;
   }
 
-  inline auto GetValue() const -> Expr* {
-    return GetChildAt(kValuePos);
-  }
-
+  HAS_NAMED_INPUT(Value, 0);
   DECLARE_EXPR_TYPE(StoreLocal);
 
  public:
@@ -354,9 +375,7 @@ static inline auto operator<<(std::ostream& stream, const UnaryOp& rhs) -> std::
   return stream << ToString(rhs);
 }
 
-class UnaryExpr : public ExprTemplate<1> {
-  static constexpr const auto kValuePos = 0;
-
+class UnaryExpr : public TemplateExpr<1> {
  private:
   UnaryOp op_;
 
@@ -378,10 +397,7 @@ class UnaryExpr : public ExprTemplate<1> {
   FOR_EACH_UNARY_OP(DEFINE_OP_CHECK)
 #undef DEFINE_OP_CHECK
 
-  inline auto GetValue() const -> Expr* {
-    return GetChildAt(kValuePos);
-  }
-
+  HAS_NAMED_INPUT(Value, 0);
   DECLARE_EXPR_TYPE(Unary);
 
  public:
@@ -432,21 +448,9 @@ static inline auto operator<<(std::ostream& stream, const BinaryOp rhs) -> std::
   return stream << ToString(rhs);
 }
 
-class BinaryExpr : public ExprTemplate<2> {
-  static constexpr const auto kLeftPos = 0;
-  static constexpr const auto kRightPos = 1;
-
- public:
+class BinaryExpr : public TemplateExpr<2> {
  private:
   BinaryOp op_;
-
-  inline void SetLeft(Expr* value) {
-    SetChildAt(kLeftPos, value);
-  }
-
-  inline void SetRight(Expr* value) {
-    SetChildAt(kRightPos, value);
-  }
 
  public:
   BinaryExpr(const BinaryOp op, Expr* left, Expr* right) :
@@ -467,14 +471,8 @@ class BinaryExpr : public ExprTemplate<2> {
   FOR_EACH_BINARY_OP(DEFINE_OP_CHECK)
 #undef DEFINE_OP_CHECK
 
-  inline auto GetLeft() const -> Expr* {
-    return GetChildAt(kLeftPos);
-  }
-
-  inline auto GetRight() const -> Expr* {
-    return GetChildAt(kRightPos);
-  }
-
+  HAS_NAMED_INPUT(Left, 0);
+  HAS_NAMED_INPUT(Right, 1);
   DECLARE_EXPR_TYPE(Binary);
 
  public:
@@ -490,28 +488,14 @@ class BinaryExpr : public ExprTemplate<2> {
 #undef DEFINE_NEW
 };
 
-class SpreadExpr : public ExprTemplate<1> {
-  static constexpr const auto kValuePos = 0;
-
- private:
-  inline void SetValue(Expr* value) {
-    SetChildAt(kValuePos, value);
-  }
-
+class SpreadExpr : public TemplateExpr<1> {
  public:
   explicit SpreadExpr(Expr* value) {
     SetValue(value);
   }
   ~SpreadExpr() override = default;
 
-  auto GetValue() const -> Expr* {
-    return GetChildAt(kValuePos);
-  }
-
-  inline auto HasValue() const -> bool {
-    return GetValue() != nullptr;
-  }
-
+  HAS_NAMED_INPUT(Value, 0);
   DECLARE_EXPR_TYPE(Spread);
 
  public:
@@ -520,24 +504,7 @@ class SpreadExpr : public ExprTemplate<1> {
   }
 };
 
-class IfExpr : public ExprTemplate<3> {
-  static constexpr const auto kConditionPos = 0;
-  static constexpr const auto kThenPos = 1;
-  static constexpr const auto kElsePos = 2;
-
- private:
-  inline void SetCondition(Expr* value) {
-    SetChildAt(kConditionPos, value);
-  }
-
-  inline void SetThen(Expr* value) {
-    SetChildAt(kThenPos, value);
-  }
-
-  inline void SetElse(Expr* value) {
-    SetChildAt(kElsePos, value);
-  }
-
+class IfExpr : public TemplateExpr<3> {
  public:
   IfExpr(Expr* condition, Expr* then_expr, Expr* else_expr) {
     SetCondition(condition);
@@ -546,30 +513,9 @@ class IfExpr : public ExprTemplate<3> {
   }
   ~IfExpr() override = default;
 
-  inline auto GetCondition() const -> Expr* {
-    return GetChildAt(kConditionPos);
-  }
-
-  inline auto HasCondition() const -> bool {
-    return GetCondition() != nullptr;
-  }
-
-  inline auto GetThen() const -> Expr* {
-    return GetChildAt(kThenPos);
-  }
-
-  inline auto HasThen() const -> bool {
-    return GetThen() != nullptr;
-  }
-
-  inline auto GetElse() const -> Expr* {
-    return GetChildAt(kElsePos);
-  }
-
-  inline auto HasElse() const -> bool {
-    return GetElse() != nullptr;
-  }
-
+  HAS_NAMED_INPUT(Condition, 0);
+  HAS_NAMED_INPUT(Then, 1);  // TODO(@s0cks): convert to SeqExpr
+  HAS_NAMED_INPUT(Else, 2);  // TODO(@s0cks): convert to SeqExpr
   DECLARE_EXPR_TYPE(If);
 
  public:
@@ -578,54 +524,10 @@ class IfExpr : public ExprTemplate<3> {
   }
 };
 
-class AssignmentExpr : public ExprTemplate<2> {
-  static constexpr const auto kLeftPos = 0;
-  static constexpr const auto kRightPos = 1;
-
- private:
-  inline void SetLeft(Expr* value) {
-    SetChildAt(kLeftPos, value);
-  }
-
-  inline void SetRight(Expr* value) {
-    SetChildAt(kRightPos, value);
-  }
-
- public:
-  AssignmentExpr(Expr* left, Expr* right = nullptr) {
-    SetLeft(left);
-    SetRight(right);
-  }
-  ~AssignmentExpr() override = default;
-
-  inline auto GetLeft() const -> Expr* {
-    return GetChildAt(kLeftPos);
-  }
-
-  inline auto HasLeft() const -> bool {
-    return GetLeft() != nullptr;
-  }
-
-  inline auto GetRight() const -> Expr* {
-    return GetChildAt(kRightPos);
-  }
-
-  inline auto HasRight() const -> bool {
-    return GetRight() != nullptr;
-  }
-
-  DECLARE_EXPR_TYPE(Assignment);
-
- public:
-  static inline auto New(Expr* lhs, Expr* rhs = nullptr) -> Expr* {
-    return new AssignmentExpr(lhs, rhs);
-  }
-};
-
-class PipelineExpr : public ExprSequence {
+class PipelineExpr : public DynamicTemplateExpr {
  public:
   PipelineExpr(const ExprList children) :
-    ExprSequence(std::move(children)) {}
+    DynamicTemplateExpr(std::move(children)) {}
   ~PipelineExpr() override = default;
 
   DECLARE_EXPR_TYPE(Pipeline);
@@ -699,6 +601,7 @@ class WildcardPatternExpr : public PatternExpr {
  public:
   WildcardPatternExpr() = default;
   ~WildcardPatternExpr() override = default;
+
   DECLARE_EXPR_TYPE(WildcardPattern);
 
  public:
@@ -708,28 +611,13 @@ class WildcardPatternExpr : public PatternExpr {
 };
 
 class LiteralPatternExpr : public TemplatePatternExpr<1> {
-  static constexpr const auto kValuePos = 0;
-
- private:
-  inline void SetValue(LiteralExpr* value) {
-    SetChildAt(kValuePos, value);
-  }
-
  public:
   explicit LiteralPatternExpr(LiteralExpr* value) {
-    SetValue(value);
+    SetLiteral(value);
   }
   ~LiteralPatternExpr() override = default;
 
-  inline auto GetValue() const -> LiteralExpr* {
-    const auto value = GetChildAt(kValuePos);
-    return value ? value->AsLiteral() : nullptr;
-  }
-
-  inline auto HasValue() const -> bool {
-    return GetValue() != nullptr;
-  }
-
+  HAS_NAMED_TYPED_INPUT(Literal, 0);
   DECLARE_EXPR_TYPE(LiteralPattern);
 
  public:
@@ -893,10 +781,10 @@ class MatchExpr : public Expr {
   }
 };
 
-class ListExpr : public ExprSequence {
+class ListExpr : public DynamicTemplateExpr {
  public:
   explicit ListExpr(const ExprList children) :
-    ExprSequence(std::move(children)) {}
+    DynamicTemplateExpr(std::move(children)) {}
   ~ListExpr() override = default;
 
   DECLARE_EXPR_TYPE(List);
@@ -907,11 +795,7 @@ class ListExpr : public ExprSequence {
   }
 };
 
-class ListComprehensionExpr : public ExprTemplate<3> {
-  static constexpr const auto kIterablePos = 0;
-  static constexpr const auto kBodyPos = 1;
-  static constexpr const auto kClausePos = 2;
-
+class ListComprehensionExpr : public TemplateExpr<3> {
  private:
   std::string binding_{};
 
@@ -919,21 +803,12 @@ class ListComprehensionExpr : public ExprTemplate<3> {
     binding_ = std::move(value);
   }
 
-  inline void SetIterable(Expr* value) {
-    SetChildAt(kIterablePos, value);
-  }
-
-  inline void SetBody(Expr* value) {
-    SetChildAt(kBodyPos, value);
-  }
-
-  inline void SetClause(Expr* value) {
-    SetChildAt(kClausePos, value);
-  }
-
  public:
   ListComprehensionExpr(Expr* iterable, Expr* body, const std::string binding, Expr* clause = nullptr) {
+    SetIterable(iterable);
     SetBinding(std::move(binding));
+    SetBody(body);
+    SetClause(clause);
   }
   ~ListComprehensionExpr() override = default;
 
@@ -941,34 +816,13 @@ class ListComprehensionExpr : public ExprTemplate<3> {
     return binding_;
   }
 
-  inline auto GetIterable() const -> Expr* {
-    return GetChildAt(kIterablePos);
-  }
-
-  inline auto HasIterable() const -> bool {
-    return GetIterable() != nullptr;
-  }
-
-  inline auto GetBody() const -> Expr* {
-    return GetChildAt(kBodyPos);
-  }
-
-  inline auto HasBody() const -> bool {
-    return GetBody() != nullptr;
-  }
-
-  inline auto GetClause() const -> Expr* {
-    return GetChildAt(kClausePos);
-  }
-
-  inline auto HasClause() const -> bool {
-    return GetClause() != nullptr;
-  }
-
+  HAS_NAMED_INPUT(Iterable, 0);
+  HAS_NAMED_INPUT(Body, 1);
+  HAS_NAMED_INPUT(Clause, 2);
   DECLARE_EXPR_TYPE(ListComprehension);
 };
 
-class NodeExpr : public ExprSequence {
+class NodeExpr : public DynamicTemplateExpr {
  public:
   enum Kind {
 #define DEFINE_KIND(Name) k##Name,
@@ -1010,7 +864,7 @@ class NodeExpr : public ExprSequence {
 
  public:
   explicit NodeExpr(const Kind kind, elem::Property* properties) :
-    ExprSequence(),
+    DynamicTemplateExpr(),
     kind_(kind),
     properties_(properties) {}
   ~NodeExpr() override = default;
@@ -1080,19 +934,12 @@ class NodeExpr : public ExprSequence {
 //     void accept(ASTVisitor&) override;
 // };
 
-class RecordPropertyExpr : public ExprTemplate<1> {
-  static constexpr const auto kValuePos = 0;
-
+class RecordPropertyExpr : public TemplateExpr<1> {
  private:
   std::string name_;
-  Expr* value_;
 
   inline void SetName(const std::string name) {
     name_ = std::move(name);
-  }
-
-  inline void SetValue(Expr* value) {
-    SetChildAt(kValuePos, value);
   }
 
  public:
@@ -1106,14 +953,7 @@ class RecordPropertyExpr : public ExprTemplate<1> {
     return name_;
   }
 
-  inline auto GetValue() const -> Expr* {
-    return GetChildAt(kValuePos);
-  }
-
-  inline auto HasValue() const -> bool {
-    return GetValue() != nullptr;
-  }
-
+  HAS_NAMED_INPUT(Value, 0);
   DECLARE_EXPR_TYPE(RecordProperty);
 
  public:
@@ -1210,9 +1050,8 @@ class RecordExpr : public Expr {
   }
 };
 
-class CallExpr : public Expr {
+class CallExpr : public TemplateExpr<1> {
  private:
-  Expr* target_;
   ExprList args_{};
 
   inline void SetArgAt(const uint64_t idx, Expr* value) {
@@ -1221,13 +1060,8 @@ class CallExpr : public Expr {
 
  public:
   explicit CallExpr(Expr* target, const ExprList args) :
-    target_(target),
     args_(std::move(args)) {}
   ~CallExpr() override = default;
-
-  auto GetTarget() const -> Expr* {
-    return target_;
-  }
 
   auto GetArgs() const -> const ExprList& {
     return args_;
@@ -1256,6 +1090,8 @@ class CallExpr : public Expr {
   }
 
   auto VisitChildren(ExprVisitor* vis) -> VisitResult override;
+
+  HAS_NAMED_INPUT(Target, 0);
   DECLARE_EXPR_TYPE(Call);
 
  public:
@@ -1263,6 +1099,8 @@ class CallExpr : public Expr {
     return new CallExpr(target, std::move(args));
   }
 };
+
+#undef HAS_NAMED_INPUT
 }  // namespace kura::expr
 
 #endif  // KURA_EXPR_H

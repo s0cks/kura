@@ -5,3 +5,6 @@ fn init() =>
     count: 0,
   }
 
+fn view(state) =>
+  #text(state.count)
+  #button{ #text("Increment") }

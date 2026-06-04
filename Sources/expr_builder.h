@@ -11,6 +11,7 @@
 #include "function.h"
 #include "local_scope.h"
 #include "object.h"
+#include "property.h"
 
 namespace kura {
 class Module;
@@ -236,10 +237,44 @@ class MatchExprBuilder : public ExprBuilder {
   }
 };
 
-class ListExprBuilder : public ExprBuilder {
+class ExprListBuilder : public ExprBuilder {
  private:
-  ExprList values_{};
+  ExprList results_{};
 
+ protected:
+  void AddResults(const ExprList results) {
+    results_.insert(std::end(results_), std::begin(results), std::end(results));
+  }
+
+  void AddResult(Expr* expr) {
+    results_.push_back(expr);
+  }
+
+ public:
+  explicit ExprListBuilder(ModuleBuilder* owner, const ExprList results = {}) :
+    ExprBuilder(owner),
+    results_(std::move(results)) {}
+  ~ExprListBuilder() override = default;
+
+  auto GetResults() const -> const ExprList& {
+    return results_;
+  }
+
+  auto HasResults() const -> bool {
+    return !results_.empty();
+  }
+};
+
+class ArgListBuilder : public ExprListBuilder {
+ public:
+  ArgListBuilder(ModuleBuilder* owner, const ExprList results = {}) :
+    ExprListBuilder(owner, std::move(results)) {}
+  ~ArgListBuilder() override = default;
+
+  auto visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any override;
+};
+
+class ListExprBuilder : public ExprBuilder {
  public:
   explicit ListExprBuilder(ModuleBuilder* owner) :
     ExprBuilder(owner) {}

@@ -10,21 +10,22 @@
 // clang-format on
 
 namespace kura {
+class String;
 class LocalScope;
 class LocalVariable {
   friend class LocalScope;
 
  private:
   LocalScope* owner_ = nullptr;
-  std::string name_;
+  String* name_;
 
   inline void SetOwner(LocalScope* rhs) {
     owner_ = rhs;
   }
 
  public:
-  explicit LocalVariable(const std::string name) :
-    name_(std::move(name)) {}
+  explicit LocalVariable(String* name) :
+    name_(name) {}
   ~LocalVariable() = default;
 
   auto GetOwner() const -> LocalScope* {
@@ -35,15 +36,16 @@ class LocalVariable {
     return owner_;
   }
 
-  auto GetName() const -> const std::string& {
+  auto GetName() const -> String* {
     return name_;
   }
 
   auto ToString() const -> std::string;
 
  public:
-  static inline auto New(const std::string name) -> LocalVariable* {
-    return new LocalVariable(std::move(name));
+  static auto New(const std::string name) -> LocalVariable*;
+  static inline auto New(String* name) -> LocalVariable* {
+    return new LocalVariable(name);
   }
 };
 
@@ -62,10 +64,7 @@ class LocalScope {
   LocalScope* parent_;
   LocalMap locals_{};
 
-  inline auto Insert(LocalVariable* local) -> bool {
-    const auto pos = locals_.insert({local->GetName(), local});
-    return pos.second;
-  }
+  auto Insert(LocalVariable* local) -> bool;
 
  public:
   explicit LocalScope(LocalScope* parent = nullptr) :
@@ -93,6 +92,7 @@ class LocalScope {
   }
 
   auto CreateLocal(const std::string name) -> LocalVariable*;
+  auto CreateLocal(String* name) -> LocalVariable*;
   auto GetLocal(const std::string name) const -> LocalVariable*;
   auto GetLocalRecursive(const std::string name) const -> LocalVariable*;
 

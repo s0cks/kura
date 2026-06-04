@@ -11,7 +11,6 @@
 #include "module.h"
 
 namespace kura {
-
 static inline auto ReadContentsFrom(const std::string filename, std::string& content) -> bool {
   FILE* file = fopen(filename.data(), "r");
   if (!file)

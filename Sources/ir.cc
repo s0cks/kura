@@ -31,7 +31,8 @@ auto ConstantInstr::ToString() const -> std::string {
 auto ReturnInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "ReturnInstr(";
-  ss << "value=" << GetValue()->ToString();
+  if (HasValue())
+    ss << "value=" << GetValue()->ToString();
   ss << ")";
   return ss.str();
 }
@@ -49,11 +50,23 @@ auto JoinEntryInstr::ToString() const -> std::string {
 }
 
 auto BranchInstr::ToString() const -> std::string {
-  return "BranchInstr()";
+  std::stringstream ss{};
+  ss << "BranchInstr(";
+  ss << "condition=" << GetCondition()->ToString() << ", " << std::endl;
+  ss << "then=" << GetThen()->ToString() << ", " << std::endl;
+  if (HasElse())
+    ss << "else=" << GetElse()->ToString() << ", " << std::endl;
+  ss << "join=" << GetJoin()->ToString() << std::endl;
+  ss << ")";
+  return ss.str();
 }
 
 auto GotoInstr::ToString() const -> std::string {
-  return "GotoInstr()";
+  std::stringstream ss{};
+  ss << "GotoIntr(";
+  ss << "target=" << GetTarget()->ToString();
+  ss << ")";
+  return ss.str();
 }
 
 auto NewNodeInstr::ToString() const -> std::string {
@@ -121,7 +134,7 @@ auto NewRecordInstr::ToString() const -> std::string {
 auto StorePropertyInstr::ToString() const -> std::string {
   std::stringstream ss;
   ss << "StorePropertyInstr(";
-  ss << "record=" << GetRecord()->GetDefinition()->ToString() << ", ";
+  ss << "instance=" << GetInstance()->GetDefinition()->ToString() << ", ";
   ss << "property=" << GetProperty()->ToString();
   if (HasValue()) {
     ss << ", value=" << GetValue()->GetDefinition()->ToString();
@@ -141,7 +154,7 @@ auto LoadLocalInstr::ToString() const -> std::string {
 auto NewListInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "NewListInstr(";
-  const auto& values = GetValues();
+  const auto& values = GetInputs();
   for (auto idx = 0; idx < values.size(); idx++) {
     if (!values[idx])
       continue;
@@ -149,6 +162,86 @@ auto NewListInstr::ToString() const -> std::string {
     if (idx < values.size() - 1)
       ss << ", ";
   }
+  ss << ")";
+  return ss.str();
+}
+
+auto SpreadInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "SpreadInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto StoreIndexInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "StoreIndexInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto LoadIndexInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LoadIndexInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto LoadPropertyInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LoadPropertyInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto LoadPropertySafelyInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LoadPropertySafelyInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto LoadFunctionInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LoadFunctionInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto ParameterInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "ParameterInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto PhiInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "PhiInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto StoreLocalInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "StoreLocalInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << ")";
+  return ss.str();
+}
+
+auto AllocInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "AllocInstr(";
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
   ss << ")";
   return ss.str();
 }

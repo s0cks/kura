@@ -31,10 +31,6 @@ auto ExprPrinter::VisitSpread(SpreadExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }
 
-auto ExprPrinter::VisitAssignment(AssignmentExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
 auto ExprPrinter::VisitPipeline(PipelineExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }
