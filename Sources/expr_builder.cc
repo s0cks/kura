@@ -74,7 +74,7 @@ auto ExprBuilder::visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any {
         auto body_expr = std::any_cast<expr::Expr*>(body);
         if (!body_expr->IsSeq())
           body_expr = SeqExpr::New(body_expr);
-        func->SetBody(body_expr);
+        func->SetBody(body_expr->AsSeq());
       }
     }
     PopScope();
@@ -269,9 +269,10 @@ finished:
 auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::any {
   const auto target = VisitExpr(ctx->primaryExpr());
   if (!target)
-    throw std::runtime_error("failed to visit target");
+    return visitChildren(ctx);
 
-  for (const auto& part : ctx->postfixPart()) {
+  const auto parts = ctx->postfixPart();
+  for (const auto& part : parts) {
     if (part->functionCall()) {
       const auto call = part->functionCall();
 
@@ -281,7 +282,7 @@ auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::
     }
   }
 
-  return visitChildren(ctx);
+  return target;
 }
 
 auto ExprBuilder::visitFunctionCall(KuraParser::FunctionCallContext* ctx) -> std::any {
@@ -304,6 +305,11 @@ auto ExprBuilder::visitIndexAccess(KuraParser::IndexAccessContext* ctx) -> std::
   return nullptr;
 }
 
+auto ExprBuilder::visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any {
+  MatchExprBuilder builder(GetOwner());
+  return builder.visitMatchExpr(ctx);
+}
+
 auto BlockExprBuilder::visitBlockExpr(KuraParser::BlockExprContext* ctx) -> std::any {
   for (const auto stmt : ctx->statement()) {
     const auto expr = VisitExpr(stmt);
@@ -320,33 +326,49 @@ auto MatchExprBuilder::visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std:
     return nullptr;
   }
 
-  for (const auto arm : ctx->matchArm()) {
+  const auto expr = MatchExpr::New(subject)->AsMatch();
+  for (const auto& arm : ctx->matchArm()) {
     const auto pattern = VisitPatternExpr(arm->pattern());
+
     auto body = VisitExpr(arm->expression());
+    if (!body) {
+      std::cerr << "failed to visit match arm body for: " << pattern->GetName()
+                << std::endl;  /// TODO(@s0cks): use ToString() when its implement
+      continue;
+    }
     if (!body->IsSeq())
       body = SeqExpr::New(body);
-    cases_.push_back(Case{pattern, body});
+
+    if (pattern->IsWildcardPattern()) {
+      if (expr->HasWildcard())
+        throw std::runtime_error("match expr already has wildcard expr");
+
+      expr->SetWildcard(body);  // TODO(@s0cks): dont overwrite existing wildcards
+      continue;
+    }
+
+    expr->AddCase({pattern, body});
   }
 
-  return MatchExpr::New(subject, cases_);
+  return (Expr*)expr;
 }
 
 auto MatchExprBuilder::visitPattern(KuraParser::PatternContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+  if (ctx->wildcardPattern())
+    return visitWildcardPattern(ctx->wildcardPattern());
+  else if (ctx->literalPattern())
+    return visitLiteralPattern(ctx->literalPattern());
+
+  throw std::runtime_error("invalid match pattern");
 }
 
 auto MatchExprBuilder::visitWildcardPattern(KuraParser::WildcardPatternContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+  return WildcardPatternExpr::New();
 }
 
 auto MatchExprBuilder::visitLiteralPattern(KuraParser::LiteralPatternContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+  const auto literal = VisitExpr(ctx->literal());
+  return literal ? LiteralPatternExpr::New(literal->AsLiteral()) : nullptr;
 }
 
 auto MatchExprBuilder::visitIdentifierPattern(KuraParser::IdentifierPatternContext* ctx) -> std::any {
@@ -406,10 +428,15 @@ auto RecordExprBuilder::visitRecordExpr(KuraParser::RecordExprContext* ctx) -> s
 
 auto RecordExprBuilder::visitRecordFieldList(KuraParser::RecordFieldListContext* ctx) -> std::any {
   for (const auto& field : ctx->recordField()) {
-    const auto name = field->IDENTIFIER()->getText();
-    const auto property = visit(field->expression());
-    const auto body = std::any_cast<Expr*>(property);
-    properties_.push_back(RecordPropertyExpr::New(name, body));
+    const auto property = visit(field);
+    if (!property.has_value()) {
+#ifdef KURA_DEBUG
+      std::cerr << "failed to construct propery for record field" << std::endl;
+#endif  // KURA_DEBUG
+      continue;
+    }
+
+    properties_.push_back(std::any_cast<expr::RecordPropertyExpr*>(property));
   }
 
   return true;
@@ -417,13 +444,12 @@ auto RecordExprBuilder::visitRecordFieldList(KuraParser::RecordFieldListContext*
 
 auto RecordExprBuilder::visitRecordField(KuraParser::RecordFieldContext* ctx) -> std::any {
   const auto name = ctx->IDENTIFIER()->getText();
-  const auto value = visit(ctx->expression());
-  if (!value.has_value() || !std::any_cast<bool>(value)) {
-    std::cerr << "failed to get record property value" << std::endl;
-    return nullptr;
-  }
+  const auto property = Property::New(0, name);
 
-  return RecordPropertyExpr::New(std::move(name), std::any_cast<Expr*>(value));
+  const auto value = visit(ctx->expression());
+  if (!value.has_value())
+    return nullptr;
+  return RecordPropertyExpr::New(property, std::any_cast<Expr*>(value));
 }
 
 auto ListExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {

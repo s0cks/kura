@@ -1,0 +1,5 @@
+fn init(msg) =>
+  match msg {
+    10 => "This is 10"
+    _ => "Hello World"
+  }

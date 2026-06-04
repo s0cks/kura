@@ -38,15 +38,27 @@ auto ReturnInstr::ToString() const -> std::string {
 }
 
 auto GraphEntryInstr::ToString() const -> std::string {
-  return "GraphEntryInstr()";
+  std::stringstream ss{};
+  ss << "GraphEntryInstr(";
+  ss << "id=" << GetBlockId();
+  ss << ")";
+  return ss.str();
 }
 
 auto TargetEntryInstr::ToString() const -> std::string {
-  return "TargetEntryInstr()";
+  std::stringstream ss{};
+  ss << "TargetEntryInstr(";
+  ss << "id=" << GetBlockId();
+  ss << ")";
+  return ss.str();
 }
 
 auto JoinEntryInstr::ToString() const -> std::string {
-  return "JoinEntryInstr()";
+  std::stringstream ss{};
+  ss << "JoinEntryInstr(";
+  ss << "id=" << GetBlockId();
+  ss << ")";
+  return ss.str();
 }
 
 auto BranchInstr::ToString() const -> std::string {

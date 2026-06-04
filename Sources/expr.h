@@ -9,6 +9,7 @@
 #include "common.h"
 #include "element.h"
 #include "object.h"
+#include "property.h"
 
 namespace kura {
 class Function;
@@ -34,10 +35,6 @@ namespace kura::expr {
   V(StoreLocal)          \
   V(WildcardPattern)     \
   V(LiteralPattern)      \
-  V(IdentifierPattern)   \
-  V(VariantPattern)      \
-  V(RecordPattern)       \
-  V(SeqPattern)          \
   V(Call)
 
 class Expr;
@@ -124,24 +121,26 @@ using ExprList = std::vector<Expr*>;
 template <const size_t NumberOfChildren>
 class TemplateExpr : public Expr {
  private:
-  Expr* children_[NumberOfChildren];
+  std::array<Expr*, NumberOfChildren> children_{};
 
  protected:
   TemplateExpr() = default;
 
   void SetChildAt(const uint64_t idx, Expr* value) override {
-    children_[idx] = value;
+    children_.at(idx) = value;
   }
 
  public:
   ~TemplateExpr() override = default;
 
   auto GetChildAt(const uint64_t idx) const -> Expr* override {
-    return children_[idx];
+    if (idx >= children_.size())
+      return nullptr;
+    return children_.at(idx);
   }
 
   auto HasChildAt(const uint64_t idx) const -> bool override {
-    return children_[idx] != nullptr;
+    return GetChildAt(idx) != nullptr;
   }
 
   auto HasChildren() const -> bool override {
@@ -158,7 +157,8 @@ class TemplateExpr : public Expr {
 
   auto VisitChildren(ExprVisitor* vis) -> VisitResult override {
     for (auto idx = 0; idx < NumberOfChildren; idx++) {
-      if (!children_[idx])
+      const auto child = GetChildAt(idx);
+      if (!child)
         continue;
       if (!children_[idx]->Accept(vis))
         return VisitResult::kStop;
@@ -210,6 +210,10 @@ class DynamicTemplateExpr : public Expr {
 
   auto HasChildAt(const uint64_t idx) const -> bool override {
     return idx <= children_.size() && children_[idx] != nullptr;
+  }
+
+  auto GetLast() const -> Expr* {
+    return children_.back();
   }
 
   auto VisitChildren(ExprVisitor* vis) -> VisitResult override {
@@ -626,74 +630,6 @@ class LiteralPatternExpr : public TemplatePatternExpr<1> {
   }
 };
 
-class IdentifierPatternExpr : public PatternExpr {
- private:
-  std::string name_{};
-
-  inline void SetName(const std::string name) {
-    name_ = std::move(name);
-  }
-
- public:
-  explicit IdentifierPatternExpr(const std::string name) {
-    SetName(name);
-  }
-  ~IdentifierPatternExpr() override = default;
-
-  // TODO(@s0cks): rename to GetName and replace Expr::GetName() with Expr::GetExprName()
-  auto GetIdentifier() const -> const std::string& {
-    return name_;
-  }
-
-  DECLARE_EXPR_TYPE(IdentifierPattern);
-
- public:
-  static inline auto New(const std::string name) -> PatternExpr* {
-    return new IdentifierPatternExpr(std::move(name));
-  }
-};
-
-class RecordPatternExpr : public PatternExpr {
-  using PropertyList = std::vector<std::string>;
-
- private:
-  PropertyList properties_{};
-
- public:
-  explicit RecordPatternExpr(const PropertyList properties) :
-    properties_(std::move(properties)) {}
-  ~RecordPatternExpr() override = default;
-
-  auto GetProperties() const -> const PropertyList& {
-    return properties_;
-  }
-
-  DECLARE_EXPR_TYPE(RecordPattern);
-};
-
-class VariantPatternExpr : public PatternExpr {
-  // TODO(@s0cks): implement
-
-  // /// Tag(p1, p2, …)
-  // struct VariantPattern : Pattern {
-  //   std::string tag;
-  //   std::vector<PatternPtr> args;
-  //   void accept(ASTVisitor&) override;
-  // };
-  DECLARE_EXPR_TYPE(VariantPattern);
-};
-
-class SeqPatternExpr : public PatternExpr {
-  // TODO(@s0cks): implement
-
-  // /// [ p1, p2, … ]
-  // struct ListPattern : Pattern {
-  //   std::vector<PatternPtr> elements;
-  //   void accept(ASTVisitor&) override;
-  // };
-  DECLARE_EXPR_TYPE(SeqPattern);
-};
-
 struct Case {
   PatternExpr* pattern;
   Expr* body;
@@ -710,73 +646,55 @@ class CaseVisitor {
 
 using CaseList = std::vector<Case>;
 
-class MatchExpr : public Expr {
- private:
-  Expr* subject_;
-  CaseList cases_{};
-
-  void SetCaseAt(const uint64_t idx, const Case value) {
-    cases_[idx] = std::move(value);
+#define HAS_INPUT_LIST(Name, Type, MemberName, ElementType)            \
+ private:                                                              \
+  Type MemberName##_{};                                                \
+  void Set##Name##At(const uint64_t idx, const ElementType rhs) {      \
+    MemberName##_.at(idx) = std::move(rhs);                            \
+  }                                                                    \
+  void Add##Name(const ElementType rhs) {                              \
+    MemberName##_.push_back(std::move(rhs));                           \
+  }                                                                    \
+                                                                       \
+ public:                                                               \
+  auto Get##Name##s() const -> const Type& {                           \
+    return MemberName##_;                                              \
+  }                                                                    \
+  inline auto Has##Name##s() const -> bool {                           \
+    return !MemberName##_.empty();                                     \
+  }                                                                    \
+  auto GetNumberOf##Name##s() const -> uint64_t {                      \
+    return MemberName##_.size();                                       \
+  }                                                                    \
+  auto Get##Name##At(const uint64_t idx) const -> const ElementType& { \
+    return MemberName##_.at(idx);                                      \
   }
 
-  inline void SetCaseAt(const uint64_t idx, PatternExpr* pattern, Expr* body) {
-    return SetCaseAt(idx, {pattern, body});
-  }
-
-  inline void SetCasePatternAt(const uint64_t idx, PatternExpr* pattern) {
-    cases_[idx].pattern = pattern;
-  }
-
-  inline void SetCaseBodyAt(const uint64_t idx, Expr* body) {
-    cases_[idx].body = body;
-  }
+class MatchExpr : public TemplateExpr<2> {
+  friend class ExprBuilder;
+  friend class MatchExprBuilder;
 
  public:
+  explicit MatchExpr(Expr* subject) {
+    SetSubject(subject);
+  }
   explicit MatchExpr(Expr* subject, const CaseList cases) :
-    subject_(subject),
-    cases_(std::move(cases)) {}
+    cases_(std::move(cases)) {
+    SetSubject(subject);
+  }
   ~MatchExpr() override = default;
 
-  auto GetSubject() const -> Expr* {
-    return subject_;
-  }
-
-  inline auto HasSubject() const -> bool {
-    return subject_;
-  }
-
-  auto GetCases() const -> const CaseList& {
-    return cases_;
-  }
-
-  inline auto HasCases() const -> bool {
-    return !cases_.empty();
-  }
-
-  auto GetNumberOfCases() const -> uint64_t {
-    return cases_.size();
-  }
-
-  auto GetCaseAt(const uint64_t idx) const -> const Case& {
-    return cases_.at(idx);
-  }
-
-  inline auto GetCasePatternAt(const uint64_t idx) const -> PatternExpr* {
-    if (idx > cases_.size())
-      return nullptr;
-    return cases_[idx].pattern;
-  }
-
-  inline auto GetCaseBodyAt(const uint64_t idx) const -> Expr* {
-    if (idx > cases_.size())
-      return nullptr;
-    return cases_[idx].body;
-  }
-
+  HAS_NAMED_INPUT(Subject, 0);
+  HAS_NAMED_INPUT(Wildcard, 1);
+  HAS_INPUT_LIST(Case, CaseList, cases, Case);
   DECLARE_EXPR_TYPE(Match);
 
  public:
-  static inline auto New(Expr* subject, const CaseList cases = {}) -> Expr* {
+  static inline auto New(Expr* subject) -> Expr* {
+    return new MatchExpr(subject);
+  }
+
+  static inline auto New(Expr* subject, const CaseList cases) -> Expr* {
     return new MatchExpr(subject, std::move(cases));
   }
 };
@@ -936,29 +854,29 @@ class NodeExpr : public DynamicTemplateExpr {
 
 class RecordPropertyExpr : public TemplateExpr<1> {
  private:
-  std::string name_;
+  Property* property_;
 
-  inline void SetName(const std::string name) {
-    name_ = std::move(name);
+  void SetProperty(Property* rhs) {
+    property_ = rhs;
   }
 
  public:
-  explicit RecordPropertyExpr(const std::string name, Expr* value = nullptr) {
-    SetName(std::move(name));
+  explicit RecordPropertyExpr(Property* property, Expr* value = nullptr) {
+    SetProperty(property);
     SetValue(value);
   }
   ~RecordPropertyExpr() override = default;
 
-  auto GetPropertyName() const -> const std::string& {
-    return name_;
+  auto GetProperty() const -> Property* {
+    return property_;
   }
 
   HAS_NAMED_INPUT(Value, 0);
   DECLARE_EXPR_TYPE(RecordProperty);
 
  public:
-  static inline auto New(const std::string name, Expr* value) -> RecordPropertyExpr* {
-    return new RecordPropertyExpr(std::move(name), value);
+  static inline auto New(Property* property, Expr* value) -> RecordPropertyExpr* {
+    return new RecordPropertyExpr(property, value);
   }
 };
 
@@ -1101,6 +1019,7 @@ class CallExpr : public TemplateExpr<1> {
 };
 
 #undef HAS_NAMED_INPUT
+#undef HAS_INPUT_LIST
 }  // namespace kura::expr
 
 #endif  // KURA_EXPR_H

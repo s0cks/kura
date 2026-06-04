@@ -67,22 +67,6 @@ auto ExprPrinter::VisitLiteralPattern(LiteralPatternExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }
 
-auto ExprPrinter::VisitIdentifierPattern(IdentifierPatternExpr* exp) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto ExprPrinter::VisitVariantPattern(VariantPatternExpr* exp) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto ExprPrinter::VisitRecordPattern(RecordPatternExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto ExprPrinter::VisitSeqPattern(SeqPatternExpr* exp) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
 auto ExprPrinter::VisitLoadLocal(LoadLocalExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }

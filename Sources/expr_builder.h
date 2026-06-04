@@ -142,6 +142,7 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitPropertyAccess(KuraParser::PropertyAccessContext* ctx) -> std::any override;
   auto visitOptionalPropertyAccess(KuraParser::OptionalPropertyAccessContext* ctx) -> std::any override;
   auto visitIndexAccess(KuraParser::IndexAccessContext* ctx) -> std::any override;
+  auto visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any override;
 
   // ╭──────────────╮
   // │ Declarations │

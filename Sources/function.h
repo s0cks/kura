@@ -10,6 +10,7 @@ namespace kura {
 class GraphEntryInstr;
 namespace expr {
 class Expr;
+class SeqExpr;
 class ExprBuilder;
 }  // namespace expr
 
@@ -19,10 +20,10 @@ class Function {
 
  private:
   String* name_;
-  expr::Expr* body_ = nullptr;
+  expr::SeqExpr* body_ = nullptr;
   GraphEntryInstr* entry_ = nullptr;
 
-  void SetBody(expr::Expr* rhs) {
+  void SetBody(expr::SeqExpr* rhs) {
     body_ = rhs;
   }
 
@@ -35,7 +36,7 @@ class Function {
     return name_;
   }
 
-  auto GetBody() const -> expr::Expr* {
+  auto GetBody() const -> expr::SeqExpr* {
     return body_;
   }
 

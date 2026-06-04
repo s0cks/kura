@@ -30,6 +30,8 @@ class Property : public TemplateObject<kPropertyType> {
   DECLARE_TYPE(Property);
 
  public:
+  static auto New(PropertyId id, const std::string name) -> Property*;
+
   static inline auto New(PropertyId id, String* name) -> Property* {
     return new Property(id, name);
   }

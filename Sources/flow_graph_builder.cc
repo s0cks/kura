@@ -15,24 +15,21 @@ static inline void AppendFragment(TargetEntryInstr* target, const EffectVisitor&
 // TODO(@s0cks): fix this, target_ and graph_ are dependent on strut position to
 // initialize correctly
 FlowGraphBuilder::FlowGraphBuilder() :
-  target_(TargetEntryInstr::New()),
+  target_(CreateNewBlock()),
   graph_(GraphEntryInstr::New(target_)) {}
 
 auto FlowGraphBuilder::Build() -> FlowGraph* {
   return FlowGraph::New(graph_);
 }
 
-auto FlowGraphBuilder::Visit(expr::Expr* expr) -> VisitResult {
-  EffectVisitor for_value(this);
-  if (!expr->Accept(&for_value))
+auto FlowGraphBuilder::Visit(expr::SeqExpr* expr) -> VisitResult {
+  ValueVisitor for_expr(this);
+  if (!for_expr(expr))
     return VisitResult::kStop;
 
-  // TODO(@s0cks): probably need to check if the EffectVisitor has been closed
-  // if (!for_value.IsClosed())
-  //   return VisitResult::kStop;
+  if (!for_expr.IsEmpty())
+    Instruction::Link(target_, for_expr.GetEntry());
 
-  if (!for_value.IsEmpty())
-    Instruction::Link(target_, for_value.GetEntry());
   return VisitResult::kContinue;
 }
 
@@ -57,35 +54,13 @@ auto EffectVisitor::VisitBinary(expr::BinaryExpr* expr) -> VisitResult {
 }
 
 auto EffectVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
-  Value* value = nullptr;
-  expr::Expr* last = nullptr;
-  ValueVisitor for_last(GetOwner());
-  const auto num_children = expr->GetNumberOfChildren();
-  switch (num_children) {
-    case 0: {
-      value = Value::New(ConstantInstr::New(Bool::True()));
-      goto emit_value;
-    }
-    case 1: {
-      last = expr->GetChildAt(0);
-      goto emit_last;
-    }
-  }
-
-  for (auto idx = 0; idx < num_children - 1; idx++) {
+  for (const auto& child : expr->GetChildren()) {
     EffectVisitor for_effect(GetOwner());
-    if (!for_effect(expr->GetChildAt(idx)))
+    if (!for_effect(child))
       return VisitResult::kStop;
     Append(for_effect);
   }
 
-emit_last:
-  if (!for_last(last))
-    return VisitResult::kStop;
-  Append(for_last);
-  value = for_last.GetValue();
-emit_value:
-  AddReturnExit(value);
   return VisitResult::kContinue;
 }
 
@@ -96,7 +71,7 @@ emit_value:
     EffectVisitor for_##Name(GetOwner());        \
     if (!for_##Name(Name##_expr))                \
       return VisitResult::kStop;                 \
-    Name##_entry = TargetEntryInstr::New();      \
+    Name##_entry = GetOwner()->CreateNewBlock(); \
     AppendFragment(Name##_entry, for_##Name);    \
   }
 
@@ -112,14 +87,36 @@ emit_value:
   }
 
 auto EffectVisitor::VisitIf(expr::IfExpr* expr) -> VisitResult {
+  const auto join = GetOwner()->CreateNewBlock<JoinEntryInstr>();
   CREATE_VALUE_FRAGMENT(cond, expr->GetCondition());
   CREATE_TARGET_FRAGMENT(then, expr->GetThen());
   CREATE_TARGET_FRAGMENT(else, expr->GetElse());
-  SetExit(AddBranch(for_cond, then_entry, else_entry));
+  AddBranch(for_cond, then_entry, else_entry, join);
+  SetExit(join);
   return VisitResult::kContinue;
 }
 
 auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
+  const auto join = GetOwner()->CreateNewBlock<JoinEntryInstr>();
+  CREATE_VALUE_FRAGMENT(subject, expr->GetSubject());
+
+  for (const auto& arm : expr->GetCases()) {
+    CREATE_VALUE_FRAGMENT(pattern, arm.pattern);
+    const auto test = Bind(BinaryOpInstr::NewEq(for_subject, for_pattern));
+    CREATE_TARGET_FRAGMENT(body, arm.body);
+    body_entry->AppendGoto(join);
+    AddBranch(test, body_entry, join);
+  }
+
+  if (expr->HasWildcard()) {
+    EffectVisitor for_wildcard(GetOwner());
+    if (!for_wildcard(expr->GetWildcard()))
+      return VisitResult::kStop;
+    Append(for_wildcard);
+    for_wildcard.AddGoto(join);
+  }
+
+  SetExit(join);
   return VisitResult::kContinue;
 }
 
@@ -163,22 +160,6 @@ auto EffectVisitor::VisitLiteralPattern(expr::LiteralPatternExpr* expr) -> Visit
   return VisitResult::kContinue;
 }
 
-auto EffectVisitor::VisitIdentifierPattern(expr::IdentifierPatternExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto EffectVisitor::VisitVariantPattern(expr::VariantPatternExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto EffectVisitor::VisitRecordPattern(expr::RecordPatternExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
-auto EffectVisitor::VisitSeqPattern(expr::SeqPatternExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
-}
-
 auto EffectVisitor::ProcessValueList(const expr::ExprList& expressions, ValueList& values) -> VisitResult {
   for (const auto value : expressions) {
     CREATE_VALUE_FRAGMENT(value, value);
@@ -201,6 +182,23 @@ auto EffectVisitor::ProcessValueList(expr::DynamicTemplateExpr& expr, ValueList&
     values.push_back(for_value.GetValue());
   }
 
+  return VisitResult::kContinue;
+}
+
+auto ValueVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
+  for (auto idx = 0; idx < expr->GetNumberOfChildren() - 1; idx++) {
+    const auto child = expr->GetChildAt(idx);
+    EffectVisitor for_effect(GetOwner());
+    if (!for_effect(child))
+      return VisitResult::kStop;
+    Append(for_effect);
+  }
+
+  ValueVisitor for_last(GetOwner());
+  if (!for_last(expr->GetChildAt(expr->GetNumberOfChildren() - 1)))
+    return VisitResult::kStop;
+  Append(for_last);
+  ReturnValue(for_last);
   return VisitResult::kContinue;
 }
 
@@ -235,11 +233,9 @@ auto ValueVisitor::VisitBinary(expr::BinaryExpr* expr) -> VisitResult {
 auto ValueVisitor::VisitRecord(expr::RecordExpr* expr) -> VisitResult {
   const auto record = Bind(NewRecordInstr::New());
   for (const auto& prop : expr->GetProperties()) {
-    const auto name = prop->GetPropertyName();
     CREATE_VALUE_FRAGMENT(value, prop->GetValue());
     // TODO(@s0cks): need to create a property with a dynamic id
-    const auto property = Property::New(0, String::New(std::move(name)));  // TODO(@s0cks): get property at parse time?
-    AddStoreProperty(record, property, for_value);
+    AddStoreProperty(record, prop->GetProperty(), for_value);
   }
 
   ReturnValue(record);
@@ -256,6 +252,45 @@ auto ValueVisitor::VisitList(expr::ListExpr* expr) -> VisitResult {
   if (!ProcessValueList(*expr, values))
     return VisitResult::kStop;
   ReturnDefinition(NewListInstr::New(std::move(values)));
+  return VisitResult::kContinue;
+}
+
+auto ValueVisitor::VisitLiteralPattern(expr::LiteralPatternExpr* expr) -> VisitResult {
+  // TODO(@s0cks): refactor
+  return VisitLiteral(expr->GetLiteral());
+}
+
+auto ValueVisitor::VisitWildcardPattern(expr::WildcardPatternExpr* expr) -> VisitResult {
+  return VisitResult::kContinue;
+}
+
+auto ValueVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
+  const auto join = GetOwner()->CreateNewBlock<JoinEntryInstr>();
+  CREATE_VALUE_FRAGMENT(subject, expr->GetSubject());
+
+  for (const auto& arm : expr->GetCases()) {
+    CREATE_VALUE_FRAGMENT(pattern, arm.pattern);
+    const auto test = Bind(BinaryOpInstr::NewEq(for_subject, for_pattern));
+
+    const auto target = GetOwner()->CreateNewBlock();
+    ValueVisitor for_arm(GetOwner());
+    if (!for_arm(arm.body))
+      return VisitResult::kStop;
+    for_arm.AddGoto(join);
+    AppendFragment(target, for_arm);
+
+    AddBranch(test, target, join);
+  }
+
+  if (expr->HasWildcard()) {
+    ValueVisitor for_wildcard(GetOwner());
+    if (!for_wildcard(expr->GetWildcard()))
+      return VisitResult::kStop;
+    for_wildcard.AddGoto(join);
+    Append(for_wildcard);
+  }
+
+  Add(join);
   return VisitResult::kContinue;
 }
 }  // namespace kura

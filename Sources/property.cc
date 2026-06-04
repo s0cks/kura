@@ -21,4 +21,8 @@ auto Property::VisitChildren(ObjectVisitor* vis) -> VisitResult {
     return VisitResult::kStop;
   return VisitResult::kContinue;
 }
+
+auto Property::New(PropertyId id, const std::string name) -> Property* {
+  return New(id, String::New(name));
+}
 }  // namespace kura

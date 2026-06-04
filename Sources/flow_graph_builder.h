@@ -6,25 +6,42 @@
 #include "ir.h"
 
 namespace kura {
+template <class I>
+concept HasBlockId = requires(I instr, const uint64_t id) {
+  { instr.SetBlockId(id) } -> std::same_as<void>;
+  { instr.GetBlockId() } -> std::same_as<BlockId>;
+};
+
 class FlowGraph;
 class FlowGraphBuilder {
+  friend class EffectVisitor;
+  friend class ValueVisitor;
+
  private:
+  BlockId current_block_id_ = 0;
   TargetEntryInstr* target_;
   GraphEntryInstr* graph_;
+
+  template <HasBlockId I = TargetEntryInstr>
+  auto CreateNewBlock() -> I* {
+    const auto entry = I::New();
+    entry->SetBlockId(current_block_id_++);
+    return entry;
+  }
 
  public:
   FlowGraphBuilder();
   ~FlowGraphBuilder() = default;
 
-  auto Visit(expr::Expr* expr) -> VisitResult;
+  auto Visit(expr::SeqExpr* expr) -> VisitResult;
   auto Build() -> FlowGraph*;
 
-  inline auto operator()(expr::Expr* expr) -> VisitResult {
+  inline auto operator()(expr::SeqExpr* expr) -> VisitResult {
     return Visit(expr);
   }
 
  public:
-  static inline auto BuildFlowGraph(expr::Expr* expr) -> FlowGraph* {
+  static inline auto BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph* {
     if (!expr)
       return nullptr;
 
@@ -127,11 +144,13 @@ class EffectVisitor : public expr::ExprVisitor {
     // do nothing
   }
 
-  virtual auto AddBranch(Value* condition, TargetEntryInstr* then_expr, TargetEntryInstr* else_expr)
-      -> JoinEntryInstr* {
-    const auto join = JoinEntryInstr::New();
+  virtual void AddBranch(Value* condition, TargetEntryInstr* then_expr, JoinEntryInstr* join) {
+    Add(BranchInstr::New(condition, then_expr, nullptr, join));
+  }
+
+  virtual void AddBranch(Value* condition, TargetEntryInstr* then_expr, TargetEntryInstr* else_expr,
+                         JoinEntryInstr* join) {
     Add(BranchInstr::New(condition, then_expr, else_expr, join));
-    return join;
   }
 
   auto ProcessValueList(const expr::ExprList& expressions, ValueList& values) -> VisitResult;
@@ -211,6 +230,7 @@ class ValueVisitor : public EffectVisitor {
     return GetValue() != nullptr;
   }
 
+  auto VisitSeq(expr::SeqExpr* expr) -> VisitResult override;
   auto VisitCall(expr::CallExpr* expr) -> VisitResult override;
   auto VisitLiteral(expr::LiteralExpr* expr) -> VisitResult override;
   auto VisitLoadLocal(expr::LoadLocalExpr* expr) -> VisitResult override;
@@ -218,6 +238,9 @@ class ValueVisitor : public EffectVisitor {
   auto VisitBinary(expr::BinaryExpr* expr) -> VisitResult override;
   auto VisitRecord(expr::RecordExpr* expr) -> VisitResult override;
   auto VisitList(expr::ListExpr* expr) -> VisitResult override;
+  auto VisitLiteralPattern(expr::LiteralPatternExpr* expr) -> VisitResult override;
+  auto VisitWildcardPattern(expr::WildcardPatternExpr* expr) -> VisitResult override;
+  auto VisitMatch(expr::MatchExpr* expr) -> VisitResult override;
 
   inline auto operator()(expr::Expr* expr) -> VisitResult {
     return expr ? expr->Accept(this) : VisitResult::Stop();

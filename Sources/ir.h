@@ -428,7 +428,6 @@ class BinaryOpInstr : public TemplateDefinition<2> {
 
  public:
   BinaryOpInstr(const expr::BinaryOp op, Value* left, Value* right) :
-    TemplateDefinition<2>(),
     op_(op) {
     SetLeft(left);
     SetRight(right);
@@ -447,6 +446,13 @@ class BinaryOpInstr : public TemplateDefinition<2> {
   static inline auto New(const expr::BinaryOp op, Value* left, Value* right) -> BinaryOpInstr* {
     return new BinaryOpInstr(op, left, right);
   }
+
+#define DEFINE_NEW(Name)                                                   \
+  static inline auto New##Name(Value* lhs, Value* rhs) -> BinaryOpInstr* { \
+    return New(expr::BinaryOp::k##Name, lhs, rhs);                         \
+  }
+  FOR_EACH_BINARY_OP(DEFINE_NEW)
+#undef DEFINE_NEW
 };
 
 class AllocInstr : public Instruction {
@@ -921,7 +927,14 @@ class LoadFunctionInstr : public Definition {
   }
 };
 
+using BlockId = uint64_t;
+
 class EntryInstr : public Instruction {
+  friend class FlowGraphBuilder;
+
+ private:
+  BlockId block_id_ = 0;
+
  protected:
   EntryInstr() = default;
 
@@ -941,8 +954,16 @@ class EntryInstr : public Instruction {
     // do nothing
   }
 
+  void SetBlockId(const BlockId rhs) {
+    block_id_ = rhs;
+  }
+
  public:
   ~EntryInstr() override = default;
+
+  auto GetBlockId() const -> BlockId {
+    return block_id_;
+  }
 
   virtual auto GetNumberOfSuccessors() const -> uint64_t {
     return 0;
@@ -1107,6 +1128,7 @@ class TargetEntryInstr : public EntryInstr {
   }
 };
 
+#undef HAS_INPUT_LIST
 #undef HAS_NAMED_INPUT
 #undef HAS_SUCCESSOR_LIST
 #undef _HAS_SUCCESSOR_LIST
