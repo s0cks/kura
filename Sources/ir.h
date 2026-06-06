@@ -4,10 +4,12 @@
 #include <functional>
 #include <string>
 
+#include "binary_op.h"
 #include "element.h"
 #include "expr.h"
 #include "object.h"
 #include "property.h"
+#include "unary_op.h"
 
 namespace kura {
 #define FOR_EACH_INSTRUCTION(V) \
@@ -34,6 +36,7 @@ namespace kura {
   V(Goto)                       \
   V(Branch)                     \
   V(Phi)                        \
+  V(Label)                      \
   V(StoreLocal)                 \
   V(LoadLocal)                  \
   V(Alloc)
@@ -400,16 +403,16 @@ class ConstantInstr : public Definition {
 
 class UnaryOpInstr : public TemplateDefinition<1> {
  private:
-  expr::UnaryOp op_;
+  UnaryOp op_;
 
  public:
-  UnaryOpInstr(const expr::UnaryOp op, Value* value) :
+  UnaryOpInstr(const UnaryOp op, Value* value) :
     op_(op) {
     SetValue(value);
   }
   ~UnaryOpInstr() override = default;
 
-  auto GetOp() const -> expr::UnaryOp {
+  auto GetOp() const -> UnaryOp {
     return op_;
   }
 
@@ -417,24 +420,24 @@ class UnaryOpInstr : public TemplateDefinition<1> {
   DECLARE_INSTRUCTION_TYPE(UnaryOp);
 
  public:
-  static inline auto New(const expr::UnaryOp op, Value* value) -> UnaryOpInstr* {
+  static inline auto New(const UnaryOp op, Value* value) -> UnaryOpInstr* {
     return new UnaryOpInstr(op, value);
   }
 };
 
 class BinaryOpInstr : public TemplateDefinition<2> {
  private:
-  expr::BinaryOp op_;
+  BinaryOp op_;
 
  public:
-  BinaryOpInstr(const expr::BinaryOp op, Value* left, Value* right) :
+  BinaryOpInstr(const BinaryOp op, Value* left, Value* right) :
     op_(op) {
     SetLeft(left);
     SetRight(right);
   }
   ~BinaryOpInstr() override = default;
 
-  auto GetOp() const -> expr::BinaryOp {
+  auto GetOp() const -> BinaryOp {
     return op_;
   }
 
@@ -443,13 +446,13 @@ class BinaryOpInstr : public TemplateDefinition<2> {
   DECLARE_INSTRUCTION_TYPE(BinaryOp);
 
  public:
-  static inline auto New(const expr::BinaryOp op, Value* left, Value* right) -> BinaryOpInstr* {
+  static inline auto New(const BinaryOp op, Value* left, Value* right) -> BinaryOpInstr* {
     return new BinaryOpInstr(op, left, right);
   }
 
 #define DEFINE_NEW(Name)                                                   \
   static inline auto New##Name(Value* lhs, Value* rhs) -> BinaryOpInstr* { \
-    return New(expr::BinaryOp::k##Name, lhs, rhs);                         \
+    return New(BinaryOp::k##Name, lhs, rhs);                               \
   }
   FOR_EACH_BINARY_OP(DEFINE_NEW)
 #undef DEFINE_NEW
@@ -930,10 +933,15 @@ class LoadFunctionInstr : public Definition {
 using BlockId = uint64_t;
 
 class EntryInstr : public Instruction {
+  friend class EffectVisitor;
+  friend class ValueVisitor;
   friend class FlowGraphBuilder;
 
  private:
   BlockId block_id_ = 0;
+#ifdef KURA_DEBUG
+  String* label_ = nullptr;
+#endif  // KURA_DEBUG
 
  protected:
   EntryInstr() = default;
@@ -957,6 +965,12 @@ class EntryInstr : public Instruction {
   void SetBlockId(const BlockId rhs) {
     block_id_ = rhs;
   }
+
+#ifdef KURA_DEBUG
+  void SetLabel(String* rhs) {
+    label_ = rhs;
+  }
+#endif  // KURA_DEBUG
 
  public:
   ~EntryInstr() override = default;
@@ -988,6 +1002,18 @@ class EntryInstr : public Instruction {
   auto HasPredecessorAt(const uint64_t idx) const -> bool {
     return GetPredecessorAt(idx) != nullptr;
   }
+
+#ifdef KURA_DEBUG
+
+  auto GetLabel() const -> String* {
+    return label_;
+  }
+
+  inline auto HasLabel() const -> bool {
+    return GetLabel() != nullptr;
+  }
+
+#endif  // KURA_DEBUG
 
   virtual auto GetLastInstruction() -> Instruction*;
 
@@ -1125,6 +1151,31 @@ class TargetEntryInstr : public EntryInstr {
  public:
   static inline auto New() -> TargetEntryInstr* {
     return new TargetEntryInstr();
+  }
+};
+
+class LabelInstr : public Instruction {
+ private:
+  String* label_;
+
+ public:
+  explicit LabelInstr(String* label) :
+    label_(label) {}
+  ~LabelInstr() override = default;
+
+  auto GetLabel() const -> String* {
+    return label_;
+  }
+
+  inline auto HasLabel() const -> bool {
+    return GetLabel() != nullptr;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(Label);
+
+ public:
+  static inline auto New(String* label) -> LabelInstr* {
+    return new LabelInstr(label);
   }
 };
 

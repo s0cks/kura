@@ -5,15 +5,36 @@
 
 namespace kura {
 using PropertyId = uint64_t;
+
+#define FOR_EACH_BUILTIN_PROPERTY(V) \
+  V(XX)                              \
+  V(XXX)
+
+// clang-format off
+enum BuiltinPropertyIds : PropertyId {
+  kInvalidPropertyId = 0,
+#define DEFINE_BUILTIN_PROPERTY_ID(Name) \
+  k##Name##PropertyId,
+  FOR_EACH_BUILTIN_PROPERTY(DEFINE_BUILTIN_PROPERTY_ID)
+#undef DEFINE_BUILTIN_PROPERTY_ID
+  kTotalNumberOfBuiltinProperties,
+};
+// clang-format on
+
+class Property;
+using PropertyVisitor = TemplateVisitor<Property>;
+using PropertyPointerVisitor = TemplatePointerVisitor<Property>;
+
 class Property : public TemplateObject<kPropertyType> {
  private:
   PropertyId id_;
   String* name_;
-  Object* value_;
+  Type* type_;
 
-  Property(PropertyId id, String* name) :
+  Property(PropertyId id, String* name, Type* type) :
     id_(id),
-    name_(name) {}
+    name_(name),
+    type_(type) {}
 
  public:
   ~Property() override = default;
@@ -26,14 +47,29 @@ class Property : public TemplateObject<kPropertyType> {
     return name_;
   }
 
+  auto GetPropertyType() const -> Type* {
+    return type_;
+  }
+
   auto VisitChildren(ObjectVisitor* vis) -> VisitResult override;
   DECLARE_TYPE(Property);
 
- public:
-  static auto New(PropertyId id, const std::string name) -> Property*;
+ private:
+  static auto New(String* name, Type* type) -> Property*;
 
-  static inline auto New(PropertyId id, String* name) -> Property* {
-    return new Property(id, name);
+ public:
+  static auto Get(const PropertyId id) -> Property*;
+  static auto FindPropertyId(String* name, Type* type) -> PropertyId;
+
+  static inline auto Find(String* name, Type* type) -> Property* {
+    return Get(FindPropertyId(name, type));
+  }
+
+  static inline auto FindOrCreate(String* name, Type* type) -> Property* {
+    const auto prop = Find(name, type);
+    if (prop)
+      return prop;
+    return New(name, type);
   }
 };
 }  // namespace kura

@@ -23,7 +23,7 @@ class FlowGraphBuilder {
   GraphEntryInstr* graph_;
 
   template <HasBlockId I = TargetEntryInstr>
-  auto CreateNewBlock() -> I* {
+  inline auto CreateNewBlock() -> I* {
     const auto entry = I::New();
     entry->SetBlockId(current_block_id_++);
     return entry;
@@ -41,19 +41,7 @@ class FlowGraphBuilder {
   }
 
  public:
-  static inline auto BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph* {
-    if (!expr)
-      return nullptr;
-
-    FlowGraphBuilder builder{};
-    const auto result = builder(expr);
-    if (!result) {
-      std::cerr << "failed to build flow graph: " << result;
-      return nullptr;
-    }
-
-    return builder.Build();
-  }
+  static auto BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph*;
 };
 
 class ValueVisitor;
@@ -98,6 +86,18 @@ class EffectVisitor : public expr::ExprVisitor {
       SetExit(instr);
     }
   }
+
+#ifdef KURA_DEBUG
+
+  inline void AddLabel(String* message) {
+    return Add(LabelInstr::New(message));
+  }
+
+  inline void AddLabel(const std::string message) {
+    return AddLabel(String::New(message));
+  }
+
+#endif  // KURA_DEBUG
 
   inline void AddGoto(EntryInstr* instr) {
     Add(GotoInstr::New(instr));
@@ -230,6 +230,7 @@ class ValueVisitor : public EffectVisitor {
     return GetValue() != nullptr;
   }
 
+  auto VisitIf(expr::IfExpr* expr) -> VisitResult override;
   auto VisitSeq(expr::SeqExpr* expr) -> VisitResult override;
   auto VisitCall(expr::CallExpr* expr) -> VisitResult override;
   auto VisitLiteral(expr::LiteralExpr* expr) -> VisitResult override;

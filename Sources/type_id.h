@@ -24,7 +24,7 @@ enum BuiltinTypes : TypeId {
   kTotalNumberOfBuiltinTypes,
 };
 // clang-format on
-static constexpr const uint64_t kBuiltinTypePadding = 0;
+static constexpr const uint64_t kBuiltinTypePadding = 100;
 static constexpr const uint64_t kFirstTypeIdAfterBuiltins = kTotalNumberOfBuiltinTypes + kBuiltinTypePadding;
 
 static inline constexpr auto IsBuiltinType(const TypeId id) -> bool {

@@ -15,6 +15,7 @@ auto Module::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "Module(";
   ss << "name=" << name;
+  ss << "view=" << (HasView() ? view->ToString() : "") << ",";
   if (!functions.empty()) {
     ss << ", functions=[";
     for (auto idx = 0; idx < functions.size(); idx++) {

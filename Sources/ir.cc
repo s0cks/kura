@@ -257,4 +257,13 @@ auto AllocInstr::ToString() const -> std::string {
   ss << ")";
   return ss.str();
 }
+
+auto LabelInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LabelInstr(";
+  if (HasLabel())
+    ss << "label=" << GetLabel()->ToString();
+  ss << ")";
+  return ss.str();
+}
 }  // namespace kura

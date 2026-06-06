@@ -145,7 +145,7 @@ struct Indent {
   Indent(Indent&& rhs) = default;
   ~Indent() = default;
 
-  inline auto Increment(const uint8_t n = 1) -> Indent& {
+  inline auto Increment(const int8_t n = 1) -> Indent& {
     if (std::numeric_limits<uint8_t>::max() - length < n) {
       length = std::numeric_limits<uint8_t>::max();
     } else {
@@ -154,7 +154,7 @@ struct Indent {
     return resize();
   }
 
-  inline auto Decrement(const uint8_t n = 1) -> Indent& {
+  inline auto Decrement(const int8_t n = 1) -> Indent& {
     if (length < n) {
       length = 0;
     } else {
@@ -197,7 +197,7 @@ static inline auto operator+(const int lhs, const Indent& rhs) -> Indent {
   return rhs.length + rhs;
 }
 
-template <const uint64_t Size>
+template <const int64_t Size>
 class TemplateIndentScope {
   DEFINE_NON_COPYABLE_TYPE(TemplateIndentScope<Size>);
 
@@ -224,6 +224,28 @@ class TemplateIndentScope {
 
 using DefaultIndentScope = TemplateIndentScope<1>;
 using IndentScope = DefaultIndentScope;
+using NegativeDefaultIndentScope = TemplateIndentScope<-1>;
+
+template <typename T>
+class TemplateVisitor {
+ public:
+  TemplateVisitor() = default;
+  virtual ~TemplateVisitor() = default;
+  virtual auto Visit(T* rhs) -> VisitResult = 0;
+};
+
+template <typename T>
+class TemplatePointerVisitor {
+ public:
+  TemplatePointerVisitor() = default;
+  virtual ~TemplatePointerVisitor() = default;
+  virtual auto Visit(T** rhs) -> VisitResult = 0;
+};
+
+template <typename T>
+concept HasToString = requires(T value) {
+  { value.ToString() } -> std::convertible_to<std::string>;
+};
 }  // namespace kura
 
 #endif  // KURA_COMMON_H

@@ -1,11 +1,8 @@
-fn test(x) =>
-  if x == 10 {
-    "Hello"
-  }
-
 fn x2(x) => x * 2
 
-fn test2(n) => 
-  if n == 0 {
-    [ x2(1), x2(2), x2(3), ]
+fn test() =>
+  if 10 == 10 {
+    "Hello"
+  } else {
+    "Goodbye"
   }

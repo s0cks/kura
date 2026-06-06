@@ -6,10 +6,12 @@
 #include <memory>
 #include <vector>
 
+#include "binary_op.h"
 #include "common.h"
 #include "element.h"
 #include "object.h"
 #include "property.h"
+#include "unary_op.h"
 
 namespace kura {
 class Function;
@@ -355,33 +357,6 @@ class StoreLocalExpr : public TemplateExpr<1> {
   }
 };
 
-#define FOR_EACH_UNARY_OP(V) \
-  V(Plus)                    \
-  V(Minus)                   \
-  V(Bang)
-
-enum UnaryOp {
-#define DEFINE_OP(Name) k##Name,
-  FOR_EACH_UNARY_OP(DEFINE_OP)
-#undef DEFINE_OP
-};
-
-static inline constexpr auto ToString(const UnaryOp rhs) -> std::string_view {
-  switch (rhs) {
-#define DEFINE_TOSTRING(Name) \
-  case UnaryOp::k##Name:      \
-    return #Name;
-    FOR_EACH_UNARY_OP(DEFINE_TOSTRING)
-#undef DEFINE_TOSTRING
-    default:
-      return "Unknown";
-  }
-}
-
-static inline auto operator<<(std::ostream& stream, const UnaryOp& rhs) -> std::ostream& {
-  return stream << ToString(rhs);
-}
-
 class UnaryExpr : public TemplateExpr<1> {
  private:
   UnaryOp op_;
@@ -419,44 +394,6 @@ class UnaryExpr : public TemplateExpr<1> {
   FOR_EACH_UNARY_OP(DEFINE_NEW)
 #undef DEFINE_NEW
 };
-
-#define FOR_EACH_BINARY_OP(V) \
-  V(Add)                      \
-  V(Subtract)                 \
-  V(Multiply)                 \
-  V(Divide)                   \
-  V(Modulus)                  \
-  V(Eq)                       \
-  V(Neq)                      \
-  V(GreaterThan)              \
-  V(GreaterThanEqual)         \
-  V(LessThan)                 \
-  V(LessThanEqual)            \
-  V(BinaryAnd)                \
-  V(BinaryOr)                 \
-  V(Pipe)
-
-enum BinaryOp {
-#define DEFINE_BINARY_OP(Name) k##Name,
-  FOR_EACH_BINARY_OP(DEFINE_BINARY_OP)
-#undef DEFINE_BINARY_OP
-};
-
-static inline auto ToString(const BinaryOp rhs) -> std::string_view {
-  switch (rhs) {
-#define DEFINE_TOSTRING(Name) \
-  case BinaryOp::k##Name:     \
-    return #Name;
-    FOR_EACH_BINARY_OP(DEFINE_TOSTRING)
-#undef DEFINE_TOSTRING
-    default:
-      return "Unknown";
-  }
-}
-
-static inline auto operator<<(std::ostream& stream, const BinaryOp rhs) -> std::ostream& {
-  return stream << ToString(rhs);
-}
 
 class BinaryExpr : public TemplateExpr<2> {
  private:

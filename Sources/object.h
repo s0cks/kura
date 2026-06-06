@@ -59,13 +59,18 @@ class TemplateValueObject : public TemplateObject<Type> {
   }
 };
 
-#define DECLARE_TYPE(Name) \
-  friend class Type;       \
-                           \
- private:                  \
-  static void Init();      \
-                           \
- public:                   \
+#define DECLARE_TYPE(Name)                \
+  friend class Type;                      \
+                                          \
+ private:                                 \
+  static void Init();                     \
+                                          \
+ public:                                  \
+  static inline auto GetTyoe() -> Type* { \
+    return Type::Name##Type();            \
+  }                                       \
+                                          \
+ public:                                  \
   auto ToString() const -> std::string override;
 
 class None : public TemplateObject<kNoneType> {

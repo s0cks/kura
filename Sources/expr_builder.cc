@@ -46,9 +46,24 @@ auto ExprBuilder::visitImportDecl(KuraParser::ImportDeclContext* ctx) -> std::an
   return nullptr;
 }
 
+auto TypeExprBuilder::visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
+}
+
+auto TypeExprBuilder::visitTypeVariantList(KuraParser::TypeVariantListContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
+}
+
+auto TypeExprBuilder::visitTypeVariant(KuraParser::TypeVariantContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
+}
+
 auto ExprBuilder::visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any {
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+  TypeExprBuilder builder(GetOwner());
+  return builder.visitTypeDecl(ctx);
 }
 
 auto ExprBuilder::visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any {
@@ -482,7 +497,7 @@ auto RecordExprBuilder::visitRecordFieldList(KuraParser::RecordFieldListContext*
 
 auto RecordExprBuilder::visitRecordField(KuraParser::RecordFieldContext* ctx) -> std::any {
   const auto name = ctx->IDENTIFIER()->getText();
-  const auto property = Property::New(0, name);
+  const auto property = Property::FindOrCreate(String::New(name), Type::NoneType());
 
   const auto value = visit(ctx->expression());
   if (!value.has_value())

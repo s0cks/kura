@@ -6,6 +6,7 @@
 
 #include "expr.h"
 #include "function.h"
+#include "view.h"
 
 namespace kura {
 namespace expr {
@@ -16,11 +17,16 @@ struct Module {
   friend class expr::ExprBuilder;
   std::string name{};
   std::vector<Function*> functions{};
+  View* view = nullptr;
 
   Module() = delete;
   Module(const std::string n) :
     name(std::move(n)) {}
   ~Module() = delete;
+
+  inline auto HasView() const -> bool {
+    return view != nullptr;
+  }
 
   auto ToString() const -> std::string;
   auto VisitFunctions(const std::function<bool(Function*)> vis) -> bool;

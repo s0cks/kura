@@ -1,6 +1,9 @@
 #ifndef KURA_IR_PRINTER_H
 #define KURA_IR_PRINTER_H
 
+#include <deque>
+#include <unordered_set>
+
 #include "flow_graph.h"
 #include "ir.h"
 
@@ -9,6 +12,8 @@ class IRPrinter {
  private:
   std::ostream& stream_;
   Indent indent_{};
+  std::deque<EntryInstr*> work_{};
+  std::unordered_set<BlockId> visited_{};
 
   inline auto stream() const -> std::ostream& {
     return stream_;
@@ -24,6 +29,33 @@ class IRPrinter {
 
   inline void line() {
     out() << std::endl;
+  }
+
+  inline void AddVisited(const BlockId rhs) {
+    visited_.insert(rhs);
+  }
+
+  inline auto HasVisited(const BlockId rhs) -> bool {
+    const auto pos = visited_.find(rhs);
+    return pos != std::end(visited_);
+  }
+
+  inline void PushBlock(EntryInstr* blk) {
+    if (!blk)
+      return;
+    if (HasVisited(blk->GetBlockId()))
+      return;
+    work_.push_back(blk);
+    visited_.insert(blk->GetBlockId());
+  }
+
+  inline auto GetNextBlock() -> EntryInstr* {
+    if (work_.empty())
+      return nullptr;
+
+    const auto next = work_.front();
+    work_.pop_front();
+    return next;
   }
 
   void PrintInstruction(Instruction* instr);

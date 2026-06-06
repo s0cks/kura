@@ -55,6 +55,31 @@ class ModuleBuilder {
   }
 };
 
+class TypeExprBuilder : public KuraParserBaseVisitor {
+  DEFINE_NON_COPYABLE_TYPE(TypeExprBuilder);
+
+ private:
+  ModuleBuilder* owner_;
+  Type* result_ = nullptr;
+
+ public:
+  explicit TypeExprBuilder(ModuleBuilder* owner) :
+    owner_(owner) {}
+  ~TypeExprBuilder() override = default;
+
+  auto GetResult() const -> Type* {
+    return result_;
+  }
+
+  inline auto HasResult() const -> bool {
+    return GetResult() != nullptr;
+  }
+
+  auto visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any override;
+  auto visitTypeVariantList(KuraParser::TypeVariantListContext* ctx) -> std::any override;
+  auto visitTypeVariant(KuraParser::TypeVariantContext* ctx) -> std::any override;
+};
+
 class ExprBuilder : public KuraParserBaseVisitor {
  private:
   ModuleBuilder* owner_;

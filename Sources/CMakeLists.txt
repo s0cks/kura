@@ -51,6 +51,8 @@ add_library(kura-runtime SHARED
   ir.cc
   ir_printer.cc
   layout.cc
+  unary_op.cc
+  binary_op.cc
   local_scope.cc
   module.cc
   object.cc
@@ -58,6 +60,7 @@ add_library(kura-runtime SHARED
   property.cc
   record.cc
   type.cc
+  view.cc
   ${GEN_SOURCES}
 )
 

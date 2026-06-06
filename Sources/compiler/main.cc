@@ -77,6 +77,15 @@ auto main(int argc, char** argv) -> int {
     return EXIT_FAILURE;
 
   Type::Init();
+
+#ifdef KURA_DEBUG
+  {
+    TypePrinter printer(std::cout);
+    if (!Type::VisitTypes(&printer))
+      return EXIT_FAILURE;
+  }
+#endif  // KURA_DEBUG
+
   LocalScope* scope = LocalScope::New();
   const std::string filename(argv[1]);
 
