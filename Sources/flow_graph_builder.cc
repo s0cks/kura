@@ -180,7 +180,7 @@ auto EffectVisitor::VisitRecord(expr::RecordExpr* expr) -> VisitResult {
   return true;
 }
 
-auto EffectVisitor::VisitRecordProperty(expr::RecordPropertyExpr* expr) -> VisitResult {
+auto EffectVisitor::VisitStoreProperty(expr::StorePropertyExpr* expr) -> VisitResult {
   return true;
 }
 

@@ -55,8 +55,8 @@ auto ExprPrinter::VisitRecord(RecordExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }
 
-auto ExprPrinter::VisitRecordProperty(RecordPropertyExpr* expr) -> VisitResult {
-  return VisitResult::kContinue;
+auto ExprPrinter::VisitStoreProperty(StorePropertyExpr* expr) -> VisitResult {
+  return true;
 }
 
 auto ExprPrinter::VisitWildcardPattern(WildcardPatternExpr* expr) -> VisitResult {

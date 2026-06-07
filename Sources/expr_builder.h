@@ -81,6 +81,24 @@ class TypeExprBuilder : public KuraParserBaseVisitor {
 };
 
 class ExprBuilder : public KuraParserBaseVisitor {
+  class LocalsScope {
+   private:
+    ModuleBuilder* owner_;
+
+   public:
+    explicit LocalsScope(ModuleBuilder* owner) :
+      owner_(owner) {
+      GetOwner()->PushScope();
+    }
+    ~LocalsScope() {
+      GetOwner()->PopScope();
+    }
+
+    auto GetOwner() const -> ModuleBuilder* {
+      return owner_;
+    }
+  };
+
  private:
   ModuleBuilder* owner_;
 
@@ -217,7 +235,7 @@ class BlockExprBuilder : public ExprBuilder {
 
 class RecordExprBuilder : public ExprBuilder {
  private:
-  std::vector<RecordPropertyExpr*> properties_{};
+  std::vector<StorePropertyExpr*> properties_{};
   std::vector<SpreadExpr*> spreads_{};
 
  public:

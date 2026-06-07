@@ -31,11 +31,11 @@ namespace kura::expr {
   V(List)                \
   V(ListComprehension)   \
   V(Record)              \
-  V(RecordProperty)      \
   V(Spread)              \
   V(LoadLocal)           \
   V(StoreLocal)          \
   V(GetProperty)         \
+  V(StoreProperty)       \
   V(WildcardPattern)     \
   V(LiteralPattern)      \
   V(Call)
@@ -236,6 +236,40 @@ class DynamicTemplateExpr : public Expr {
   }
 };
 
+#define _HAS_NAMED_INPUT(Name, Type, Position)           \
+  static constexpr const auto k##Name##Pos = (Position); \
+                                                         \
+ private:                                                \
+  inline void Set##Name(Type* rhs) {                     \
+    return SetChildAt(k##Name##Pos, rhs);                \
+  }                                                      \
+                                                         \
+ public:                                                 \
+  inline auto Get##Name() const -> Type* {               \
+    return GetChildAt(k##Name##Pos);                     \
+  }                                                      \
+  inline auto Has##Name() const -> bool {                \
+    return Get##Name() != nullptr;                       \
+  }
+
+#define HAS_NAMED_INPUT(Name, Position) _HAS_NAMED_INPUT(Name, Expr, Position)
+
+#define HAS_NAMED_TYPED_INPUT(Name, Position)            \
+  static constexpr const auto k##Name##Pos = (Position); \
+                                                         \
+ private:                                                \
+  inline void Set##Name(Name##Expr* rhs) {               \
+    return SetChildAt(k##Name##Pos, rhs);                \
+  }                                                      \
+                                                         \
+ public:                                                 \
+  inline auto Get##Name() const -> Name##Expr* {         \
+    return GetChildAt(k##Name##Pos)->As##Name();         \
+  }                                                      \
+  inline auto Has##Name() const -> bool {                \
+    return Get##Name() != nullptr;                       \
+  }
+
 class SeqExpr : public DynamicTemplateExpr {
  public:
   explicit SeqExpr(const ExprList children = {}) :
@@ -275,6 +309,73 @@ class LiteralExpr : public Expr {
   }
 };
 
+class StorePropertyExpr : public TemplateExpr<1> {
+ private:
+  Property* property_;
+
+  void SetProperty(Property* rhs) {
+    property_ = rhs;
+  }
+
+ public:
+  explicit StorePropertyExpr(Property* property, Expr* value = nullptr) {
+    SetProperty(property);
+    SetValue(value);
+  }
+  ~StorePropertyExpr() override = default;
+
+  auto GetProperty() const -> Property* {
+    return property_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_EXPR_TYPE(StoreProperty);
+
+ public:
+  static inline auto New(Property* property, Expr* value) -> StorePropertyExpr* {
+    return new StorePropertyExpr(property, value);
+  }
+};
+
+class GetPropertyExpr : public TemplateExpr<1> {
+  static constexpr const auto kInstancePos = 0;
+
+ private:
+  Property* property_;
+  bool safe_access_;
+
+  inline void SetInstance(Expr* rhs) {
+    return SetChildAt(kInstancePos, rhs);
+  }
+
+ public:
+  GetPropertyExpr(Expr* instance, Property* property, const bool safe_access) :
+    property_(property),
+    safe_access_(safe_access) {
+    SetInstance(instance);
+  }
+  ~GetPropertyExpr() override = default;
+
+  auto GetProperty() const -> Property* {
+    return property_;
+  }
+
+  inline auto GetInstance() -> Expr* {
+    return GetChildAt(kInstancePos);
+  }
+
+  auto IsSafeAccess() const -> bool {
+    return safe_access_;
+  }
+
+  DECLARE_EXPR_TYPE(GetProperty);
+
+ public:
+  static inline auto New(Expr* instance, Property* property, const bool safe_access = false) -> Expr* {
+    return new GetPropertyExpr(instance, property, safe_access);
+  }
+};
+
 class LoadLocalExpr : public Expr {
  private:
   LocalVariable* local_;
@@ -295,40 +396,6 @@ class LoadLocalExpr : public Expr {
     return new LoadLocalExpr(local);
   }
 };
-
-#define _HAS_NAMED_INPUT(Name, Type, Position)           \
-  static constexpr const auto k##Name##Pos = (Position); \
-                                                         \
- private:                                                \
-  inline void Set##Name(Type* rhs) {                     \
-    return SetChildAt(k##Name##Pos, rhs);                \
-  }                                                      \
-                                                         \
- public:                                                 \
-  inline auto Get##Name() const -> Type* {               \
-    return GetChildAt(k##Name##Pos);                     \
-  }                                                      \
-  inline auto Has##Name() const -> bool {                \
-    return Get##Name() != nullptr;                       \
-  }
-
-#define HAS_NAMED_INPUT(Name, Position) _HAS_NAMED_INPUT(Name, Expr, Position)
-
-#define HAS_NAMED_TYPED_INPUT(Name, Position)            \
-  static constexpr const auto k##Name##Pos = (Position); \
-                                                         \
- private:                                                \
-  inline void Set##Name(Name##Expr* rhs) {               \
-    return SetChildAt(k##Name##Pos, rhs);                \
-  }                                                      \
-                                                         \
- public:                                                 \
-  inline auto Get##Name() const -> Name##Expr* {         \
-    return GetChildAt(k##Name##Pos)->As##Name();         \
-  }                                                      \
-  inline auto Has##Name() const -> bool {                \
-    return Get##Name() != nullptr;                       \
-  }
 
 class StoreLocalExpr : public TemplateExpr<1> {
  private:
@@ -796,38 +863,10 @@ class NodeExpr : public DynamicTemplateExpr {
 //     void accept(ASTVisitor&) override;
 // };
 
-class RecordPropertyExpr : public TemplateExpr<1> {
- private:
-  Property* property_;
-
-  void SetProperty(Property* rhs) {
-    property_ = rhs;
-  }
-
- public:
-  explicit RecordPropertyExpr(Property* property, Expr* value = nullptr) {
-    SetProperty(property);
-    SetValue(value);
-  }
-  ~RecordPropertyExpr() override = default;
-
-  auto GetProperty() const -> Property* {
-    return property_;
-  }
-
-  HAS_NAMED_INPUT(Value, 0);
-  DECLARE_EXPR_TYPE(RecordProperty);
-
- public:
-  static inline auto New(Property* property, Expr* value) -> RecordPropertyExpr* {
-    return new RecordPropertyExpr(property, value);
-  }
-};
-
 class RecordExpr : public Expr {
  public:
   using SpreadList = std::vector<SpreadExpr*>;
-  using PropertyList = std::vector<RecordPropertyExpr*>;
+  using PropertyList = std::vector<StorePropertyExpr*>;
 
  private:
   SpreadList spreads_{};
@@ -837,7 +876,7 @@ class RecordExpr : public Expr {
     spreads_[idx] = value;
   }
 
-  inline void SetPropertyAt(const uint64_t idx, RecordPropertyExpr* value) {
+  inline void SetPropertyAt(const uint64_t idx, StorePropertyExpr* value) {
     properties_[idx] = value;
   }
 
@@ -872,7 +911,7 @@ class RecordExpr : public Expr {
     return properties_.size();
   }
 
-  auto GetPropertyAt(const uint64_t idx) const -> RecordPropertyExpr* {
+  auto GetPropertyAt(const uint64_t idx) const -> StorePropertyExpr* {
     return properties_[idx];
   }
 
@@ -959,45 +998,6 @@ class CallExpr : public TemplateExpr<1> {
  public:
   static inline auto New(Expr* target, const ExprList args = {}) -> Expr* {
     return new CallExpr(target, std::move(args));
-  }
-};
-
-class GetPropertyExpr : public TemplateExpr<1> {
-  static constexpr const auto kInstancePos = 0;
-
- private:
-  Property* property_;
-  bool safe_access_;
-
-  inline void SetInstance(Expr* rhs) {
-    return SetChildAt(kInstancePos, rhs);
-  }
-
- public:
-  GetPropertyExpr(Expr* instance, Property* property, const bool safe_access) :
-    property_(property),
-    safe_access_(safe_access) {
-    SetInstance(instance);
-  }
-  ~GetPropertyExpr() override = default;
-
-  auto GetProperty() const -> Property* {
-    return property_;
-  }
-
-  inline auto GetInstance() -> Expr* {
-    return GetChildAt(kInstancePos);
-  }
-
-  auto IsSafeAccess() const -> bool {
-    return safe_access_;
-  }
-
-  DECLARE_EXPR_TYPE(GetProperty);
-
- public:
-  static inline auto New(Expr* instance, Property* property, const bool safe_access = false) -> Expr* {
-    return new GetPropertyExpr(instance, property, safe_access);
   }
 };
 

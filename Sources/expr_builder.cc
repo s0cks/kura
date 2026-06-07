@@ -69,34 +69,30 @@ auto ExprBuilder::visitTypeDecl(KuraParser::TypeDeclContext* ctx) -> std::any {
 auto ExprBuilder::visitFuncDecl(KuraParser::FuncDeclContext* ctx) -> std::any {
   const auto name = ctx->IDENTIFIER()->getText();
   const auto func = CreateFunctionInScope(std::move(name));
-  PushScope();
-  {
-    const auto parameters = ctx->parameterList();
-    if (parameters) {
-      for (const auto& param : parameters->parameter()) {
-        const auto ident = param->IDENTIFIER()->getText();
-        const auto local = GetScope()->CreateLocal(ident);
-        if (!local) {
-          std::stringstream ss{};
-          ss << "failed to create LocalVariable for parameter: " << ident;
-          throw std::runtime_error(ss.str());
-        }
+  LocalsScope func_scope(GetOwner());
+  const auto parameters = ctx->parameterList();
+  if (parameters) {
+    for (const auto& param : parameters->parameter()) {
+      const auto ident = param->IDENTIFIER()->getText();
+      const auto local = GetScope()->CreateLocal(ident);
+      if (!local) {
+        std::stringstream ss{};
+        ss << "failed to create LocalVariable for parameter: " << ident;
+        throw std::runtime_error(ss.str());
       }
     }
-
-    PushScope();
-    {
-      const auto body = visit(ctx->expression());
-      if (body.has_value()) {
-        auto body_expr = std::any_cast<expr::Expr*>(body);
-        if (!body_expr->IsSeq())
-          body_expr = SeqExpr::New(body_expr);
-        func->SetBody(body_expr->AsSeq());
-      }
-    }
-    PopScope();
   }
-  PopScope();
+
+  {
+    LocalsScope body_scope(GetOwner());
+    const auto body = visit(ctx->expression());
+    if (body.has_value()) {
+      auto body_expr = std::any_cast<expr::Expr*>(body);
+      if (!body_expr->IsSeq())
+        body_expr = SeqExpr::New(body_expr);
+      func->SetBody(body_expr->AsSeq());
+    }
+  }
   return func;
 }
 
@@ -524,7 +520,7 @@ auto RecordExprBuilder::visitRecordFieldList(KuraParser::RecordFieldListContext*
       continue;
     }
 
-    properties_.push_back(std::any_cast<expr::RecordPropertyExpr*>(property));
+    properties_.push_back(std::any_cast<expr::StorePropertyExpr*>(property));
   }
 
   return true;
@@ -537,13 +533,12 @@ auto RecordExprBuilder::visitRecordField(KuraParser::RecordFieldContext* ctx) ->
   const auto value = visit(ctx->expression());
   if (!value.has_value())
     return nullptr;
-  return RecordPropertyExpr::New(property, std::any_cast<Expr*>(value));
+  return StorePropertyExpr::New(property, std::any_cast<Expr*>(value));
 }
 
 auto ListExprBuilder::visitListExpr(KuraParser::ListExprContext* ctx) -> std::any {
   ArgListBuilder builder(GetOwner());
   builder.visitArgumentList(ctx->argumentList());
-finished:
   return ListExpr::New(builder.GetResults());
 }
 
