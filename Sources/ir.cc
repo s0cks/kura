@@ -40,7 +40,7 @@ auto ReturnInstr::ToString() const -> std::string {
 auto GraphEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "GraphEntryInstr(";
-  ss << "id=" << GetBlockId();
+  ss << "block_id=" << GetBlockId();
   ss << ")";
   return ss.str();
 }
@@ -48,7 +48,7 @@ auto GraphEntryInstr::ToString() const -> std::string {
 auto TargetEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "TargetEntryInstr(";
-  ss << "id=" << GetBlockId();
+  ss << "block_id=" << GetBlockId();
   ss << ")";
   return ss.str();
 }
@@ -56,7 +56,7 @@ auto TargetEntryInstr::ToString() const -> std::string {
 auto JoinEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "JoinEntryInstr(";
-  ss << "id=" << GetBlockId();
+  ss << "block_id=" << GetBlockId();
   ss << ")";
   return ss.str();
 }
@@ -205,7 +205,8 @@ auto LoadIndexInstr::ToString() const -> std::string {
 auto LoadPropertyInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "LoadPropertyInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << "instance=" << GetInstance()->ToString() << ", ";
+  ss << "property=" << GetProperty()->ToString();
   ss << ")";
   return ss.str();
 }
@@ -213,7 +214,8 @@ auto LoadPropertyInstr::ToString() const -> std::string {
 auto LoadPropertySafelyInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "LoadPropertySafelyInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << "instance=" << GetInstance()->ToString() << ", ";
+  ss << "property=" << GetProperty()->ToString();
   ss << ")";
   return ss.str();
 }
@@ -234,10 +236,25 @@ auto ParameterInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto PhiInstr::Incoming::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Incoming(";
+  ss << "predecessor=" << predecessor->ToString() << ", ";
+  ss << "value=" << value->ToString();
+  ss << ")";
+  return ss.str();
+}
+
 auto PhiInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "PhiInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << "incoming=[";
+  for (auto idx = 0; idx < GetNumberOfIncoming(); idx++) {
+    ss << GetIncomingAt(idx);
+    if (idx < GetNumberOfIncoming() - 1)
+      ss << ", ";
+  }
+  ss << "]";
   ss << ")";
   return ss.str();
 }

@@ -1,0 +1,17 @@
+fn init(x) => x.name
+
+fn init2(state) =>
+  if state.x == 10 {
+    200
+  } else {
+    300
+  }
+
+fn twenty() => 10 * 2
+
+fn init3(state) =>
+  if state.x == 10 {
+    200
+  } else {
+    300
+  } + 100

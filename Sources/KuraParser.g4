@@ -135,7 +135,7 @@ indexAccess
 // ╰────────────╯
 primaryExpr
   : literal
-  | qualifiedName
+  | IDENTIFIER
   | listExpr
   | listComprehensionExpr
   | recordExpr

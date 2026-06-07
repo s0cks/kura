@@ -46,6 +46,7 @@ class FlowGraphBuilder {
 
 class ValueVisitor;
 class EffectVisitor : public expr::ExprVisitor {
+  friend class ValueVisitor;
   friend class FlowGraphBuilder;
 
  private:
@@ -209,12 +210,20 @@ class ValueVisitor : public EffectVisitor {
   }
 
   void ReturnDefinition(Definition* defn) override {
-    value_ = Bind(defn);
+    return ReturnValue(Bind(defn));
   }
 
   inline void ReturnNull() {
     // TODO(@s0cks): get cached null instance
     return ReturnDefinition(ConstantInstr::New(nullptr));
+  }
+
+  inline auto CreateLoad(Value* instance, Property* property) -> Value* {
+    return Bind(LoadPropertyInstr::New(instance, property));
+  }
+
+  inline auto CreateSafeLoad(Value* instance, Property* property) -> Value* {
+    return Bind(LoadPropertySafelyInstr::New(instance, property));
   }
 
  public:
@@ -230,6 +239,7 @@ class ValueVisitor : public EffectVisitor {
     return GetValue() != nullptr;
   }
 
+  auto VisitGetProperty(expr::GetPropertyExpr* expr) -> VisitResult override;
   auto VisitIf(expr::IfExpr* expr) -> VisitResult override;
   auto VisitSeq(expr::SeqExpr* expr) -> VisitResult override;
   auto VisitCall(expr::CallExpr* expr) -> VisitResult override;

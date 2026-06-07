@@ -319,6 +319,23 @@ finished:
   return nullptr;
 }
 
+auto ExprBuilder::visitPrimaryExpr(KuraParser::PrimaryExprContext* ctx) -> std::any {
+  if (ctx->IDENTIFIER()) {
+    const auto ident = ctx->IDENTIFIER()->getText();
+
+    LocalVariable* local = GetScope()->GetLocalRecursive(ident);
+    if (!local) {
+      std::stringstream ss{};
+      ss << "failed to find LocalVariable: " << ident;
+      throw std::runtime_error(ss.str());
+    }
+
+    return LoadLocalExpr::New(local);
+  }
+
+  return visitChildren(ctx);
+}
+
 auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::any {
   const auto target = VisitExpr(ctx->primaryExpr());
   if (!target)
@@ -332,6 +349,24 @@ auto ExprBuilder::visitPostfixExpr(KuraParser::PostfixExprContext* ctx) -> std::
       ArgListBuilder args(GetOwner());
       args.visitArgumentList(call->argumentList());
       return CallExpr::New(target, std::move(args.GetResults()));
+    } else if (part->propertyAccess()) {
+      const auto property = visit(part->propertyAccess());
+      if (!property.has_value()) {
+        std::stringstream ss{};
+        ss << "invalid property: " << part->optionalPropertyAccess()->IDENTIFIER()->getText();
+        throw std::runtime_error(ss.str());
+      }
+
+      return GetPropertyExpr::New(target, std::any_cast<Property*>(property));
+    } else if (part->optionalPropertyAccess()) {
+      const auto property = visit(part->optionalPropertyAccess());
+      if (!property.has_value()) {
+        std::stringstream ss{};
+        ss << "invalid property: " << part->optionalPropertyAccess()->IDENTIFIER()->getText();
+        throw std::runtime_error(ss.str());
+      }
+
+      return GetPropertyExpr::New(target, std::any_cast<Property*>(property), true);
     }
   }
 
@@ -344,13 +379,13 @@ auto ExprBuilder::visitFunctionCall(KuraParser::FunctionCallContext* ctx) -> std
 }
 
 auto ExprBuilder::visitPropertyAccess(KuraParser::PropertyAccessContext* ctx) -> std::any {
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented" << std::endl;  // TODO(@s0cks): implement
-  return nullptr;
+  const auto name = ctx->IDENTIFIER()->getText();
+  return Property::FindOrCreate(String::New(name), Type::NoneType());
 }
 
 auto ExprBuilder::visitOptionalPropertyAccess(KuraParser::OptionalPropertyAccessContext* ctx) -> std::any {
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented" << std::endl;  // TODO(@s0cks): implement
-  return nullptr;
+  const auto name = ctx->IDENTIFIER()->getText();
+  return Property::FindOrCreate(String::New(name), Type::NoneType());
 }
 
 auto ExprBuilder::visitIndexAccess(KuraParser::IndexAccessContext* ctx) -> std::any {

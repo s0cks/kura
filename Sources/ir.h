@@ -176,6 +176,9 @@ class Instruction {
   }
 
 #define DECLARE_INSTRUCTION_TYPE(Name)                           \
+  friend class EffectVisitor;                                    \
+  friend class ValueVisitor;                                     \
+                                                                 \
  public:                                                         \
   auto ToString() const -> std::string override;                 \
   auto Accept(InstructionVisitor* vis) -> bool override;         \
@@ -618,6 +621,10 @@ class LoadPropertyInstr : public TemplateDefinition<1> {
   }
   ~LoadPropertyInstr() override = default;
 
+  auto GetProperty() const -> Property* {
+    return property_;
+  }
+
   HAS_NAMED_INPUT(Instance, 0);
   DECLARE_INSTRUCTION_TYPE(LoadProperty);
 
@@ -748,6 +755,12 @@ class PhiInstr : public Definition {
   struct Incoming {
     TargetEntryInstr* predecessor;
     Value* value;
+
+    auto ToString() const -> std::string;
+
+    friend auto operator<<(std::ostream& stream, const Incoming& rhs) -> std::ostream& {
+      return stream << rhs.ToString();
+    }
   };
 
   using IncomingList = std::vector<Incoming>;

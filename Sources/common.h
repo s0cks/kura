@@ -75,6 +75,8 @@ class VisitResult {
  public:
   constexpr VisitResult(const Kind kind) :
     kind_(kind) {}
+  constexpr VisitResult(const bool rhs) :
+    kind_(rhs ? kContinue : kStop) {}
   ~VisitResult() = default;
 
   constexpr inline auto GetKind() const -> Kind {

@@ -41,6 +41,9 @@ void IRPrinter::PrintInstructions(EntryInstr* entry) {
     if (next_block->HasLabel()) {
       line();
       out() << next_block->GetLabel()->GetData() << ": " << std::endl;
+    } else {
+      line();
+      out() << "block_" << next_block->GetBlockId() << ": " << std::endl;
     }
 
 #endif  // KURA_DEBUG

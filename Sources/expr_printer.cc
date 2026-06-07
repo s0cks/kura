@@ -74,4 +74,8 @@ auto ExprPrinter::VisitLoadLocal(LoadLocalExpr* expr) -> VisitResult {
 auto ExprPrinter::VisitStoreLocal(StoreLocalExpr* expr) -> VisitResult {
   return VisitResult::kContinue;
 }
+
+auto ExprPrinter::VisitGetProperty(GetPropertyExpr* expr) -> VisitResult {
+  return VisitResult::kContinue;
+}
 }  // namespace kura::expr

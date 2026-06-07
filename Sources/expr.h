@@ -35,6 +35,7 @@ namespace kura::expr {
   V(Spread)              \
   V(LoadLocal)           \
   V(StoreLocal)          \
+  V(GetProperty)         \
   V(WildcardPattern)     \
   V(LiteralPattern)      \
   V(Call)
@@ -946,7 +947,7 @@ class CallExpr : public TemplateExpr<1> {
 
   auto GetChildAt(const uint64_t idx) const -> Expr* override {
     if (idx == 0)
-      return GetTarget();
+      return TemplateExpr<1>::GetChildAt(0);
     return GetArgAt(idx - 1);
   }
 
@@ -958,6 +959,45 @@ class CallExpr : public TemplateExpr<1> {
  public:
   static inline auto New(Expr* target, const ExprList args = {}) -> Expr* {
     return new CallExpr(target, std::move(args));
+  }
+};
+
+class GetPropertyExpr : public TemplateExpr<1> {
+  static constexpr const auto kInstancePos = 0;
+
+ private:
+  Property* property_;
+  bool safe_access_;
+
+  inline void SetInstance(Expr* rhs) {
+    return SetChildAt(kInstancePos, rhs);
+  }
+
+ public:
+  GetPropertyExpr(Expr* instance, Property* property, const bool safe_access) :
+    property_(property),
+    safe_access_(safe_access) {
+    SetInstance(instance);
+  }
+  ~GetPropertyExpr() override = default;
+
+  auto GetProperty() const -> Property* {
+    return property_;
+  }
+
+  inline auto GetInstance() -> Expr* {
+    return GetChildAt(kInstancePos);
+  }
+
+  auto IsSafeAccess() const -> bool {
+    return safe_access_;
+  }
+
+  DECLARE_EXPR_TYPE(GetProperty);
+
+ public:
+  static inline auto New(Expr* instance, Property* property, const bool safe_access = false) -> Expr* {
+    return new GetPropertyExpr(instance, property, safe_access);
   }
 };
 
