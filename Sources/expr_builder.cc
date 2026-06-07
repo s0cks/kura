@@ -258,9 +258,16 @@ auto ExprBuilder::visitQualifiedName(KuraParser::QualifiedNameContext* ctx) -> s
   throw std::runtime_error(ss.str());
 }
 
-auto ExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  const auto tag = ctx->IDENTIFIER()->getText();
+auto UIExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
+  const auto result = visit(ctx->uiProps());
+
+  if (ctx->uiChildren()) {
+    const auto children = visit(ctx->uiChildren());
+  }
+
+  const auto tag = GetTag();
+  std::cout << "visiting ui-expr for: " << tag << std::endl;
+
   if (tag == "text")
     return NodeExpr::NewText();
   else if (tag == "button")
@@ -269,28 +276,33 @@ auto ExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
   return nullptr;
 }
 
-auto ExprBuilder::visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
+auto UIExprBuilder::visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
+}
+
+auto UIExprBuilder::visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
+}
+
+auto UIExprBuilder::visitUiProp(KuraParser::UiPropContext* ctx) -> std::any {
+  const auto name = ctx->IDENTIFIER()->getText();
+  std::cout << "visiting ui property: " << name << std::endl;
+
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
   return nullptr;
 }
 
-auto ExprBuilder::visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+auto UIExprBuilder::visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any {
+  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  return visitChildren(ctx);
 }
 
-auto ExprBuilder::visitUiProp(KuraParser::UiPropContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
-}
-
-auto ExprBuilder::visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any {
-  // TODO(@s0cks): implement
-  std::cerr << __PRETTY_FUNCTION__ << " is not implemented!" << std::endl;
-  return nullptr;
+auto ExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
+  const auto tag = ctx->IDENTIFIER()->getText();
+  UIExprBuilder builder(GetOwner(), std::move(tag));
+  return builder.visitUiExpr(ctx);
 }
 
 auto ArgListBuilder::visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any {

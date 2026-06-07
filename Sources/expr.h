@@ -820,13 +820,13 @@ class NodeExpr : public DynamicTemplateExpr {
   DECLARE_EXPR_TYPE(Node);
 
  public:
-  static inline auto New(const Kind kind, elem::Property* properties = nullptr) -> NodeExpr* {
+  static inline auto New(const Kind kind, elem::Property* properties = nullptr) -> Expr* {
     return new NodeExpr(kind, properties);
   }
 
-#define DEFINE_NEW(Name)                                                            \
-  static inline auto New##Name(elem::Property* properties = nullptr) -> NodeExpr* { \
-    return New(Kind::k##Name, properties);                                          \
+#define DEFINE_NEW(Name)                                                        \
+  static inline auto New##Name(elem::Property* properties = nullptr) -> Expr* { \
+    return New(Kind::k##Name, properties);                                      \
   }
   FOR_EACH_ELEMENT_NODE(DEFINE_NEW)
 #undef DEFINE_NEW

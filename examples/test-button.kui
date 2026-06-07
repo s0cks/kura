@@ -1,0 +1,4 @@
+fn init() =>
+  #button(fill: 0){
+    #text()
+  }

@@ -81,6 +81,7 @@ class TypeExprBuilder : public KuraParserBaseVisitor {
 };
 
 class ExprBuilder : public KuraParserBaseVisitor {
+ protected:
   class LocalsScope {
    private:
     ModuleBuilder* owner_;
@@ -188,6 +189,7 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitOptionalPropertyAccess(KuraParser::OptionalPropertyAccessContext* ctx) -> std::any override;
   auto visitIndexAccess(KuraParser::IndexAccessContext* ctx) -> std::any override;
   auto visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any override;
+  auto visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any override;
 
   // ╭──────────────╮
   // │ Declarations │
@@ -206,15 +208,6 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto visitLiteralTrue(KuraParser::LiteralTrueContext* ctx) -> std::any override;
   auto visitLiteralFalse(KuraParser::LiteralFalseContext* ctx) -> std::any override;
   auto visitLiteralMeasurement(KuraParser::LiteralMeasurementContext* ctx) -> std::any override;
-
-  // ╭────╮
-  // │ UI │
-  // ╰────╯
-  auto visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any override;
-  auto visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any override;
-  auto visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any override;
-  auto visitUiProp(KuraParser::UiPropContext* ctx) -> std::any override;
-  auto visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any override;
 
   auto operator()(KuraParser::SourceContext* ctx) -> std::any {
     return visit(ctx);
@@ -333,6 +326,33 @@ class ListExprBuilder : public ExprBuilder {
   auto operator()(KuraParser::ListExprContext* ctx) -> std::any {
     return visitListExpr(ctx);
   }
+};
+
+class UIExprBuilder : public KuraParserBaseVisitor {
+ private:
+  ModuleBuilder* owner_;
+  std::string tag_;
+  std::vector<Property*> properties_{};
+
+  inline void AddProperty(Property* rhs) {
+    properties_.push_back(rhs);
+  }
+
+ public:
+  explicit UIExprBuilder(ModuleBuilder* owner, const std::string tag) :
+    owner_(owner),
+    tag_(std::move(tag)) {}
+  ~UIExprBuilder() override = default;
+
+  auto GetTag() const -> const std::string& {
+    return tag_;
+  }
+
+  auto visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any override;
+  auto visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any override;
+  auto visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any override;
+  auto visitUiProp(KuraParser::UiPropContext* ctx) -> std::any override;
+  auto visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any override;
 };
 }  // namespace kura::expr
 
