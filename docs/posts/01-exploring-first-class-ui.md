@@ -1,5 +1,5 @@
 ---
-title: "First Class UI"
+title: "Exploring First Class UI"
 date: "06/08/2026"
 tags: [ "kura", "ImGui", "Nuklear" ]
 description: "A discussion about all the ways you can over complicate UI engineering in game engines."
