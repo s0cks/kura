@@ -5,6 +5,6 @@ title: Kura
 
 ## Kura
 
-Welcome
+A compiled language for game engine UIs.
 
 <BlogIndex/>
