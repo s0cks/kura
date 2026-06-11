@@ -331,7 +331,6 @@ class ListExprBuilder : public ExprBuilder {
 class UIExprBuilder : public KuraParserBaseVisitor {
  private:
   ModuleBuilder* owner_;
-  std::string tag_;
   std::vector<Property*> properties_{};
 
   inline void AddProperty(Property* rhs) {
@@ -339,13 +338,12 @@ class UIExprBuilder : public KuraParserBaseVisitor {
   }
 
  public:
-  explicit UIExprBuilder(ModuleBuilder* owner, const std::string tag) :
-    owner_(owner),
-    tag_(std::move(tag)) {}
+  explicit UIExprBuilder(ModuleBuilder* owner) :
+    owner_(owner) {}
   ~UIExprBuilder() override = default;
 
-  auto GetTag() const -> const std::string& {
-    return tag_;
+  auto GetOwner() const -> ModuleBuilder* {
+    return owner_;
   }
 
   auto visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any override;
@@ -353,6 +351,10 @@ class UIExprBuilder : public KuraParserBaseVisitor {
   auto visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::any override;
   auto visitUiProp(KuraParser::UiPropContext* ctx) -> std::any override;
   auto visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any override;
+
+  auto operator()(KuraParser::UiExprContext* ctx) -> std::any {
+    return visitUiExpr(ctx);
+  }
 };
 }  // namespace kura::expr
 

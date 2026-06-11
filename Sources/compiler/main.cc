@@ -84,6 +84,16 @@ auto main(int argc, char** argv) -> int {
     if (!Type::VisitTypes(&printer))
       return EXIT_FAILURE;
   }
+
+  {
+    const std::function<VisitResult(Property*)> vis = [](Property* property) {
+      std::cout << " - " << property->ToString() << std::endl;
+      return true;
+    };
+    std::cout << "Properties:" << std::endl;
+    if (!Property::VisitAllProperties(vis))
+      return EXIT_FAILURE;
+  }
 #endif  // KURA_DEBUG
 
   LocalScope* scope = LocalScope::New();

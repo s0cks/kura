@@ -5,21 +5,8 @@
 
 namespace kura {
 using PropertyId = uint64_t;
-
-#define FOR_EACH_BUILTIN_PROPERTY(V) \
-  V(XX)                              \
-  V(XXX)
-
-// clang-format off
-enum BuiltinPropertyIds : PropertyId {
-  kInvalidPropertyId = 0,
-#define DEFINE_BUILTIN_PROPERTY_ID(Name) \
-  k##Name##PropertyId,
-  FOR_EACH_BUILTIN_PROPERTY(DEFINE_BUILTIN_PROPERTY_ID)
-#undef DEFINE_BUILTIN_PROPERTY_ID
-  kTotalNumberOfBuiltinProperties,
-};
-// clang-format on
+static constexpr const auto kInvalidPropertyId = 0;
+static constexpr const auto kFirstPropertyId = 1;
 
 class Property;
 using PropertyVisitor = TemplateVisitor<Property>;
@@ -57,7 +44,26 @@ class Property : public TemplateObject<kPropertyType> {
  private:
   static auto New(String* name, Type* type) -> Property*;
 
+  static auto New(const std::string name, Type* type) -> Property*;
+
+#define DEFINE_NEW(Name)                                              \
+  static inline auto New##Name(String* name) -> Property* {           \
+    return New(name, Type::Name##Type());                             \
+  }                                                                   \
+  static inline auto New##Name(const std::string name) -> Property* { \
+    return New(std::move(name), Type::Name##Type());                  \
+  }
+
+  DEFINE_NEW(Seq);
+  DEFINE_NEW(Bool);
+  DEFINE_NEW(Number);
+  DEFINE_NEW(String);
+#undef DEFINE_NEW
+
  public:
+  static auto VisitAllProperties(PropertyVisitor* vis) -> VisitResult;
+  static auto VisitAllProperties(const std::function<VisitResult(Property*)> vis) -> VisitResult;
+  static auto VisitAllPropertyPointers(PropertyPointerVisitor* vis) -> VisitResult;
   static auto Get(const PropertyId id) -> Property*;
   static auto FindPropertyId(String* name, Type* type) -> PropertyId;
 
@@ -72,6 +78,7 @@ class Property : public TemplateObject<kPropertyType> {
     return New(name, type);
   }
 };
+
 }  // namespace kura
 
 #endif  // KURA_PROPERTY_H

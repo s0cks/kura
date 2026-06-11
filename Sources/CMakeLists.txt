@@ -79,3 +79,4 @@ target_link_libraries(kura-runtime
 
 add_subdirectory(compiler/)
 add_subdirectory(debugger/)
+add_subdirectory(renderer/)

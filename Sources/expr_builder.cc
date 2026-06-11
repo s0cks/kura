@@ -258,22 +258,50 @@ auto ExprBuilder::visitQualifiedName(KuraParser::QualifiedNameContext* ctx) -> s
   throw std::runtime_error(ss.str());
 }
 
+static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind> {
+  if (rhs == "text")
+    return {NodeExpr::kText};
+  else if (rhs == "button")
+    return {NodeExpr::kButton};
+  else if (rhs == "list")
+    return {NodeExpr::kList};
+  else if (rhs == "image")
+    return {NodeExpr::kImage};
+  else if (rhs == "block")
+    return {NodeExpr::kBlock};
+  else if (rhs == "canvas")
+    return {NodeExpr::kCanvas};
+  else if (rhs == "viewport")
+    return {NodeExpr::kViewport};
+  else if (rhs == "input")
+    return {NodeExpr::kInput};
+  else if (rhs == "scroll")
+    return {NodeExpr::kScroll};
+
+  return std::nullopt;
+}
+
 auto UIExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
   const auto result = visit(ctx->uiProps());
 
+  const auto tag = ctx->IDENTIFIER()->getText();
+  std::cout << "visiting ui-expr for: " << tag << std::endl;
+
+  const auto kind = ParseNodeExprKind(tag);
+  if (!kind) {
+    std::stringstream ss{};
+    ss << "invalid ui-expr tag: " << tag;
+    throw std::runtime_error(ss.str());
+  }
+
+  const auto node = NodeExpr::New(*kind);
+
+  // TODO(@s0cks): add children to NodeExpr before returning
   if (ctx->uiChildren()) {
     const auto children = visit(ctx->uiChildren());
   }
 
-  const auto tag = GetTag();
-  std::cout << "visiting ui-expr for: " << tag << std::endl;
-
-  if (tag == "text")
-    return NodeExpr::NewText();
-  else if (tag == "button")
-    return NodeExpr::NewButton();
-  std::cerr << "invalid ui-expr tag: " << tag;
-  return nullptr;
+  return node;
 }
 
 auto UIExprBuilder::visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any {
@@ -289,20 +317,17 @@ auto UIExprBuilder::visitUiPropList(KuraParser::UiPropListContext* ctx) -> std::
 auto UIExprBuilder::visitUiProp(KuraParser::UiPropContext* ctx) -> std::any {
   const auto name = ctx->IDENTIFIER()->getText();
   std::cout << "visiting ui property: " << name << std::endl;
-
   NOT_IMPLEMENTED;  // TODO(@s0cks): implement
   return nullptr;
 }
 
 auto UIExprBuilder::visitUiChildren(KuraParser::UiChildrenContext* ctx) -> std::any {
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
   return visitChildren(ctx);
 }
 
 auto ExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
-  const auto tag = ctx->IDENTIFIER()->getText();
-  UIExprBuilder builder(GetOwner(), std::move(tag));
-  return builder.visitUiExpr(ctx);
+  UIExprBuilder builder(GetOwner());
+  return builder(ctx);
 }
 
 auto ArgListBuilder::visitArgumentList(KuraParser::ArgumentListContext* ctx) -> std::any {

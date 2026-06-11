@@ -9,9 +9,9 @@ namespace kura {
   V(None)                \
   V(Number)              \
   V(String)              \
-  V(Seq)                 \
+  V(Property)            \
   V(Record)              \
-  V(Property)
+  V(Seq)
 
 using TypeId = uint64_t;
 
