@@ -1,5 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
 import BlogIndex from '../components/BlogIndex.vue'
+import MultiCode from '../components/MultiCode.vue'
 import './custom.css'
 
 export default {
@@ -23,5 +24,6 @@ export default {
   appearance: 'dark',
   enhanceApp({ app }) {
     app.component('BlogIndex', BlogIndex)
+    app.component('MultiCode', MultiCode)
   }
 }
