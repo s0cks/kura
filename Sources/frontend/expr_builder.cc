@@ -1,4 +1,4 @@
-#include "expr_builder.h"
+#include "frontend/expr_builder.h"
 
 #include <optional>
 
@@ -294,14 +294,25 @@ auto UIExprBuilder::visitUiExpr(KuraParser::UiExprContext* ctx) -> std::any {
     throw std::runtime_error(ss.str());
   }
 
-  const auto node = NodeExpr::New(*kind);
+  // TODO(@s0cks): parse properties for node
 
+  const auto node = NodeExpr::New(*kind)->AsNode();
   // TODO(@s0cks): add children to NodeExpr before returning
   if (ctx->uiChildren()) {
-    const auto children = visit(ctx->uiChildren());
+    // FIX(@s0cks): something is null here
+    // for (auto child : ctx->uiChildren()->blockExpr()->statement()) {
+    //   UIExprBuilder builder(GetOwner());
+    //   const auto value = builder.visit(child);
+    //   if (!value.has_value()) {
+    //     std::stringstream ss{};
+    //     ss << "failed to visit ui-expr child";
+    //     throw std::runtime_error(ss.str());
+    //   }
+    //   node->Append(std::any_cast<expr::Expr*>(node));
+    // }
   }
 
-  return node;
+  return reinterpret_cast<expr::Expr*>(node);
 }
 
 auto UIExprBuilder::visitUiProps(KuraParser::UiPropsContext* ctx) -> std::any {
@@ -468,7 +479,7 @@ auto MatchExprBuilder::visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std:
       continue;
     }
 
-    expr->AddCase({pattern, body});
+    expr->AppendCase(CaseExpr::New(pattern, body)->AsCase());
   }
 
   return (Expr*)expr;

@@ -42,21 +42,13 @@ add_library(kura-runtime SHARED
   element.cc
   element_compiler.cc
   element_printer.cc
-  expr.cc
-  expr_builder.cc
-  expr_printer.cc
-  flow_graph.cc
-  flow_graph_builder.cc
   function.cc
-  ir.cc
-  ir_printer.cc
   layout.cc
   unary_op.cc
   binary_op.cc
   local_scope.cc
   module.cc
   object.cc
-  parser.cc
   property.cc
   record.cc
   type.cc
@@ -80,3 +72,5 @@ target_link_libraries(kura-runtime
 add_subdirectory(compiler/)
 add_subdirectory(debugger/)
 add_subdirectory(renderer/)
+add_subdirectory(frontend/)
+add_subdirectory(backend/)

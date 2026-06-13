@@ -1,12 +1,12 @@
-#include "flow_graph_builder.h"
+#include "backend/flow_graph_builder.h"
 
 #include <iostream>
 #include <sstream>
 
+#include "backend/flow_graph.h"
+#include "backend/ir.h"
 #include "common.h"
-#include "expr.h"
-#include "flow_graph.h"
-#include "ir.h"
+#include "frontend/expr.h"
 
 namespace kura {
 static inline void AppendFragment(TargetEntryInstr* target, const EffectVisitor& vis) {
@@ -136,9 +136,9 @@ auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
   CREATE_VALUE_FRAGMENT(subject, expr->GetSubject());
 
   for (const auto& arm : expr->GetCases()) {
-    CREATE_VALUE_FRAGMENT(pattern, arm.pattern);
+    CREATE_VALUE_FRAGMENT(pattern, arm->GetPattern());
     const auto test = Bind(BinaryOpInstr::NewEq(for_subject, for_pattern));
-    CREATE_TARGET_FRAGMENT(body, arm.body);
+    CREATE_TARGET_FRAGMENT(body, arm->GetBody());
     body_entry->AppendGoto(join);
 #ifdef KURA_DEBUG
     body_entry->SetLabel(String::New("pattern"));
@@ -169,6 +169,10 @@ auto EffectVisitor::VisitPipeline(expr::PipelineExpr* expr) -> VisitResult {
 }
 
 auto EffectVisitor::VisitList(expr::ListExpr* expr) -> VisitResult {
+  return true;
+}
+
+auto EffectVisitor::VisitCase(expr::CaseExpr* expr) -> VisitResult {
   return true;
 }
 
@@ -339,14 +343,15 @@ auto ValueVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
     const auto prefix = ss.str();
     AddLabel(prefix + "_test");
 #endif  // KURA_DEBUG
-    CREATE_VALUE_FRAGMENT(pattern, arm.pattern);
+    CREATE_VALUE_FRAGMENT(pattern, arm->GetPattern());
     Append(for_pattern);
     const auto test = Bind(BinaryOpInstr::NewEq(for_subject, for_pattern));
 
     const auto target = GetOwner()->CreateNewBlock();
     ValueVisitor for_arm(GetOwner());
-    if (!for_arm(arm.body))
+    if (!for_arm(arm->GetBody()))
       return false;
+
     for_arm.AddGoto(join);
     AppendFragment(target, for_arm);
 

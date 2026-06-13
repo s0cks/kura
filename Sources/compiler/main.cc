@@ -11,16 +11,16 @@
 #include <stdlib.h>
 #include <yoga/Yoga.h>
 
+#include "backend/flow_graph.h"
+#include "backend/flow_graph_builder.h"
+#include "backend/ir.h"
+#include "backend/ir_printer.h"
 #include "common.h"
 #include "element_compiler.h"
-#include "expr_printer.h"
-#include "flow_graph.h"
-#include "flow_graph_builder.h"
-#include "ir.h"
-#include "ir_printer.h"
+#include "frontend/expr_printer.h"
+#include "frontend/parser.h"
 #include "kura.h"
 #include "module.h"
-#include "parser.h"
 
 using namespace kura;
 
@@ -113,15 +113,14 @@ auto main(int argc, char** argv) -> int {
   ModulePrinter printer(std::cout);
   if (!printer(m))
     return EXIT_FAILURE;
-
+  //
   // llvm::InitLLVM x(argc, argv);
   // llvm::InitializeNativeTarget();
   // llvm::InitializeNativeTargetAsmPrinter();
   // llvm::InitializeNativeTargetAsmParser();
   //
-  // dom::Document* doc = new dom::Document();
   // auto ctx = std::make_unique<llvm::LLVMContext>();
-  // dom::DOMCompiler compiler(ctx.get());
+  // elem::ElementCompiler compiler(ctx.get());
   //
   // auto m = compiler.Compile();
   //
@@ -144,11 +143,11 @@ auto main(int argc, char** argv) -> int {
   //   return EXIT_FAILURE;
   // }
   //
-  // auto ctor = SymExpect->toPtr<void (*)(dom::Document*)>();
-  // ctor(doc);
-  // YGNodeCalculateLayout(doc->node(), YGUndefined, YGUndefined, YGDirectionLTR);
+  // auto ctor = SymExpect->toPtr<elem::Document* (*)(void)>();
+  // const auto doc = ctor();
+  // YGNodeCalculateLayout(doc->GetNode(), YGUndefined, YGUndefined, YGDirectionLTR);
   //
-  // if (!dom::DOMPrinter::Print(doc))
+  // if (!elem::DOMPrinter::Print(doc))
   //   return EXIT_FAILURE;
   return EXIT_SUCCESS;
 }

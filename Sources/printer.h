@@ -6,21 +6,20 @@
 #include "common.h"
 
 namespace kura {
-template <typename Stream = std::ostream>
 class Printer {
  private:
-  Stream& stream_;
+  std::ostream& stream_;
   Indent indent_;
 
  protected:
-  Printer(Stream& stream, const Indent indent) :
+  Printer(std::ostream& stream, const Indent indent) :
     stream_(stream),
     indent_(std::move(indent)) {}
 
  public:
   ~Printer() = default;
 
-  inline auto stream() const -> Stream& {
+  inline auto stream() const -> std::ostream& {
     return stream_;
   }
 
@@ -28,21 +27,21 @@ class Printer {
     return indent_;
   }
 
-  auto out() const -> Stream& {
+  auto out() const -> std::ostream& {
     return stream() << indent();
   }
 };
 
-template <typename T, typename Stream = std::ostream>
-class ToStringPrinter : Printer<Stream>, public TemplateVisitor<T> {
+template <typename T>
+class ToStringPrinter : Printer, public TemplateVisitor<T> {
  public:
-  ToStringPrinter(Stream& stream, const Indent indent = {}) :
-    Printer<Stream>(stream, std::move(indent)),
+  ToStringPrinter(std::ostream& stream, const Indent indent = {}) :
+    Printer(stream, std::move(indent)),
     TemplateVisitor<T>() {}
   ~ToStringPrinter() override = default;
 
   auto Visit(T* rhs) -> VisitResult override {
-    Printer<Stream>::out() << rhs->ToString() << std::endl;
+    Printer::out() << rhs->ToString() << std::endl;
     return VisitResult::kContinue;
   }
 };

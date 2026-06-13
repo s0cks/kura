@@ -7,7 +7,7 @@
 #include "KuraParserBaseVisitor.h"
 // clang-format on
 
-#include "expr.h"
+#include "frontend/expr.h"
 #include "function.h"
 #include "local_scope.h"
 #include "object.h"

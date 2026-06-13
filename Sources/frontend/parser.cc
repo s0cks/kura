@@ -7,7 +7,7 @@
 
 #include "KuraLexer.h"
 #include "KuraParser.h"
-#include "expr_builder.h"
+#include "frontend/expr_builder.h"
 #include "module.h"
 
 namespace kura {

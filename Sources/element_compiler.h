@@ -30,6 +30,10 @@ class ElementCompiler {
   llvm::FunctionType* new_node_func_type_ = nullptr;
   llvm::FunctionCallee new_node_func_{};
 
+  // malloc
+  llvm::FunctionType* malloc_func_type_ = nullptr;
+  llvm::FunctionCallee malloc_func_{};
+
 #define DECLARE_YGFUNC(Name, Func)                 \
   llvm::FunctionType* Name##_func_type_ = nullptr; \
   llvm::FunctionCallee Name##_func_{};
@@ -37,6 +41,7 @@ class ElementCompiler {
   FOR_EACH_YGFUNC(DECLARE_YGFUNC)
 #undef DECLARE_YGFUNC
   void InitYogaFunctions(llvm::Module* m);
+  void InitMallocFunction(llvm::Module* m);
 
   inline void SetValueWithSetter(llvm::Value* this_ptr, llvm::FunctionCallee setter, const float value) {
     std::vector<llvm::Value*> args = {

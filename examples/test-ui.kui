@@ -1,1 +1,6 @@
-fn view1() => #text("Hello World")
+fn view1() => #text()
+
+fn view2() =>
+  #button(){
+    #text()
+  }

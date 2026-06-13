@@ -200,11 +200,10 @@ class SumType : public AlgebraicType {
   DECLARE_ALGEBRAIC_TYPE(Sum);
 };
 
-template <typename Stream = std::ostream>
-class TypePrinter : public ToStringPrinter<Type, Stream> {
+class TypePrinter : public ToStringPrinter<Type> {
  public:
-  explicit TypePrinter(Stream& stream, const Indent indent = {}) :
-    ToStringPrinter<Type, Stream>(stream, std::move(indent)) {}
+  explicit TypePrinter(std::ostream& stream, const Indent indent = {}) :
+    ToStringPrinter<Type>(stream, std::move(indent)) {}
   ~TypePrinter() = default;
 };
 }  // namespace kura

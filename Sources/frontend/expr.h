@@ -25,6 +25,7 @@ namespace kura::expr {
   V(Binary)              \
   V(Seq)                 \
   V(If)                  \
+  V(Case)                \
   V(Match)               \
   V(Node)                \
   V(Pipeline)            \
@@ -180,7 +181,50 @@ class TemplateExpr : public Expr {
   }
 };
 
+#define _HAS_NAMED_INPUT_LIST(Name, MultiName, Type, Member)    \
+ public:                                                        \
+  using Name##List = std::vector<Type*>;                        \
+                                                                \
+ private:                                                       \
+  Name##List Member{};                                          \
+                                                                \
+ protected:                                                     \
+  void Append##Name(Type* rhs) {                                \
+    Member.push_back(rhs);                                      \
+  }                                                             \
+                                                                \
+ public:                                                        \
+  auto Get##MultiName() const -> const Name##List& {            \
+    return Member;                                              \
+  }                                                             \
+  auto GetNumberOf##MultiName() const -> uint64_t {             \
+    return Member.size();                                       \
+  }                                                             \
+  auto Has##MultiName() const -> bool {                         \
+    return !Member.empty();                                     \
+  }                                                             \
+  auto Get##Name##At(const uint64_t idx) const -> Type* {       \
+    if (idx >= Member.size())                                   \
+      return nullptr;                                           \
+    return Member.at(idx);                                      \
+  }                                                             \
+  inline auto Has##Name##At(const uint64_t idx) const -> bool { \
+    return Get##Name##At(idx) != nullptr;                       \
+  }                                                             \
+  auto VisitAll##Name##s(ExprVisitor* vis) -> VisitResult {     \
+    for (auto idx = 0; idx < Member.size(); idx++) {            \
+      const auto child = Member.at(idx);                        \
+      if (!child)                                               \
+        continue;                                               \
+      if (!child->Accept(vis))                                  \
+        return false;                                           \
+    }                                                           \
+    return true;                                                \
+  }
+
 class DynamicTemplateExpr : public Expr {
+  friend class UIExprBuilder;
+
  private:
   ExprList children_{};
 
@@ -236,39 +280,25 @@ class DynamicTemplateExpr : public Expr {
   }
 };
 
-#define _HAS_NAMED_INPUT(Name, Type, Position)           \
-  static constexpr const auto k##Name##Pos = (Position); \
-                                                         \
- private:                                                \
-  inline void Set##Name(Type* rhs) {                     \
-    return SetChildAt(k##Name##Pos, rhs);                \
-  }                                                      \
-                                                         \
- public:                                                 \
-  inline auto Get##Name() const -> Type* {               \
-    return GetChildAt(k##Name##Pos);                     \
-  }                                                      \
-  inline auto Has##Name() const -> bool {                \
-    return Get##Name() != nullptr;                       \
+#define _HAS_NAMED_INPUT(Name, Type, Position)                \
+  static constexpr const auto k##Name##Pos = (Position);      \
+                                                              \
+ private:                                                     \
+  inline void Set##Name(Type* rhs) {                          \
+    return SetChildAt(k##Name##Pos, rhs);                     \
+  }                                                           \
+                                                              \
+ public:                                                      \
+  inline auto Get##Name() const -> Type* {                    \
+    return reinterpret_cast<Type*>(GetChildAt(k##Name##Pos)); \
+  }                                                           \
+  inline auto Has##Name() const -> bool {                     \
+    return Get##Name() != nullptr;                            \
   }
 
-#define HAS_NAMED_INPUT(Name, Position) _HAS_NAMED_INPUT(Name, Expr, Position)
+#define HAS_NAMED_INPUT(Name, Position)       _HAS_NAMED_INPUT(Name, Expr, Position)
 
-#define HAS_NAMED_TYPED_INPUT(Name, Position)            \
-  static constexpr const auto k##Name##Pos = (Position); \
-                                                         \
- private:                                                \
-  inline void Set##Name(Name##Expr* rhs) {               \
-    return SetChildAt(k##Name##Pos, rhs);                \
-  }                                                      \
-                                                         \
- public:                                                 \
-  inline auto Get##Name() const -> Name##Expr* {         \
-    return GetChildAt(k##Name##Pos)->As##Name();         \
-  }                                                      \
-  inline auto Has##Name() const -> bool {                \
-    return Get##Name() != nullptr;                       \
-  }
+#define HAS_NAMED_TYPED_INPUT(Name, Position) _HAS_NAMED_INPUT(Name, Name##Expr, Position)
 
 class SeqExpr : public DynamicTemplateExpr {
  public:
@@ -595,20 +625,24 @@ class TemplatePatternExpr : public PatternExpr {
     for (auto idx = 0; idx < NumberOfChildren; idx++) {
       if (!children_[idx])
         continue;
+
       if (!children_[idx]->Accept(vis))
-        return VisitResult::kStop;
+        return false;
     }
-    return VisitResult::kContinue;
+
+    return true;
   }
 
   auto VisitChildren(const std::function<VisitResult(Expr*)> vis) -> VisitResult override {
     for (auto idx = 0; idx < NumberOfChildren; idx++) {
       if (!children_[idx])
         continue;
+
       if (!vis(children_[idx]))
-        return VisitResult::kStop;
+        return false;
     }
-    return VisitResult::kContinue;
+
+    return true;
   }
 };
 
@@ -641,45 +675,22 @@ class LiteralPatternExpr : public TemplatePatternExpr<1> {
   }
 };
 
-struct Case {
-  PatternExpr* pattern;
-  Expr* body;
-};
+class CaseExpr : public TemplateExpr<2> {
+ public:
+  CaseExpr(PatternExpr* pattern, Expr* body) {}
+  ~CaseExpr() override = default;
 
-class CaseVisitor {
- protected:
-  CaseVisitor() = default;
+  HAS_NAMED_TYPED_INPUT(Pattern, 0);
+  HAS_NAMED_INPUT(Body, 1);
+  DECLARE_EXPR_TYPE(Case);
 
  public:
-  virtual ~CaseVisitor() = default;
-  virtual auto VisitCase(PatternExpr* pattern, Expr* body) -> bool = 0;
+  static inline auto New(PatternExpr* pattern, Expr* body) -> Expr* {
+    return new CaseExpr(pattern, body);
+  }
 };
 
-using CaseList = std::vector<Case>;
-
-#define HAS_INPUT_LIST(Name, Type, MemberName, ElementType)            \
- private:                                                              \
-  Type MemberName##_{};                                                \
-  void Set##Name##At(const uint64_t idx, const ElementType rhs) {      \
-    MemberName##_.at(idx) = std::move(rhs);                            \
-  }                                                                    \
-  void Add##Name(const ElementType rhs) {                              \
-    MemberName##_.push_back(std::move(rhs));                           \
-  }                                                                    \
-                                                                       \
- public:                                                               \
-  auto Get##Name##s() const -> const Type& {                           \
-    return MemberName##_;                                              \
-  }                                                                    \
-  inline auto Has##Name##s() const -> bool {                           \
-    return !MemberName##_.empty();                                     \
-  }                                                                    \
-  auto GetNumberOf##Name##s() const -> uint64_t {                      \
-    return MemberName##_.size();                                       \
-  }                                                                    \
-  auto Get##Name##At(const uint64_t idx) const -> const ElementType& { \
-    return MemberName##_.at(idx);                                      \
-  }
+using CaseList = std::vector<CaseExpr*>;
 
 class MatchExpr : public TemplateExpr<2> {
   friend class ExprBuilder;
@@ -697,7 +708,7 @@ class MatchExpr : public TemplateExpr<2> {
 
   HAS_NAMED_INPUT(Subject, 0);
   HAS_NAMED_INPUT(Wildcard, 1);
-  HAS_INPUT_LIST(Case, CaseList, cases, Case);
+  _HAS_NAMED_INPUT_LIST(Case, Cases, CaseExpr, cases_);
   DECLARE_EXPR_TYPE(Match);
 
  public:
@@ -752,6 +763,8 @@ class ListComprehensionExpr : public TemplateExpr<3> {
 };
 
 class NodeExpr : public DynamicTemplateExpr {
+  _HAS_NAMED_INPUT_LIST(Property, Properties, StorePropertyExpr, properties_);
+
  public:
   enum Kind {
 #define DEFINE_KIND(Name) k##Name,
@@ -777,34 +790,15 @@ class NodeExpr : public DynamicTemplateExpr {
 
  private:
   Kind kind_;
-  elem::Property* properties_ = nullptr;
-
-  inline void SetKind(const Kind rhs) {
-    kind_ = rhs;
-  }
-
-  inline void SetProperties(elem::Property* rhs) {
-    properties_ = rhs;
-  }
-
-  inline void AddProperty(elem::Property* p) {
-    elem::Property::Append(&properties_, p);
-  }
 
  public:
-  explicit NodeExpr(const Kind kind, elem::Property* properties) :
+  explicit NodeExpr(const Kind kind, const PropertyList properties) :
     DynamicTemplateExpr(),
     kind_(kind),
-    properties_(properties) {}
+    properties_(std::move(properties)) {
+    PropertyList props;
+  }
   ~NodeExpr() override = default;
-
-  auto GetProperties() const -> elem::Property* {
-    return properties_;
-  }
-
-  inline auto HasProperties() const -> bool {
-    return GetProperties() != nullptr;
-  }
 
   auto GetKind() const -> Kind {
     return kind_;
@@ -820,64 +814,29 @@ class NodeExpr : public DynamicTemplateExpr {
   DECLARE_EXPR_TYPE(Node);
 
  public:
-  static inline auto New(const Kind kind, elem::Property* properties = nullptr) -> Expr* {
-    return new NodeExpr(kind, properties);
+  static inline auto New(const Kind kind, const PropertyList properties = {}) -> Expr* {
+    return new NodeExpr(kind, std::move(properties));
   }
 
-#define DEFINE_NEW(Name)                                                        \
-  static inline auto New##Name(elem::Property* properties = nullptr) -> Expr* { \
-    return New(Kind::k##Name, properties);                                      \
+#define DEFINE_NEW(Name)                                                      \
+  static inline auto New##Name(const PropertyList properties = {}) -> Expr* { \
+    return New(Kind::k##Name, std::move(properties));                         \
   }
   FOR_EACH_ELEMENT_NODE(DEFINE_NEW)
 #undef DEFINE_NEW
 };
 
-// // ─── Postfix parts ────────────────────────────────────────────────────────────
-// struct FunctionCallPart {
-//     std::vector<ExprPtr> args;
-// };
-//
-// struct PropertyAccessPart {
-//     std::string name;
-//     bool        optional{false};   ///< true for ?.
-// };
-//
-// struct IndexAccessPart {
-//     ExprPtr index;
-// };
-//
-// /// Discriminated union for one postfix suffix
-// struct PostfixPart {
-//     enum class Kind { Call, Prop, Index } kind;
-//
-//     // Only one of these is active, chosen by kind:
-//     FunctionCallPart  call{};
-//     PropertyAccessPart prop{};
-//     IndexAccessPart   index{};
-// };
-//
-// /// primary postfixPart*
-// struct PostfixExpr : Expr {
-//     ExprPtr                  primary;
-//     std::vector<PostfixPart> parts;
-//     void accept(ASTVisitor&) override;
-// };
-
 class RecordExpr : public Expr {
+  _HAS_NAMED_INPUT_LIST(Property, Properties, StorePropertyExpr, properties_);
+
  public:
   using SpreadList = std::vector<SpreadExpr*>;
-  using PropertyList = std::vector<StorePropertyExpr*>;
 
  private:
   SpreadList spreads_{};
-  PropertyList properties_{};
 
   inline void SetSpreadAt(const uint64_t idx, SpreadExpr* value) {
     spreads_[idx] = value;
-  }
-
-  inline void SetPropertyAt(const uint64_t idx, StorePropertyExpr* value) {
-    properties_[idx] = value;
   }
 
  public:
@@ -903,22 +862,6 @@ class RecordExpr : public Expr {
     return idx < spreads_.size() && spreads_[idx] != nullptr;
   }
 
-  auto GetProperties() const -> const PropertyList& {
-    return properties_;
-  }
-
-  auto GetNumberOfProperties() const -> uint64_t {
-    return properties_.size();
-  }
-
-  auto GetPropertyAt(const uint64_t idx) const -> StorePropertyExpr* {
-    return properties_[idx];
-  }
-
-  auto HasPropertyAt(const uint64_t idx) const -> bool {
-    return idx < properties_.size() && properties_[idx] != nullptr;
-  }
-
   auto GetNumberOfChildren() const -> uint64_t override {
     return GetNumberOfSpreads() + GetNumberOfProperties();
   }
@@ -939,10 +882,10 @@ class RecordExpr : public Expr {
 
   auto VisitSpreads(ExprVisitor* vis) -> bool;
   auto VisitSpreads(const std::function<bool(Expr*)> vis) -> bool;
-  auto VisitProperties(ExprVisitor* vis) -> bool;
   auto VisitProperties(const std::function<bool(Expr*)> vis) -> bool;
   auto VisitChildren(ExprVisitor* vis) -> VisitResult override;
   auto VisitChildren(const std::function<VisitResult(Expr*)> vis) -> VisitResult override;
+
   DECLARE_EXPR_TYPE(Record);
 
  public:

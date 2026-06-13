@@ -1,4 +1,4 @@
-#include "expr.h"
+#include "frontend/expr.h"
 
 namespace kura::expr {
 #define DEFINE_ACCEPT(Name)                                  \
@@ -19,14 +19,6 @@ auto RecordExpr::VisitSpreads(ExprVisitor* vis) -> bool {
 auto RecordExpr::VisitSpreads(const std::function<bool(Expr*)> vis) -> bool {
   for (const auto& spread : spreads_) {
     if (!vis(spread))
-      return false;
-  }
-  return true;
-}
-
-auto RecordExpr::VisitProperties(ExprVisitor* vis) -> bool {
-  for (const auto& property : properties_) {
-    if (!property->Accept(vis))
       return false;
   }
   return true;
@@ -57,20 +49,24 @@ auto RecordExpr::VisitChildren(const std::function<VisitResult(Expr*)> vis) -> V
     if (!vis(spread))
       return VisitResult::kStop;
   }
+
   for (const auto& property : properties_) {
     if (!vis(property))
       return VisitResult::kStop;
   }
+
   return VisitResult::kContinue;
 }
 
 auto CallExpr::VisitChildren(ExprVisitor* vis) -> VisitResult {
   if (!GetTarget()->Accept(vis))
     return VisitResult::kStop;
+
   for (const auto& arg : args_) {
     if (!arg->Accept(vis))
       return VisitResult::kStop;
   }
+
   return VisitResult::kContinue;
 }
 }  // namespace kura::expr

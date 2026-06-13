@@ -1,7 +1,7 @@
 #include "ir_printer.h"
 
+#include "backend/ir.h"
 #include "common.h"
-#include "ir.h"
 
 namespace kura {
 void IRPrinter::PrintInstruction(Instruction* instr) {

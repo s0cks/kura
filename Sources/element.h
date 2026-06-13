@@ -152,10 +152,17 @@ class StructuralNode : public Node {
   }
 
 class Document : public StructuralNode {
+ private:
+  YGNodeRef node_;
+
  public:
   explicit Document(const NodeList children) :
     StructuralNode(std::move(children)) {}
   ~Document() override = default;
+
+  auto GetNode() const -> YGNodeRef {
+    return node_;
+  }
 
   DECLARE_ELEMENT_NODE_TYPE(Document);
 

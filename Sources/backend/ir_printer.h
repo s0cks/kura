@@ -4,8 +4,8 @@
 #include <deque>
 #include <unordered_set>
 
-#include "flow_graph.h"
-#include "ir.h"
+#include "backend/flow_graph.h"
+#include "backend/ir.h"
 
 namespace kura {
 class IRPrinter {

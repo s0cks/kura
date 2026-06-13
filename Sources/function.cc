@@ -2,7 +2,7 @@
 
 #include <sstream>
 
-#include "expr.h"
+#include "frontend/expr.h"
 
 namespace kura {
 auto Function::ToString() const -> std::string {

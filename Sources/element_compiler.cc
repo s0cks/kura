@@ -33,6 +33,24 @@ void ElementCompiler::InitYogaFunctions(llvm::Module* m) {
 #undef INIT_YGFUNC
 }
 
+void ElementCompiler::InitMallocFunction(llvm::Module* m) {
+  malloc_func_ = m->getFunction("malloc");
+  if (!malloc_func_) {
+    malloc_func_type_ = llvm::FunctionType::get(ptr_type_,
+                                                {
+                                                    llvm::Type::getInt64Ty(*ctx_),
+                                                },
+                                                false);
+    malloc_func_ = llvm::Function::Create(malloc_func_type_, llvm::Function::ExternalLinkage, "malloc", m);
+  }
+}
+
+// const llvm::DataLayout &DL = Module->getDataLayout();
+// uint64_t AllocSize = DL.getTypeAllocSize(MyClassType);
+// llvm::Value *SizeValue = Builder.getInt64(AllocSize);
+// llvm::Value *RawPtr = Builder.CreateCall(MallocFunc, {SizeValue}, "malloc_tmp");
+// llvm::Value *ClassInstancePtr = Builder.CreateBitCast(RawPtr, llvm::PointerType::get(MyClassType, 0));
+
 auto ElementCompiler::Compile() -> std::unique_ptr<llvm::Module> {
   auto m = std::make_unique<llvm::Module>("jit", *ctx_);
   InitYogaFunctions(m.get());

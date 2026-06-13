@@ -6,7 +6,7 @@
 
 #include "binary_op.h"
 #include "element.h"
-#include "expr.h"
+#include "frontend/expr.h"
 #include "object.h"
 #include "property.h"
 #include "unary_op.h"

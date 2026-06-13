@@ -1,9 +1,9 @@
 #ifndef KURA_FLOW_GRAPH_H
 #define KURA_FLOW_GRAPH_H
 
-#include "ir.h"
-namespace kura {
+#include "backend/ir.h"
 
+namespace kura {
 class FlowGraph {
  private:
   GraphEntryInstr* entry_;

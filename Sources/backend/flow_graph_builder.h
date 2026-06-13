@@ -1,9 +1,9 @@
 #ifndef KURA_FLOW_GRAPH_BUILDER_H
 #define KURA_FLOW_GRAPH_BUILDER_H
 
+#include "backend/ir.h"
 #include "common.h"
-#include "expr.h"
-#include "ir.h"
+#include "frontend/expr.h"
 
 namespace kura {
 template <class I>
