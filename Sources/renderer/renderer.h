@@ -1,17 +1,14 @@
 #ifndef KURA_RENDERER_H
 #define KURA_RENDERER_H
 
-namespace kura {
-class Renderer {
- private:
-  Renderer() = default;
+#ifdef KURA_RENDER_TARGET_OPENGL
 
- public:
-  ~Renderer() = default;
+#include "renderer/renderer_gl.h"
 
- public:
-  static void Init();
-};
-}  // namespace kura
+#elif KURA_RENDER_TARGET_VULKAN
+
+#include "renderer/renderer_vk.h"
+
+#endif
 
 #endif  // KURA_RENDERER_H

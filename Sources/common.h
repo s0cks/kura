@@ -26,6 +26,16 @@
 
 #endif  // NOT_IMPLEMENTED
 
+#ifdef __linux__
+
+#include <pthread.h>
+
+#else
+
+#error "unsupported operating system"
+
+#endif  // OS
+
 namespace kura {
 #define DEFINE_NON_COPYABLE_TYPE(Name)             \
  public:                                           \

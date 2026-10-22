@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "debugger/debugger.h"
+
 int main(int argc, char** argv) {
-  printf("Hello World\n");
-  return EXIT_SUCCESS;
+  using namespace kura;
+  Debugger debugger;
+  return debugger(argc, argv);
 }

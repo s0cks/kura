@@ -12,6 +12,8 @@ target_link_libraries(kura-debug
 )
 
 add_executable(kura-debugger
+  debugger.cc
+  debugger_gtk4.cc
   main.cc)
 target_link_libraries(kura-debugger
   PUBLIC kura-debug)

@@ -1,7 +1,8 @@
-option(KURA_RENDER_TARGET "The render target for kura. [OPENGL/VULKAN]" "OPENGL")
+set(KURA_RENDER_TARGET "OpenGL" CACHE STRING "The backend graphics API to target")
+string(TOUPPER "${KURA_RENDER_TARGET}" KURA_RENDER_TARGET_UPPER)
 
-option(KURA_MAX_VERTICES "The max number of vertices the renderer should have" 16384)
-option(KURA_MAX_INDICES "The max number of indices the renderer should have" 32768)
+set(KURA_MAX_VERTICES "16384" CACHE STRING "The max number of vertices the renderer should have")
+set(KURA_MAX_INDICES "32768" CACHE STRING "The max number of indices the renderer should have")
 
 target_compile_definitions(kura-runtime
   PUBLIC
@@ -11,14 +12,24 @@ target_compile_definitions(kura-runtime
 
 target_sources(kura-runtime
   PUBLIC renderer.cc
+         batch_gl.cc
          renderer_gl.cc
-         renderer_vk.cc)
+         renderer_vk.cc
+         vertex.cc
+         vertex_gl.cc)
 
-if(${KURA_RENDER_TARGET} STREQUAL "OPENGL")
+message(STATUS "render target: ${KURA_RENDER_TARGET_UPPER}")
+if(${KURA_RENDER_TARGET_UPPER} STREQUAL "OPENGL")
+  pkg_check_modules(EGL   REQUIRED IMPORTED_TARGET egl)
+  pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
+
   target_compile_definitions(kura-runtime
     PUBLIC 
       KURA_RENDER_TARGET_OPENGL)
-elseif(${KURA_RENDER_TARGET} STREQUAL "VULKAN")
+  target_link_libraries(kura-runtime
+    PUBLIC PkgConfig::EGL
+           PkgConfig::EPOXY)
+elseif(${KURA_RENDER_TARGET_UPPER} STREQUAL "VULKAN")
   target_compile_definitions(kura-runtime
     PUBLIC
       KURA_RENDER_TARGET_VULKAN)

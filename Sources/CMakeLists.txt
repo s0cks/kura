@@ -16,6 +16,7 @@ llvm_map_components_to_libnames(llvm_libs
   core
 )
 
+find_package(glm CONFIG REQUIRED)
 find_package(yoga CONFIG REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
 
@@ -67,6 +68,7 @@ target_link_libraries(kura-runtime
          PkgConfig::XXHASH
          yogacore
          antlr::antlr4
+         glm::glm
 )
 
 add_subdirectory(compiler/)

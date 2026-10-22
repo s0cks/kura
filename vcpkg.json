@@ -5,6 +5,7 @@
     "libuv",
     "jansson",
     "yoga",
-    "xxhash"
+    "xxhash",
+    "glm"
   ]
 }
