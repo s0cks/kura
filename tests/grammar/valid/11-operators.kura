@@ -1,0 +1,7 @@
+let a = !ready && b || c
+let b = 1 + 2 * 3 - 4 / 2
+let c = -x.y
+let d = a == b && c != d
+let e = a < b
+let f = a <= b || a >= b || a > b
+let g = f(x)(y).z

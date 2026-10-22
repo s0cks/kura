@@ -1,4 +1,4 @@
-fn init() =>
-  #button(fill: 0){
+fn init(): Content =>
+  #button(fill: 0) {
     #text()
   }

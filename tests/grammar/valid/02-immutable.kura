@@ -1,0 +1,4 @@
+let x = {
+  name: "Person 1",
+}
+x = { name: "Person 2", }

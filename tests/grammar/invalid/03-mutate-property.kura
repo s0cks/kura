@@ -1,0 +1,2 @@
+let x = { name: "a", }
+x.name = "b"

@@ -1,4 +1,6 @@
 build/
+*.tar.gz
+*.patch
 wiki/
 elmgl1/
 elmgl2/

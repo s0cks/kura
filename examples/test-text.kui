@@ -1,2 +1,9 @@
-fn init() =>
+fn init(): Content =>
   #text(fill: 0)
+
+fn view1(): Content => #text()
+
+fn view2(): Content =>
+  #button() {
+    #text()
+  }

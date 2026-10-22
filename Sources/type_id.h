@@ -11,7 +11,11 @@ namespace kura {
   V(String)              \
   V(Property)            \
   V(Record)              \
-  V(Seq)
+  V(Seq)                 \
+  V(Px)                  \
+  V(Pct)                 \
+  V(Fr)                  \
+  V(Color)
 
 using TypeId = uint64_t;
 

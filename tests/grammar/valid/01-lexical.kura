@@ -1,0 +1,15 @@
+// a comment runs to the end of the line
+let x = 10 // so does a trailing comment
+let item-count = 10
+fn get-position(): Position => { x: 10, y: 20, }
+let config = { is-debug: true, }
+let a = b - c   // subtraction
+let d = b-c     // a single identifier named b-c
+let e = -b      // unary minus
+let s = "esc \n \t \" \\ ok"
+let n = 10.5
+let none-value = None
+let u1 = 10px
+let u2 = 50%
+let u3 = 1fr
+let u4 = blue

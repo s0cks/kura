@@ -1,0 +1,51 @@
+type Position = {
+  x: Number,
+  y: Number,
+  z?: Number,
+}
+
+type Message = Click(Position) | Tick | Set(Number)
+type Optional<T> = Some(T) | None
+type Op = (Number, Number) => Number
+type Content = Node | None
+
+@vec
+let origin: Seq<Number> = [ 0, 0, 0, ]
+let width = 10px
+let accent: Color = blue
+let half = 50%
+let columns = 2fr
+
+fn update(message: Message, count: Number): Number =>
+  match message {
+    Click(position) => count + 1,
+    Set(n) => n,
+    Tick => count,
+    _ => 0,
+  }
+
+fn sum(items: Seq<Number>): Number =>
+  for item in items if item > 0 fold total = 0 => total + item
+
+fn apply(op: (Number, Number) => Number, a: Number, b: Number): Number => op(a, b)
+fn add-one(x: Number): Number => apply((a, b) => a + b, x, 1)
+
+fn messages(): Message => Click({ x: 1, y: 2, })
+fn idle(): Message => Tick
+fn piped(p: Position): Message => p |> Click()
+
+fn ordered(a: Position, b: Position): Position => { ...a, x: 1, ...b, y: 2, }
+fn nested(m: Optional<Message>): Number =>
+  match m {
+    Some(Click(p)) => 1,
+    Some(other) => 2,
+    None => 3,
+  }
+
+@meta(tags: [ Player ])
+fn view(count: Number): Content =>
+  @meta(tags: [ Button ])
+  #button(on-click: Tick) {
+    let label = "Count"
+    #text(label)
+  }

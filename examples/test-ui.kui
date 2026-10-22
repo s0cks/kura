@@ -1,6 +1,6 @@
-fn view1() => #text()
-
-fn view2() =>
-  #button(){
-    #text()
+fn view(message: String): Content =>
+  @meta(tags: [ Button, User ])
+  #button(on-click: 1) {
+    #text("Hello World")
+    #text(message)
   }

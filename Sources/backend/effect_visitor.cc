@@ -3,6 +3,20 @@
 #include "backend/value_visitor.h"
 
 namespace kura {
+// The Expr nodes below come out of the parser but have no flow-graph lowering
+// yet. Fail loudly instead of silently emitting nothing.
+#define DEFINE_NOT_LOWERED(Name)                                                        \
+  auto EffectVisitor::Visit##Name(expr::Name##Expr* expr) -> VisitResult {              \
+    std::cerr << "error: lowering of " #Name "Expr is not implemented yet" << std::endl; \
+    return VisitResult::kStop;                                                          \
+  }
+DEFINE_NOT_LOWERED(Lambda)
+DEFINE_NOT_LOWERED(Fold)
+DEFINE_NOT_LOWERED(Variant)
+DEFINE_NOT_LOWERED(BindingPattern)
+DEFINE_NOT_LOWERED(VariantPattern)
+#undef DEFINE_NOT_LOWERED
+
 auto EffectVisitor::VisitStoreLocal(expr::StoreLocalExpr* expr) -> VisitResult {
   return true;
 }

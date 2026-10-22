@@ -1,0 +1,25 @@
+let label = if count > 0 { "items" } else { "empty" }
+let size = if is-large { 20px } else if is-medium { 14px } else { 10px }
+fn describe(message: Message): String =>
+  match message {
+    Click(position) => "clicked",
+    Tick => "tick",
+  }
+let doubled = for n in numbers => n * 2
+let big = for n in numbers if n > 10 => n
+let total = for item in items fold sum = 0 => sum + item.price
+let both = for n in numbers if n > 1 fold acc = 0 => acc + n
+let rec-in-if = if a { { x: 1, } } else { { x: 2, } }
+fn patterns(m: Message): Number =>
+  match m {
+    Click(Pointer(p)) => 1,
+    Some(value) => 2,
+    None => 3,
+    _ => 4,
+    name => 5,
+    10 => 6,
+    -1 => 7,
+    "s" => 8,
+    true => 9,
+    10px => 10,
+  }

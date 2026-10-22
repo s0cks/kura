@@ -1,0 +1,13 @@
+let a = 10px + 4px
+let b = 10px * 2
+let c = 10px / 2px
+let data: Seq<Px> = [
+  1px,
+  1px,
+  1px,
+]
+let items1 = [ item1, item2 ]
+let items2 = [ item3, item4 ]
+let items = items1 + items2
+let empty: Seq<Number> = []
+let nested: Seq<Seq<Px>> = [ [ 1px ], [] ]

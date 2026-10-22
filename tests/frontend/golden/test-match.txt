@@ -1,0 +1,1 @@
+fn init(msg: Number): String = (seq (match msg (case Number(value=10) => (seq String(value=This is 10))) (case Number(value=-1) => (seq String(value=negative))) (case none => (seq String(value=none))) (case _ => (seq String(value=Hello World)))))

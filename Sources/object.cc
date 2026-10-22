@@ -104,4 +104,24 @@ auto Seq::VisitChildren(ObjectVisitor* vis) -> VisitResult {
   }
   return VisitResult::kContinue;
 }
+
+#define DEFINE_UNIT_OBJECT_IMPL(Name)                    \
+  void Name::Init() {}                                   \
+  auto Name::ToString() const -> std::string {           \
+    std::stringstream ss{};                              \
+    ss << #Name << "(value=" << GetValue() << ")";       \
+    return ss.str();                                     \
+  }
+DEFINE_UNIT_OBJECT_IMPL(Px)
+DEFINE_UNIT_OBJECT_IMPL(Pct)
+DEFINE_UNIT_OBJECT_IMPL(Fr)
+#undef DEFINE_UNIT_OBJECT_IMPL
+
+void Color::Init() {}
+
+auto Color::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Color(name=" << GetValue() << ")";
+  return ss.str();
+}
 }  // namespace kura

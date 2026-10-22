@@ -1,0 +1,18 @@
+fn total(): Number => {
+  let base = 10
+  let padding = 4
+  base + padding * 2
+}
+
+fn redefine(): Number => {
+  let x = 1
+  x = x + 1
+  let inner = { x = 100  x }
+  x + inner
+}
+
+fn pipe(user: Model): String => user |> get-name() |> upper-case()
+fn get-name(u: Model): String => u.name
+fn upper-case(s: String): String => s
+fn forward(): Number => later()
+fn later(): Number => 1

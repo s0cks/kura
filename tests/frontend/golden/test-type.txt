@@ -1,0 +1,2 @@
+fn init(): Model = (seq (record count: Number(value=0)))
+fn view(state: Model): Content = (seq (#Fragment (#Text value: (get state count)) (#Button (#Text value: String(value=Increment)))))

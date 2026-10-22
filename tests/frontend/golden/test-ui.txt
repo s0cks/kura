@@ -1,0 +1,1 @@
+fn view(message: String): Content = (seq (#Button @meta(tags: (list (variant Button) (variant User))) on-click: Number(value=1) (#Text value: String(value=Hello World)) (#Text value: message)))

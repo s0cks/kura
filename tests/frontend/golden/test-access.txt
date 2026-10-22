@@ -1,0 +1,4 @@
+fn init(x: Model): String = (seq (get x name))
+fn init2(state: Model): Number = (seq (if (binary Eq (get state x) Number(value=10)) (seq Number(value=200)) (seq Number(value=300))))
+fn twenty(): Number = (seq (binary Multiply Number(value=10) Number(value=2)))
+fn init3(state: Model): Number = (seq (binary Add (if (binary Eq (get state x) Number(value=10)) (seq Number(value=200)) (seq Number(value=300))) Number(value=100)))

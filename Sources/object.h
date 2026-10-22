@@ -184,6 +184,42 @@ class Seq : public TemplateObject<kSeqType> {
     return new Seq(std::move(values));
   }
 };
+
+// Unit literals are numeric but have their own types: they are never implicitly
+// converted to Number (or to each other).
+#define DEFINE_UNIT_OBJECT(Name)                                    \
+  class Name : public TemplateValueObject<k##Name##Type, double> {  \
+   public:                                                          \
+    explicit Name(const double value) :                             \
+      TemplateValueObject(value) {}                                 \
+    ~Name() override = default;                                     \
+                                                                    \
+    DECLARE_TYPE(Name);                                             \
+                                                                    \
+   public:                                                          \
+    static inline auto New(const double value) -> Name* {           \
+      return new Name(value);                                       \
+    }                                                               \
+  };
+DEFINE_UNIT_OBJECT(Px);
+DEFINE_UNIT_OBJECT(Pct);
+DEFINE_UNIT_OBJECT(Fr);
+#undef DEFINE_UNIT_OBJECT
+
+// A named color literal (`blue`). The palette is resolved by later passes.
+class Color : public TemplateValueObject<kColorType, std::string> {
+ public:
+  explicit Color(const std::string name) :
+    TemplateValueObject(std::move(name)) {}
+  ~Color() override = default;
+
+  DECLARE_TYPE(Color);
+
+ public:
+  static inline auto New(const std::string name) -> Color* {
+    return new Color(std::move(name));
+  }
+};
 }  // namespace kura
 
 #endif  // KURA_OBJECT_H

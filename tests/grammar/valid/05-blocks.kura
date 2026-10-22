@@ -1,0 +1,12 @@
+let total = {
+  let base = 10px
+  let padding = 4px
+  base + padding * 2
+}
+let a = {}
+let b = { x: 1, }
+let c = { let y = 1  y + 1 }
+fn f(): Seq<Number> => []
+let g = if ready { } else { }
+let h = { let z = 1 }
+let redef = { x = 5  x }

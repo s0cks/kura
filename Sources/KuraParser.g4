@@ -1,309 +1,285 @@
+/*
+ * KuraParser.g4 — Kura v1 syntax.
+ * Source of truth: wiki "Language Syntax" (v1).
+ *
+ * This grammar only decides *shape*. Everything the spec labels a compile
+ * error that needs names/types (exhaustive match, unit mismatches, redefinition
+ * keeping its type, recursion, top-level params annotated, entry-point
+ * signatures, ...) belongs in later passes.
+ */
 parser grammar KuraParser;
 
-options {
-  tokenVocab=KuraLexer;
-}
+options { tokenVocab = KuraLexer; }
 
-// ╭────────────╮
-// │ Source     │
-// ╰────────────╯
+// ---------------------------------------------------------------------------
+// Program
+// ---------------------------------------------------------------------------
+
 source
-  : declaration* EOF
+  : item* EOF
   ;
 
-declaration
-  : importDecl
-  | typeDecl
-  | funcDecl
-  | macroDecl
+item
+  : directive* ( typeDecl | fnDecl | letBinding | redefinition )
   ;
 
-// ╭────────────╮
-// │ Imports    │
-// ╰────────────╯
-importDecl
-  : IMPORT qualifiedName SEMICOLON?
+// `@vec`, `@meta(tags: [ Button, User ])` — hints only (see wiki Language-Directives).
+// Directives attach to bindings, functions and UI elements.
+directive
+  : DIRECTIVE ( LPAREN uiArgList? RPAREN )?
   ;
 
-qualifiedName
-  : IDENTIFIER (DOT IDENTIFIER)*
-  ;
+// ---------------------------------------------------------------------------
+// Declarations
+// ---------------------------------------------------------------------------
 
-// ╭────────────╮
-// │ Types      │
-// ╰────────────╯
 typeDecl
-  : TYPE IDENTIFIER ASSIGN typeVariantList SEMICOLON?
+  : TYPE UPPER_IDENT typeParams? ASSIGN typeExpr
   ;
 
-typeVariantList
-  : typeVariant (SINGLE_PIPE typeVariant)*
+typeParams
+  : LT UPPER_IDENT ( COMMA UPPER_IDENT )* GT
   ;
 
-typeVariant
-  : IDENTIFIER
+// Top-level function. Parentheses always required. Return type optional here;
+// the "required for init/update/view" rule is a semantic check.
+fnDecl
+  : FN IDENT LPAREN paramList? RPAREN ( COLON typeExpr )? FAT_ARROW expression
   ;
 
-// ╭────────────╮
-// │ Functions  │
-// ╰────────────╯
-
-funcDecl
-  : FN
-    IDENTIFIER
-    parameterList
-    DOUBLE_ARROW
-    expression
-    SEMICOLON?
+paramList
+  : param ( COMMA param )* COMMA?
   ;
 
-parameterList
-  : LPAREN (parameter | parameter (COMMA parameter)+)? RPAREN
+param
+  : IDENT COLON typeExpr
   ;
 
-parameter
-  : IDENTIFIER
+letBinding
+  : LET IDENT ( COLON typeExpr )? ASSIGN expression
   ;
 
-// ╭────────────╮
-// │ Macros     │
-// ╰────────────╯
-
-macroDecl
-  : MACRO
-    IDENTIFIER
-    parameterList?
-    DOUBLE_ARROW
-    expression
-    SEMICOLON?
-  ;
-
-// ╭────────────╮
-// │ Expressions│
-// ╰────────────╯
-
-expression
-  : binaryOpExpr
-  ;
-
-binaryOpExpr
-    : binaryOpExpr (STAR | SLASH | PERCENT) binaryOpExpr
-    | binaryOpExpr (PLUS | MINUS) binaryOpExpr
-    | binaryOpExpr (LT | LTE | GT | GTE) binaryOpExpr
-    | binaryOpExpr (EQ | NEQ) binaryOpExpr
-    | binaryOpExpr AND binaryOpExpr
-    | binaryOpExpr OR binaryOpExpr
-    | binaryOpExpr PIPE binaryOpExpr
-    | <assoc=right> binaryOpExpr ASSIGN binaryOpExpr
-    | unaryExpr
-    ;
-
-unaryExpr
-  : (BANG | PLUS | MINUS) unaryExpr
-  | postfixExpr
-  ;
-
-postfixExpr
-  : primaryExpr postfixPart*
-  ;
-
-postfixPart
-  : functionCall
-  | propertyAccess
-  | optionalPropertyAccess
-  | indexAccess
-  ;
-
-functionCall
-  : LPAREN argumentList? RPAREN
-  ;
-
-propertyAccess
-  : DOT IDENTIFIER
-  ;
-
-optionalPropertyAccess
-  : OPTIONALDOT IDENTIFIER
-  ;
-
-indexAccess
-  : LBRACKET expression RBRACKET
-  ;
-
-// ╭────────────╮
-// │ Primary    │
-// ╰────────────╯
-primaryExpr
-  : literal
-  | IDENTIFIER
-  | listExpr
-  | listComprehensionExpr
-  | recordExpr
-  | blockExpr
-  | ifExpr
-  | matchExpr
-  | uiExpr
-  | LPAREN expression RPAREN
-  ;
-
-// ╭────────────╮
-// │ Collections│
-// ╰────────────╯
-listExpr
-  : LBRACKET argumentList? RBRACKET
-  ;
-
-listComprehensionExpr
-  : LBRACKET
-    expression
-    'for' IDENTIFIER 'in' expression listComprehensionClause
-    RBRACKET
-  ;
-
-listComprehensionClause
-  : 'if' expression
-  ;
-
-// TODO(@s0cks): add typed records
-// type Person = { name: String, age: Int }
-recordExpr
-  : LBRACE recordFieldList? RBRACE
-  ;
-
-recordFieldList
-  : recordField (COMMA recordField)* COMMA?
-  ;
-
-recordField
-  : IDENTIFIER COLON expression
-  | spreadExpr
-  ;
-
-argumentList
-  : expression (COMMA expression)* COMMA?
-  ;
-
-spreadExpr
-  : SPREAD expression
-  ;
-
-// ╭────────────╮
-// │ Blocks     │
-// ╰────────────╯
-blockExpr
-  : LBRACE statement* RBRACE
+// `x = expression` — redefinition (NOT mutation). `x.name = ...` is deliberately
+// not accepted: the left side is an identifier only.
+redefinition
+  : IDENT ASSIGN expression
   ;
 
 statement
-  : expression SEMICOLON?
+  : directive* ( letBinding | redefinition )
   ;
 
-// ╭────────────╮
-// │ UI DSL     │
-// ╰────────────╯
-uiExpr
-  : HASH IDENTIFIER uiProps? uiChildren?
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// A union is a `|`-separated list of members; a single member is just a type.
+typeExpr
+  : typeMember ( BAR typeMember )*
   ;
 
-uiProps
-  : LPAREN uiPropList? RPAREN
+typeMember
+  : UPPER_IDENT LPAREN typeExpr RPAREN        # VariantType   // Click(Position)
+  | UPPER_IDENT typeArgs?                     # NamedType     // Tick, Number, Seq<Px>
+  | NONE                                      # NoneType
+  | recordType                                # RecordTypeMember
+  | functionType                              # FunctionTypeMember
   ;
 
-uiPropList
-  : uiProp (COMMA uiProp)* COMMA?
+typeArgs
+  : LT typeExpr ( COMMA typeExpr )* GT
   ;
 
-uiProp
-  : IDENTIFIER COLON expression
-  | spreadExpr
+// There is no bare `Record` type: properties are always listed.
+recordType
+  : LBRACE ( recordField ( COMMA recordField )* COMMA? )? RBRACE
   ;
 
-uiChildren
-  : blockExpr
+// `z?: Number` is shorthand for `z: Optional<Number>`.
+recordField
+  : IDENT QMARK? COLON typeExpr
   ;
-//TODO(@s0cks): refactor
 
-// ╭────────────╮
-// │ If         │
-// ╰────────────╯
+functionType
+  : LPAREN ( typeExpr ( COMMA typeExpr )* COMMA? )? RPAREN FAT_ARROW typeExpr
+  ;
+
+// ---------------------------------------------------------------------------
+// Expressions
+// ---------------------------------------------------------------------------
+
+// `|>` is the lowest-precedence operator. The right-hand side is restricted to
+// a call so `x |> f(y)` is always `f(x, y)`; anything else is a syntax error.
+expression
+  : operation ( PIPE pipeTarget )*
+  ;
+
+pipeTarget
+  : pipeCallee LPAREN argumentList? RPAREN
+  ;
+
+pipeCallee
+  : IDENT ( DOT IDENT )*
+  | UPPER_IDENT
+  | LPAREN expression RPAREN
+  ;
+
+// Highest to lowest precedence, per the Operators table.
+// Binary minus is its own token (BIN_MINUS) because it needs whitespace on
+// both sides; unary minus is MINUS.
+operation
+  : operation DOT IDENT                                   # PropertyAccess
+  | operation LPAREN argumentList? RPAREN                 # CallExpr
+  | op = ( MINUS | BANG ) operation                       # UnaryExpr
+  | operation op = ( STAR | SLASH ) operation             # MultiplicativeExpr
+  | operation op = ( PLUS | BIN_MINUS ) operation         # AdditiveExpr
+  | operation op = ( LT | LE | GT | GE ) operation        # ComparisonExpr
+  | operation op = ( EQ | NEQ ) operation                 # EqualityExpr
+  | operation AND operation                               # LogicalAndExpr
+  | operation OR operation                                # LogicalOrExpr
+  | primary                                               # PrimaryExpr
+  ;
+
+argumentList
+  : expression ( COMMA expression )* COMMA?
+  ;
+
+primary
+  : NUMBER                                                # NumberLit
+  | STRING                                                # StringLit
+  | TRUE                                                  # TrueLit
+  | FALSE                                                 # FalseLit
+  | NONE                                                  # NoneLit
+  | unitLiteral                                           # UnitLit
+  | IDENT                                                 # VarRef
+  | UPPER_IDENT                                           # VariantRef   // Tick, or callee of Click(...)
+  | seqLiteral                                            # SeqLit
+  | recordLiteral                                         # RecordLit
+  | blockExpr                                             # BlockLit
+  | ifExpr                                                # IfLit
+  | matchExpr                                             # MatchLit
+  | forExpr                                               # ForLit
+  | lambda                                                # LambdaLit
+  | uiExpr                                                # UiLit
+  | LPAREN expression RPAREN                                    # ParenExpr
+  ;
+
+unitLiteral
+  : PX_LIT | PCT_LIT | FR_LIT | COLOR_LIT
+  ;
+
+seqLiteral
+  : LBRACK ( expression ( COMMA expression )* COMMA? )? RBRACK
+  ;
+
+// ---------------------------------------------------------------------------
+// Records vs blocks
+// ---------------------------------------------------------------------------
+// A `{` starting with `...` or `name :` is a record. Any other non-empty `{ }`
+// is a block. Empty `{}` is a record in value position, and a block only where
+// the grammar demands a block (if/else bodies, see `block`).
+
+recordLiteral
+  : LBRACE RBRACE
+  | LBRACE recordEntry ( COMMA recordEntry )* COMMA? RBRACE
+  ;
+
+recordEntry
+  : IDENT COLON expression              # PropertyEntry
+  | SPREAD expression                   # SpreadEntry
+  ;
+
+// Non-empty block in value position. Value = last expression; with no final
+// expression the value is None.
+blockExpr
+  : LBRACE statement+ expression? RBRACE
+  | LBRACE expression RBRACE
+  ;
+
+// Block where the grammar expects a block — may be empty (`if ready { } else { }`).
+block
+  : LBRACE statement* expression? RBRACE
+  ;
+
+// ---------------------------------------------------------------------------
+// Control flow
+// ---------------------------------------------------------------------------
+
 ifExpr
-  : IF expression blockExpr (ELSE blockExpr)?
+  : IF expression block ELSE ( ifExpr | block )
   ;
-
-// ╭────────────╮
-// │ Match      │
-// ╰────────────╯
 
 matchExpr
-  : MATCH expression
-    LBRACE
-    matchArm*
-    RBRACE
+  : MATCH expression LBRACE matchArm ( COMMA matchArm )* COMMA? RBRACE
   ;
 
 matchArm
-  : pattern DOUBLE_ARROW expression SEMICOLON?
+  : pattern FAT_ARROW expression
   ;
-
-// ╭────────────╮
-// │ Patterns   │
-// ╰────────────╯
 
 pattern
-  : wildcardPattern
-  | literalPattern
-  | identifierPattern
-  | variantPattern
-  | recordPattern
-  | listPattern
-  ;
-
-wildcardPattern
-  : UNDERSCORE
+  : UNDERSCORE                                  # WildcardPattern
+  | IDENT                                       # BindingPattern
+  | NONE                                        # NonePattern
+  | UPPER_IDENT ( LPAREN pattern RPAREN )?      # VariantPattern
+  | literalPattern                              # LiteralPatternAlt
   ;
 
 literalPattern
-  : literal
+  : MINUS? ( NUMBER | unitLiteral )
+  | STRING
+  | TRUE
+  | FALSE
   ;
 
-identifierPattern
-  : IDENTIFIER
+// for <name> in <seq> [if <guard>] [fold <acc> = <initial>] => <expression>
+forExpr
+  : FOR IDENT IN expression
+    ( IF expression )?
+    ( FOLD IDENT ASSIGN expression )?
+    FAT_ARROW expression
   ;
 
-variantPattern
-  : IDENTIFIER LPAREN patternList? RPAREN
+// ---------------------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------------------
+
+// Anonymous function: (x, y) => x + y
+lambda
+  : LPAREN ( IDENT ( COMMA IDENT )* COMMA? )? RPAREN FAT_ARROW expression
   ;
 
-recordPattern
-  : LBRACE patternFieldList? RBRACE
+// ---------------------------------------------------------------------------
+// UI elements
+// ---------------------------------------------------------------------------
+// `#text("Hello")`, `#button(on-click: Close){ #text("Close") }`.
+// The Views page is still empty, so this mirrors the shape the old grammar and
+// wiki examples used: `#tag`, optional `( args )`, optional `{ children }`.
+// Directives may precede an element: `@meta(tags: [ Player ]) #input`.
+
+uiExpr
+  : directive* HASH IDENT uiProps? uiChildren?
   ;
 
-patternFieldList
-  : patternField (COMMA patternField)* COMMA?
+uiProps
+  : LPAREN uiArgList? RPAREN
   ;
 
-patternField
-  : IDENTIFIER
+uiArgList
+  : uiArg ( COMMA uiArg )* COMMA?
   ;
 
-listPattern
-  : LBRACKET patternList? RBRACKET
+uiArg
+  : IDENT COLON expression        # NamedUiArg
+  | SPREAD expression             # SpreadUiArg
+  | expression                    # PositionalUiArg
   ;
 
-patternList
-  : pattern (COMMA pattern)*
+uiChildren
+  : LBRACE uiChild* RBRACE
   ;
 
-// ╭────────────╮
-// │ Literals   │
-// ╰────────────╯
-
-literal
-  : NUMBER      # LiteralNumber
-  | STRING      # LiteralString
-  | TRUE        # LiteralTrue
-  | FALSE       # LiteralFalse
-  | NULL        # LiteralNull
-  | NONE        # LiteralNone
-  | MEASUREMENT # LiteralMeasurement
+uiChild
+  : uiExpr                        # ElementChild
+  | statement                     # BindingChild
   ;

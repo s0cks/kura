@@ -1,0 +1,6 @@
+fn add(x: Number, y: Number): Number = (seq (binary Add x y))
+fn subtract(x: Number, y: Number): Number = (seq (binary Subtract x y))
+fn multiply(x: Number, y: Number): Number = (seq (binary Multiply x y))
+fn divide(x: Number, y: Number): Number = (seq (binary Divide x y))
+fn neg(x: Number): Number = (seq (unary Minus x))
+fn kebab(item-count: Number, b: Number): Number = (seq (binary Subtract item-count b))

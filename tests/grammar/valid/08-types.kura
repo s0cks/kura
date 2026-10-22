@@ -1,0 +1,32 @@
+let x = 10
+let x2: Seq<String> = [ "Hello World" ]
+type StringAlias = String
+type NumberAlias = Number
+type BoolAlias = Bool
+let nn: None = None
+let p: Px = 10px
+type Names = Seq<String>
+let sn: Seq<Number> = []
+let rt: { a: Number } = { a: 1 }
+type Op = (Number, Number) => Number
+type Position = {
+  x: Number,
+  y: Number,
+}
+type Position2 = {
+  x: Number,
+  y: Number,
+  z: Optional<Number>,
+}
+type Position3 = {
+  x: Number,
+  y: Number,
+  z?: Number,
+}
+type Message = Click(Position) | Tick
+type Content = Node | None
+type Optional<T> = Some(T) | None
+type Result<T, E> = Ok(T) | Error(E)
+type Thunk = () => Number
+type Curried = (Number) => (Number) => Number
+let c = Click({ x: 1, y: 2, })

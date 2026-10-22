@@ -1,32 +1,21 @@
-fn init() =>
+fn init(): Model =>
   {
     count: 0,
     message: "Hello World",
   }
 
-fn init2() => 
+fn init2(): Model =>
   {
     count: 10 + 10,
     message: "Hello World",
   }
 
-// fn init3(x) =>
-// if x == 10 {
-//  {
-//      count: 0,
-//      message: "Hello World",
-//    }
-//  } else {
-//    {
-//      count: x + 10,
-//      message: "Hello World",
-//    }
-//  }
-
-fn init4() =>
+fn init4(): Model =>
   {
     count: 0,
   } +
   {
     message: "Hello World",
   }
+
+fn init5(model: Model): Model => { ...model, count: model.count + 1, }

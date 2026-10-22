@@ -1,11 +1,14 @@
 #ifndef KURA_EXPR_PRINTER_H
 #define KURA_EXPR_PRINTER_H
 
+#include <sstream>
+
 #include "frontend/expr.h"
 #include "printer.h"
 
 namespace kura::expr {
-// TODO(@s0cks): implement
+// Prints an Expr tree as a single-line s-expression, e.g.
+//   (seq (set x 1) (binary + x 2))
 class ExprPrinter : Printer, public ExprVisitor {
   static constexpr const auto kDefaultIndent = 0;
 
@@ -22,7 +25,18 @@ class ExprPrinter : Printer, public ExprVisitor {
 #undef DEFINE_VISIT
   // clang-format on
 
+ private:
+  void PrintChild(Expr* expr);
+  void PrintChildren(const ExprList& exprs);
+  void PrintDirectives(const DirectiveList& directives);
+
  public:
+  static inline auto ToString(Expr* expr) -> std::string {
+    std::stringstream ss{};
+    Print(ss, expr);
+    return ss.str();
+  }
+
   static inline auto Print(std::ostream& stream, Expr* expr, const Indent indent = {}) -> VisitResult {
     ExprPrinter printer(stream, std::move(indent));
     return expr->Accept(&printer);

@@ -1,0 +1,14 @@
+fn add(x: Number, y: Number): Number =>
+  x + y
+fn get-pos(): Position => {
+  x: 10,
+  y: 20,
+}
+fn apply(op: (Number, Number) => Number, x: Number, y: Number): Number =>
+  op(x, y)
+let sum = apply((a, b) => a + b, 1, 2)
+let label = user |> get-name() |> upper-case()
+let thunk = () => 1
+let piped = x |> f(y)
+let method-pipe = x |> a.b(y)
+fn inferred(x: Number) => x * 2

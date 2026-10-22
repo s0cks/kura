@@ -1,0 +1,3 @@
+fn init(): Content = (seq (#Text fill: Number(value=0)))
+fn view1(): Content = (seq (#Text))
+fn view2(): Content = (seq (#Button (#Text)))

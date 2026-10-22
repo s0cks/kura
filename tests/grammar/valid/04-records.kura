@@ -1,0 +1,37 @@
+let data = {
+  status: 10,
+  success: false,
+  message: "Hello World",
+}
+let s = data.status
+data = { success: true }
+data = {
+  ...data,
+  message: "Hello World",
+}
+let props1 = {
+  fill: blue,
+}
+let props2 = {
+  ...props1,
+  insets: [ 1px, 1px, 1px, 1px ],
+}
+let props3 = {
+  ...props1,
+  ...props2,
+  is-debug: true,
+}
+let r1 = { status: 10, }
+let r2 = {
+  success: true,
+  message: "Finished",
+}
+let r3 = r1 + r2
+let r4 = r3 + {
+  is-debug: true,
+}
+let r5 = {
+  ...(r1 + r2),
+  component: "Button",
+}
+let nested-access = a.b.c

@@ -1,0 +1,6 @@
+@simd
+let pos = [ 10, 10, 10, ]
+
+@simd
+@inline
+fn f(x: Number): Number => x

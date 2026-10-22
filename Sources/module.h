@@ -17,6 +17,9 @@ struct Module {
   friend class expr::ExprBuilder;
   std::string name{};
   std::vector<Function*> functions{};
+  std::vector<expr::TypeDecl*> types{};
+  // Top-level `let` / redefinition, in source order.
+  std::vector<expr::StoreLocalExpr*> bindings{};
   View* view = nullptr;
 
   Module() = delete;
@@ -34,6 +37,14 @@ struct Module {
  private:
   inline void AddFunction(Function* func) {
     functions.push_back(func);
+  }
+
+  inline void AddType(expr::TypeDecl* decl) {
+    types.push_back(decl);
+  }
+
+  inline void AddBinding(expr::StoreLocalExpr* binding) {
+    bindings.push_back(binding);
   }
 
   inline void AddFunctions(const std::vector<Function*>& funcs) {

@@ -1,8 +1,11 @@
-fn x2(x) => x * 2
+fn x2(x: Number): Number => x * 2
 
-fn test() =>
+fn test(): String =>
   if 10 == 10 {
     "Hello"
   } else {
     "Goodbye"
   }
+
+fn size(n: Number): Number =>
+  if n > 10 { 3 } else if n > 5 { 2 } else { 1 }

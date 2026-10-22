@@ -3,11 +3,15 @@
 
 #include <string>
 
+#include <vector>
+
 #include "common.h"
+#include "frontend/type_expr.h"
 #include "object.h"
 
 namespace kura {
 class GraphEntryInstr;
+class LocalVariable;
 namespace expr {
 class Expr;
 class SeqExpr;
@@ -18,13 +22,36 @@ class Function {
   friend class expr::ExprBuilder;
   DEFINE_NON_COPYABLE_TYPE(Function);
 
+ public:
+  // `name: Type`. The annotation is syntax only until types get resolved.
+  struct Parameter {
+    LocalVariable* local;
+    expr::TypeExpr* type;
+  };
+  using ParameterList = std::vector<Parameter>;
+
  private:
   String* name_;
   expr::SeqExpr* body_ = nullptr;
   GraphEntryInstr* entry_ = nullptr;
+  ParameterList parameters_{};
+  expr::TypeExpr* return_type_ = nullptr;
+  expr::DirectiveList directives_{};
 
   void SetBody(expr::SeqExpr* rhs) {
     body_ = rhs;
+  }
+
+  void SetParameters(const ParameterList rhs) {
+    parameters_ = std::move(rhs);
+  }
+
+  void SetReturnType(expr::TypeExpr* rhs) {
+    return_type_ = rhs;
+  }
+
+  void SetDirectives(const expr::DirectiveList rhs) {
+    directives_ = std::move(rhs);
   }
 
  public:
@@ -42,6 +69,19 @@ class Function {
 
   inline auto HasBody() const -> bool {
     return GetBody() != nullptr;
+  }
+
+  auto GetParameters() const -> const ParameterList& {
+    return parameters_;
+  }
+
+  // Null when the function has no return type annotation.
+  auto GetReturnType() const -> expr::TypeExpr* {
+    return return_type_;
+  }
+
+  auto GetDirectives() const -> const expr::DirectiveList& {
+    return directives_;
   }
 
   auto GetEntry() const -> GraphEntryInstr* {

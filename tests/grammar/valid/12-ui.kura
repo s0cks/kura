@@ -1,0 +1,14 @@
+fn view(model: Model): Content =>
+  @meta(tags: [ Button, User ])
+  #button(on-click: Close) {
+    #text("Hello World")
+    @meta(tags: [ Player ])
+    #input
+    #text(model.message)
+  }
+
+fn plain(): Content => #text("x")
+@vec
+let pos = [ 10, 10, 10 ]
+@list
+let items = [ 10, 10, 10 ]

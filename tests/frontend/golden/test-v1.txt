@@ -1,0 +1,20 @@
+type Position = { x: Number, y: Number, z?: Number }
+type Message = Click(Position) | Tick | Set(Number)
+type Optional<T> = Some(T) | None
+type Op = (Number, Number) => Number
+type Content = Node | None
+(set origin: Seq<Number> @vec (list Number(value=0) Number(value=0) Number(value=0)))
+(set width Px(value=10))
+(set accent: Color Color(name=blue))
+(set half Pct(value=50))
+(set columns Fr(value=2))
+fn update(message: Message, count: Number): Number = (seq (match message (case (variant-pattern Click (bind position)) => (seq (binary Add count Number(value=1)))) (case (variant-pattern Set (bind n)) => (seq n)) (case (variant-pattern Tick) => (seq count)) (case _ => (seq Number(value=0)))))
+fn sum(items: Seq<Number>): Number = (seq (fold item in items if (binary GreaterThan item Number(value=0)) total = Number(value=0) => (binary Add total item)))
+fn apply(op: (Number, Number) => Number, a: Number, b: Number): Number = (seq (call op a b))
+fn add-one(x: Number): Number = (seq (call apply (lambda (a b) (seq (binary Add a b))) x Number(value=1)))
+fn messages(): Message = (seq (variant Click (record x: Number(value=1) y: Number(value=2))))
+fn idle(): Message = (seq (variant Tick))
+fn piped(p: Position): Message = (seq (variant Click p))
+fn ordered(a: Position, b: Position): Position = (seq (record ...a x: Number(value=1) ...b y: Number(value=2)))
+fn nested(m: Optional<Message>): Number = (seq (match m (case (variant-pattern Some (variant-pattern Click (bind p))) => (seq Number(value=1))) (case (variant-pattern Some (bind other)) => (seq Number(value=2))) (case none => (seq Number(value=3)))))
+@meta fn view(count: Number): Content = (seq (#Button @meta(tags: (list (variant Button))) on-click: (variant Tick) (set label String(value=Count)) (#Text value: label)))

@@ -1,0 +1,24 @@
+type Model = {
+  count: Number,
+}
+
+type Message = Increment | Decrement | Set(Model)
+
+fn init(): Model => {
+  count: 0,
+}
+
+fn update(message: Message, model: Model): Model =>
+  match message {
+    Increment => { ...model, count: model.count + 1, },
+    Decrement => { ...model, count: model.count - 1, },
+    Set(next) => next,
+  }
+
+type Message2 = Increment | Edited(TextInput) | Pressed(Pointer)
+
+fn name-or-default(name: Optional<String>): String =>
+  match name {
+    Some(value) => value,
+    None => "anonymous",
+  }

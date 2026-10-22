@@ -1,7 +1,11 @@
-fn add(x, y) => x + y
+fn add(x: Number, y: Number): Number => x + y
 
-fn subtract(x, y) => x - y
+fn subtract(x: Number, y: Number): Number => x - y
 
-fn multiply(x, y) => x * y
+fn multiply(x: Number, y: Number): Number => x * y
 
-fn divide(x, y) => x / y
+fn divide(x: Number, y: Number): Number => x / y
+
+fn neg(x: Number): Number => -x
+
+fn kebab(item-count: Number, b: Number): Number => item-count - b

@@ -1,0 +1,3 @@
+fn init(): Seq<Number> = (seq (list Number(value=1) Number(value=2) Number(value=3)))
+fn init2(x: Number): Seq<Number> = (seq (list x Number(value=4) Number(value=5)))
+fn doubled(numbers: Seq<Number>): Seq<Number> = (seq (for n in numbers if (binary GreaterThan n Number(value=10)) => (binary Multiply n Number(value=2))))

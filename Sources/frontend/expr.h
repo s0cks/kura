@@ -9,6 +9,7 @@
 #include "binary_op.h"
 #include "common.h"
 #include "element.h"
+#include "frontend/type_expr.h"
 #include "object.h"
 #include "property.h"
 #include "unary_op.h"
@@ -39,6 +40,11 @@ namespace kura::expr {
   V(StoreProperty)       \
   V(WildcardPattern)     \
   V(LiteralPattern)      \
+  V(BindingPattern)      \
+  V(VariantPattern)      \
+  V(Lambda)              \
+  V(Fold)                \
+  V(Variant)             \
   V(Call)
 
 class Expr;
@@ -430,6 +436,9 @@ class LoadLocalExpr : public Expr {
 class StoreLocalExpr : public TemplateExpr<1> {
  private:
   LocalVariable* local_;
+  TypeExpr* annotation_ = nullptr;  // `let x: Number = ...`
+  DirectiveList directives_{};
+
 
   inline void SetLocal(LocalVariable* local) {
     local_ = local;
@@ -444,6 +453,22 @@ class StoreLocalExpr : public TemplateExpr<1> {
 
   auto GetLocal() const -> LocalVariable* {
     return local_;
+  }
+
+  auto GetAnnotation() const -> TypeExpr* {
+    return annotation_;
+  }
+
+  void SetAnnotation(TypeExpr* rhs) {
+    annotation_ = rhs;
+  }
+
+  auto GetDirectives() const -> const DirectiveList& {
+    return directives_;
+  }
+
+  void SetDirectives(const DirectiveList rhs) {
+    directives_ = std::move(rhs);
   }
 
   HAS_NAMED_INPUT(Value, 0);
@@ -675,9 +700,59 @@ class LiteralPatternExpr : public TemplatePatternExpr<1> {
   }
 };
 
+// `name` in a match arm: matches anything and binds it for the arm body.
+class BindingPatternExpr : public PatternExpr {
+ private:
+  LocalVariable* local_;
+
+ public:
+  explicit BindingPatternExpr(LocalVariable* local) :
+    local_(local) {}
+  ~BindingPatternExpr() override = default;
+
+  auto GetLocal() const -> LocalVariable* {
+    return local_;
+  }
+
+  DECLARE_EXPR_TYPE(BindingPattern);
+
+ public:
+  static inline auto New(LocalVariable* local) -> PatternExpr* {
+    return new BindingPatternExpr(local);
+  }
+};
+
+// `Click(position)`, `Tick`, `Some(Pair(a, b))`. The payload pattern is optional.
+class VariantPatternExpr : public TemplatePatternExpr<1> {
+ private:
+  std::string name_;
+
+ public:
+  VariantPatternExpr(const std::string name, PatternExpr* payload) :
+    name_(std::move(name)) {
+    SetPayload(payload);
+  }
+  ~VariantPatternExpr() override = default;
+
+  auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  _HAS_NAMED_INPUT(Payload, PatternExpr, 0);
+  DECLARE_EXPR_TYPE(VariantPattern);
+
+ public:
+  static inline auto New(const std::string name, PatternExpr* payload = nullptr) -> PatternExpr* {
+    return new VariantPatternExpr(std::move(name), payload);
+  }
+};
+
 class CaseExpr : public TemplateExpr<2> {
  public:
-  CaseExpr(PatternExpr* pattern, Expr* body) {}
+  CaseExpr(PatternExpr* pattern, Expr* body) {
+    SetPattern(pattern);
+    SetBody(body);
+  }
   ~CaseExpr() override = default;
 
   HAS_NAMED_TYPED_INPUT(Pattern, 0);
@@ -760,6 +835,107 @@ class ListComprehensionExpr : public TemplateExpr<3> {
   HAS_NAMED_INPUT(Body, 1);
   HAS_NAMED_INPUT(Clause, 2);
   DECLARE_EXPR_TYPE(ListComprehension);
+
+ public:
+  static inline auto New(Expr* iterable, Expr* body, const std::string binding, Expr* clause = nullptr) -> Expr* {
+    return new ListComprehensionExpr(iterable, body, std::move(binding), clause);
+  }
+};
+
+// `(x, y) => x + y`
+class LambdaExpr : public TemplateExpr<1> {
+ public:
+  using ParamList = std::vector<LocalVariable*>;
+
+ private:
+  ParamList params_;
+
+ public:
+  LambdaExpr(const ParamList params, Expr* body) :
+    params_(std::move(params)) {
+    SetBody(body);
+  }
+  ~LambdaExpr() override = default;
+
+  auto GetParams() const -> const ParamList& {
+    return params_;
+  }
+
+  auto GetNumberOfParams() const -> uint64_t {
+    return params_.size();
+  }
+
+  HAS_NAMED_INPUT(Body, 0);
+  DECLARE_EXPR_TYPE(Lambda);
+
+ public:
+  static inline auto New(const ParamList params, Expr* body) -> Expr* {
+    return new LambdaExpr(std::move(params), body);
+  }
+};
+
+// `for item in items [if guard] fold acc = initial => body`
+class FoldExpr : public TemplateExpr<4> {
+ private:
+  LocalVariable* binding_;
+  LocalVariable* accumulator_;
+
+ public:
+  FoldExpr(Expr* iterable, LocalVariable* binding, LocalVariable* accumulator, Expr* initial, Expr* body,
+           Expr* clause = nullptr) :
+    binding_(binding),
+    accumulator_(accumulator) {
+    SetIterable(iterable);
+    SetInitial(initial);
+    SetBody(body);
+    SetClause(clause);
+  }
+  ~FoldExpr() override = default;
+
+  auto GetBinding() const -> LocalVariable* {
+    return binding_;
+  }
+
+  auto GetAccumulator() const -> LocalVariable* {
+    return accumulator_;
+  }
+
+  HAS_NAMED_INPUT(Iterable, 0);
+  HAS_NAMED_INPUT(Initial, 1);
+  HAS_NAMED_INPUT(Body, 2);
+  HAS_NAMED_INPUT(Clause, 3);
+  DECLARE_EXPR_TYPE(Fold);
+
+ public:
+  static inline auto New(Expr* iterable, LocalVariable* binding, LocalVariable* accumulator, Expr* initial, Expr* body,
+                         Expr* clause = nullptr) -> Expr* {
+    return new FoldExpr(iterable, binding, accumulator, initial, body, clause);
+  }
+};
+
+// Constructs a variant: `Tick`, or `Click({ x: 1, y: 2, })` with a payload.
+class VariantExpr : public TemplateExpr<1> {
+ private:
+  std::string name_;
+
+ public:
+  VariantExpr(const std::string name, Expr* payload) :
+    name_(std::move(name)) {
+    SetPayload(payload);
+  }
+  ~VariantExpr() override = default;
+
+  auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  HAS_NAMED_INPUT(Payload, 0);
+  DECLARE_EXPR_TYPE(Variant);
+
+ public:
+  static inline auto New(const std::string name, Expr* payload = nullptr) -> Expr* {
+    return new VariantExpr(std::move(name), payload);
+  }
 };
 
 class NodeExpr : public DynamicTemplateExpr {
@@ -790,6 +966,7 @@ class NodeExpr : public DynamicTemplateExpr {
 
  private:
   Kind kind_;
+  DirectiveList directives_{};
 
  public:
   explicit NodeExpr(const Kind kind, const PropertyList properties) :
@@ -802,6 +979,14 @@ class NodeExpr : public DynamicTemplateExpr {
 
   auto GetKind() const -> Kind {
     return kind_;
+  }
+
+  auto GetDirectives() const -> const DirectiveList& {
+    return directives_;
+  }
+
+  void SetDirectives(const DirectiveList rhs) {
+    directives_ = std::move(rhs);
   }
 
 #define DEFINE_TYPE_CHECK(Name)          \
@@ -834,6 +1019,7 @@ class RecordExpr : public Expr {
 
  private:
   SpreadList spreads_{};
+  ExprList entries_{};  // spreads and properties in source order
 
   inline void SetSpreadAt(const uint64_t idx, SpreadExpr* value) {
     spreads_[idx] = value;
@@ -848,6 +1034,12 @@ class RecordExpr : public Expr {
 
   auto GetSpreads() const -> const SpreadList& {
     return spreads_;
+  }
+
+  // Spreads and properties interleaved as written. Later entries override
+  // earlier ones, so the order is meaningful: `{ ...a, x: 1 }` != `{ x: 1, ...a }`.
+  auto GetEntries() const -> const ExprList& {
+    return entries_;
   }
 
   auto GetNumberOfSpreads() const -> uint64_t {
@@ -892,6 +1084,20 @@ class RecordExpr : public Expr {
   static inline auto New(const SpreadList spreads, const PropertyList properties) -> Expr* {
     return new RecordExpr(std::move(spreads), std::move(properties));
   }
+
+  static inline auto NewOrdered(const ExprList entries) -> Expr* {
+    SpreadList spreads{};
+    PropertyList properties{};
+    for (const auto entry : entries) {
+      if (const auto spread = entry->AsSpread())
+        spreads.push_back(spread);
+      else if (const auto property = entry->AsStoreProperty())
+        properties.push_back(property);
+    }
+    const auto result = new RecordExpr(std::move(spreads), std::move(properties));
+    result->entries_ = std::move(entries);
+    return result;
+  }
 };
 
 class CallExpr : public TemplateExpr<1> {
@@ -904,7 +1110,9 @@ class CallExpr : public TemplateExpr<1> {
 
  public:
   explicit CallExpr(Expr* target, const ExprList args) :
-    args_(std::move(args)) {}
+    args_(std::move(args)) {
+    SetTarget(target);
+  }
   ~CallExpr() override = default;
 
   auto GetArgs() const -> const ExprList& {
