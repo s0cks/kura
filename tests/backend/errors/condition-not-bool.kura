@@ -1,0 +1,2 @@
+// error: not Bool
+fn f(n: Int): Int => if n { 1 } else { 2 }

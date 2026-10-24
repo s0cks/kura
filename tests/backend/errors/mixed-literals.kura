@@ -1,0 +1,2 @@
+// error: can't mix Int and Float
+fn f() => 1 + 1.0

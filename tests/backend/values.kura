@@ -1,0 +1,28 @@
+type Position = { x: Number, y: Number, }
+type Message = Click(Position) | Tick | Set(Number)
+
+fn spread(a: Position, b: Position): Position => { ...a, x: 1, ...b, y: 2, }
+fn access(p: Position): Number => p.x + p.y
+fn click(): Message => Click({ x: 1, y: 2, })
+fn piped(p: Position): Message => p |> Click()
+
+fn describe(m: Message): String =>
+  match m {
+    Click(p) => "click",
+    Set(10) => "ten",
+    Set(n) => "set",
+    Tick => "tick",
+  }
+
+fn nested-pattern(m: Message): Number =>
+  match m {
+    Click(p) => p.x,
+    Set(n) => n,
+    _ => 0,
+  }
+
+fn shadow(x: Number): Number => {
+  let x = x + 1
+  let x = x * 2
+  x
+}

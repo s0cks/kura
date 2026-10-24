@@ -1,0 +1,2 @@
+// error: returns String but is declared to return Int
+fn f(): Int => "a"

@@ -1,0 +1,2 @@
+// error: can't mix Int and Float
+fn f(a: Int, b: Float): Float => a + b

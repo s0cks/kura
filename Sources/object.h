@@ -104,6 +104,8 @@ class Bool : public TemplateValueObject<kBoolType, bool> {
   static auto True() -> Bool*;
 };
 
+// The abstract numeric type: what a `Number` annotation means is "an Int or a
+// Float". The frontend never creates one, a literal is an Int or a Float.
 class Number : public TemplateValueObject<kNumberType, double> {
  public:
   explicit Number(const double value) :
@@ -115,6 +117,36 @@ class Number : public TemplateValueObject<kNumberType, double> {
  public:
   static inline auto New(const double value) -> Number* {
     return new Number(value);
+  }
+};
+
+// A 64-bit signed integer: `10`.
+class Int : public TemplateValueObject<kIntType, int64_t> {
+ public:
+  explicit Int(const int64_t value) :
+    TemplateValueObject(value) {}
+  ~Int() override = default;
+
+  DECLARE_TYPE(Int);
+
+ public:
+  static inline auto New(const int64_t value) -> Int* {
+    return new Int(value);
+  }
+};
+
+// A 64-bit IEEE float: `10.0`.
+class Float : public TemplateValueObject<kFloatType, double> {
+ public:
+  explicit Float(const double value) :
+    TemplateValueObject(value) {}
+  ~Float() override = default;
+
+  DECLARE_TYPE(Float);
+
+ public:
+  static inline auto New(const double value) -> Float* {
+    return new Float(value);
   }
 };
 

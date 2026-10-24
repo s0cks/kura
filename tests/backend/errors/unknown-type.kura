@@ -1,0 +1,2 @@
+// error: unknown type `Nope`
+fn f(x: Nope): Int => 1

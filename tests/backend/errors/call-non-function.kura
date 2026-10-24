@@ -1,0 +1,2 @@
+// error: can't call Int
+fn f(n: Int): Int => n(1)

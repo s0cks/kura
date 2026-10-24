@@ -536,7 +536,7 @@ class BinaryExpr : public TemplateExpr<2> {
 
 #define DEFINE_OP_CHECK(Name)            \
   inline auto Is##Name() const -> bool { \
-    return GetOp() != BinaryOp::k##Name; \
+    return GetOp() == BinaryOp::k##Name; \
   }
   FOR_EACH_BINARY_OP(DEFINE_OP_CHECK)
 #undef DEFINE_OP_CHECK
@@ -812,6 +812,7 @@ class ListExpr : public DynamicTemplateExpr {
 
 class ListComprehensionExpr : public TemplateExpr<3> {
  private:
+  LocalVariable* local_;
   std::string binding_{};
 
   inline void SetBinding(const std::string value) {
@@ -819,13 +820,20 @@ class ListComprehensionExpr : public TemplateExpr<3> {
   }
 
  public:
-  ListComprehensionExpr(Expr* iterable, Expr* body, const std::string binding, Expr* clause = nullptr) {
+  // `local` is the loop variable: it is visible to the clause and the body.
+  ListComprehensionExpr(Expr* iterable, Expr* body, LocalVariable* local, const std::string binding,
+                        Expr* clause = nullptr) :
+    local_(local) {
     SetIterable(iterable);
     SetBinding(std::move(binding));
     SetBody(body);
     SetClause(clause);
   }
   ~ListComprehensionExpr() override = default;
+
+  auto GetLocal() const -> LocalVariable* {
+    return local_;
+  }
 
   auto GetBinding() const -> const std::string& {
     return binding_;
@@ -837,8 +845,9 @@ class ListComprehensionExpr : public TemplateExpr<3> {
   DECLARE_EXPR_TYPE(ListComprehension);
 
  public:
-  static inline auto New(Expr* iterable, Expr* body, const std::string binding, Expr* clause = nullptr) -> Expr* {
-    return new ListComprehensionExpr(iterable, body, std::move(binding), clause);
+  static inline auto New(Expr* iterable, Expr* body, LocalVariable* local, const std::string binding,
+                         Expr* clause = nullptr) -> Expr* {
+    return new ListComprehensionExpr(iterable, body, local, std::move(binding), clause);
   }
 };
 

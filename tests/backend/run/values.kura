@@ -1,0 +1,72 @@
+type Position = { x: Number, y: Number, z?: Number, }
+type Message = Click(Position) | Tick | Set(Number)
+
+fn pos(): Position => { x: 1, y: 2, }
+// run: pos => { x: 1, y: 2 }
+// run: spread => { x: 9, y: 2 }
+fn spread(): Position => { ...pos(), x: 9, }
+// run: merged => { x: 1, y: 7 }
+fn merged(): Position => { ...pos(), ...{ y: 7, }, }
+fn access(p: Position): Number => p.x + p.y
+// run: access-pos => 3
+fn access-pos(): Number => access(pos())
+fn optional-z(p: Position): Number => match p.z { Some(z) => z, None => 0, }
+// run: z-absent => 0
+fn z-absent(): Number => optional-z(pos())
+// run: z-present => 5
+fn z-present(): Number => optional-z({ x: 1, y: 2, z: 5, })
+
+// run: click => Click({ x: 1, y: 2 })
+fn click(): Message => Click({ x: 1, y: 2, })
+// run: tick => Tick
+fn tick(): Message => Tick
+// run: set 3 => Set(3)
+fn set(n: Number): Message => Set(n)
+fn describe(m: Message): String =>
+  match m {
+    Click(p) => "click",
+    Set(10) => "ten",
+    Set(n) => "set",
+    Tick => "tick",
+  }
+// run: d-click => "click"
+fn d-click(): String => describe(click())
+// run: d-tick => "tick"
+fn d-tick(): String => describe(Tick)
+// run: d-ten => "ten"
+fn d-ten(): String => describe(Set(10))
+// run: d-set => "set"
+fn d-set(): String => describe(Set(3))
+fn payload(m: Message): Number =>
+  match m {
+    Click(p) => p.x + p.y,
+    Set(n) => n,
+    _ => 0,
+  }
+// run: p-click => 3
+fn p-click(): Number => payload(click())
+// run: p-set => 7
+fn p-set(): Number => payload(Set(7))
+// run: p-tick => 0
+fn p-tick(): Number => payload(Tick)
+fn maybe(m: Optional<Message>): Number =>
+  match m {
+    Some(Click(p)) => 1,
+    Some(other) => 2,
+    None => 3,
+  }
+// run: m-click => 1
+fn m-click(): Number => maybe(Click({ x: 1, y: 2, }))
+// run: m-set => 2
+fn m-set(): Number => maybe(Set(1))
+// run: m-none => 3
+fn m-none(): Number => maybe(None)
+// run: eq-records => true
+fn eq-records(): Bool => pos() == { x: 1, y: 2, }
+// run: eq-variants => true
+fn eq-variants(): Bool => click() == Click({ x: 1, y: 2, })
+// run: neq-variants => true
+fn neq-variants(): Bool => Tick != Set(1)
+// run: eq-int-float 1 1.0 => true
+// run: eq-int-float 1 2.0 => false
+fn eq-int-float(a: Number, b: Number): Bool => a == b

@@ -1,0 +1,8 @@
+fn int(): Int = (seq Int(value=10))
+fn float(): Float = (seq Float(value=10.5))
+fn negative(): Int = (seq (unary Minus Int(value=3)))
+fn negative-float(): Float = (seq (unary Minus Float(value=0.25)))
+fn unit(): Px = (seq Px(value=10))
+fn widen(a: Int): Number = (seq a)
+fn classify(n: Int): String = (seq (match n (case Int(value=10) => (seq String(value=ten))) (case Int(value=-1) => (seq String(value=negative one))) (case _ => (seq String(value=other)))))
+fn classify-float(x: Float): String = (seq (match x (case Float(value=1.5) => (seq String(value=one and a half))) (case _ => (seq String(value=other)))))

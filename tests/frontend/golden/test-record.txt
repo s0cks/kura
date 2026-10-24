@@ -1,4 +1,4 @@
-fn init(): Model = (seq (record count: Number(value=0) message: String(value=Hello World)))
-fn init2(): Model = (seq (record count: (binary Add Number(value=10) Number(value=10)) message: String(value=Hello World)))
-fn init4(): Model = (seq (binary Add (record count: Number(value=0)) (record message: String(value=Hello World))))
-fn init5(model: Model): Model = (seq (record ...model count: (binary Add (get model count) Number(value=1))))
+fn init(): Model = (seq (record count: Int(value=0) message: String(value=Hello World)))
+fn init2(): Model = (seq (record count: (binary Add Int(value=10) Int(value=10)) message: String(value=Hello World)))
+fn init4(): Model = (seq (binary Add (record count: Int(value=0)) (record message: String(value=Hello World))))
+fn init5(model: Model): Model = (seq (record ...model count: (binary Add (get model count) Int(value=1))))

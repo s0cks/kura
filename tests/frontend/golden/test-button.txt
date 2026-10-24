@@ -1,1 +1,1 @@
-fn init(): Content = (seq (#Button fill: Number(value=0) (#Text)))
+fn init(): Content = (seq (#Button fill: Int(value=0) (#Text)))

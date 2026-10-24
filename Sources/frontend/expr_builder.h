@@ -122,6 +122,9 @@ class ExprBuilder : public KuraParserBaseVisitor {
   std::unordered_set<std::string> function_names_{};
 
   [[noreturn]] static void Error(antlr4::ParserRuleContext* ctx, const std::string& message);
+
+  // An Int (`10`) or a Float (`10.0`).
+  static auto NumberLiteral(antlr4::ParserRuleContext* ctx, const std::string& text, const bool negate) -> Object*;
   // Syntax that parses (it is part of v1) but that the Expr IR cannot represent yet.
   // Nothing in the core language is left in this state; it is only used for the
   // remaining unspecified corners (see the callers).

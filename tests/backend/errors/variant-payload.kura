@@ -1,0 +1,3 @@
+// error: carries Number but got String
+type M = Set(Number) | Tick
+fn f(): M => Set("a")

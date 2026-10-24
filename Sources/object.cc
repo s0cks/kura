@@ -56,6 +56,22 @@ auto Number::ToString() const -> std::string {
   return ss.str();
 }
 
+void Int::Init() {}
+
+auto Int::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Int(value=" << GetValue() << ")";
+  return ss.str();
+}
+
+void Float::Init() {}
+
+auto Float::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Float(value=" << GetValue() << ")";
+  return ss.str();
+}
+
 void String::Init() {
   NOT_IMPLEMENTED;  // TODO(@s0cks): implement
 }

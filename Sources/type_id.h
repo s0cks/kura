@@ -8,6 +8,8 @@ namespace kura {
   V(Bool)                \
   V(None)                \
   V(Number)              \
+  V(Int)                 \
+  V(Float)               \
   V(String)              \
   V(Property)            \
   V(Record)              \

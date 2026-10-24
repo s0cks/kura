@@ -1,0 +1,3 @@
+// error: can't mix Int and Float
+fn apply(op: (Int) => Int, x: Int): Int => op(x)
+fn f(): Int => apply((s) => s + 1.5, 1)

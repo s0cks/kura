@@ -1,3 +1,3 @@
-fn x2(x: Number): Number = (seq (binary Multiply x Number(value=2)))
-fn test(): String = (seq (if (binary Eq Number(value=10) Number(value=10)) (seq String(value=Hello)) (seq String(value=Goodbye))))
-fn size(n: Number): Number = (seq (if (binary GreaterThan n Number(value=10)) (seq Number(value=3)) (seq (if (binary GreaterThan n Number(value=5)) (seq Number(value=2)) (seq Number(value=1))))))
+fn x2(x: Number): Number = (seq (binary Multiply x Int(value=2)))
+fn test(): String = (seq (if (binary Eq Int(value=10) Int(value=10)) (seq String(value=Hello)) (seq String(value=Goodbye))))
+fn size(n: Number): Number = (seq (if (binary GreaterThan n Int(value=10)) (seq Int(value=3)) (seq (if (binary GreaterThan n Int(value=5)) (seq Int(value=2)) (seq Int(value=1))))))

@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+#include "backend/flow_graph.h"
+#include "function.h"
 #include "local_scope.h"
 
 namespace kura {
@@ -12,117 +14,111 @@ namespace kura {
 FOR_EACH_INSTRUCTION(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
 
+// Printed IR names definitions `%id` and blocks `B<id>`; instructions refer to
+// their inputs by name only, so a dump stays one line per instruction.
+static inline auto Name(const Value* value) -> std::string {
+  if (!value || !value->GetDefinition())
+    return "<none>";
+  return "%" + std::to_string(value->GetDefinition()->GetId());
+}
+
+static inline auto Name(const EntryInstr* block) -> std::string {
+  if (!block)
+    return "<none>";
+  return "B" + std::to_string(block->GetBlockId());
+}
+
+static inline auto Name(const LocalVariable* local) -> std::string {
+  if (!local || !local->GetName())
+    return "<local>";
+  return std::string(local->GetName()->GetData());
+}
+
 auto Value::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "Value(";
-  ss << "defn=" << GetDefinition()->ToString();
-  ss << ")";
-  return ss.str();
+  return Name(this);
 }
 
 auto ConstantInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "ConstantInstr(";
-  ss << "value=" << GetValue()->ToString();
-  ss << ")";
+  ss << "Constant(" << (GetValue() ? GetValue()->ToString() : "null") << ")";
   return ss.str();
 }
 
 auto ReturnInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "ReturnInstr(";
+  ss << "Return(";
   if (HasValue())
-    ss << "value=" << GetValue()->ToString();
+    ss << Name(GetValue());
   ss << ")";
   return ss.str();
 }
 
 auto GraphEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "GraphEntryInstr(";
-  ss << "block_id=" << GetBlockId();
-  ss << ")";
+  ss << "GraphEntry(block_id=" << GetBlockId() << ")";
   return ss.str();
 }
 
 auto TargetEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "TargetEntryInstr(";
-  ss << "block_id=" << GetBlockId();
-  ss << ")";
+  ss << "TargetEntry(block_id=" << GetBlockId() << ")";
   return ss.str();
 }
 
 auto JoinEntryInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "JoinEntryInstr(";
-  ss << "block_id=" << GetBlockId();
-  ss << ")";
+  ss << "JoinEntry(block_id=" << GetBlockId() << ")";
   return ss.str();
 }
 
 auto BranchInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "BranchInstr(";
-  ss << "condition=" << GetCondition()->ToString() << ", " << std::endl;
-  ss << "then=" << GetThen()->ToString() << ", " << std::endl;
+  ss << "Branch(" << Name(GetCondition()) << ", then=" << Name(GetThen());
   if (HasElse())
-    ss << "else=" << GetElse()->ToString() << ", " << std::endl;
-  ss << "join=" << GetJoin()->ToString() << std::endl;
-  ss << ")";
+    ss << ", else=" << Name(GetElse());
+  ss << ", join=" << Name(GetJoin()) << ")";
   return ss.str();
 }
 
 auto GotoInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "GotoIntr(";
-  ss << "target=" << GetTarget()->ToString();
-  ss << ")";
-  return ss.str();
+  return "Goto(" + Name(GetTarget()) + ")";
 }
 
 auto NewNodeInstr::ToString() const -> std::string {
-  return "NewNodeInstr()";
+  switch (GetKind()) {
+#define DEFINE_CASE(Name) \
+  case Kind::k##Name:     \
+    return "NewNode(" #Name ")";
+    FOR_EACH_ELEMENT_NODE(DEFINE_CASE)
+#undef DEFINE_CASE
+    default:
+      return "NewNode(Unknown)";
+  }
 }
 
 auto BinaryOpInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "BinaryOpInstr(";
-  ss << "op=" << GetOp() << ", ";
-  ss << "left=" << GetLeft()->GetDefinition()->ToString() << ", ";
-  ss << "right=" << GetRight()->GetDefinition()->ToString();
-  ss << ")";
+  ss << "BinaryOp(" << GetOp() << ", " << Name(GetLeft()) << ", " << Name(GetRight()) << ")";
   return ss.str();
 }
 
 auto UnaryOpInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "BinaryOpInstr(";
-  ss << "op=" << GetOp() << ", ";
-  ss << "value=" << GetValue()->GetDefinition()->ToString();
-  ss << ")";
+  ss << "UnaryOp(" << GetOp() << ", " << Name(GetValue()) << ")";
   return ss.str();
 }
 
 auto CallInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "CallInstr(";
-  ss << "target=" << GetTarget()->ToString();
-  if (HasArgs()) {
-    ss << "args=[";
-    for (auto idx = 0; idx < GetNumberOfArgs(); idx++) {
-      ss << GetArgAt(idx)->ToString();
-      if (idx < GetNumberOfArgs() - 1)
-        ss << ", ";
-    }
-    ss << "]";
-  }
+  ss << "Call(" << Name(GetTarget());
+  for (const auto& arg : GetArgs())
+    ss << ", " << Name(arg);
   ss << ")";
   return ss.str();
 }
 
 auto PipeCallInstr::ToString() const -> std::string {
-  return "PipeCallInstr()";
+  return "PipeCall()";
 }
 
 auto EntryInstr::GetLastInstruction() -> Instruction* {
@@ -137,40 +133,30 @@ auto GraphEntryInstr::GetLastInstruction() -> Instruction* {
 }
 
 auto NewRecordInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "NewRecordInstr(";
-  ss << ")";
-  return ss.str();
+  return "NewRecord()";
 }
 
 auto StorePropertyInstr::ToString() const -> std::string {
-  std::stringstream ss;
-  ss << "StorePropertyInstr(";
-  ss << "instance=" << GetInstance()->GetDefinition()->ToString() << ", ";
-  ss << "property=" << GetProperty()->ToString();
-  if (HasValue()) {
-    ss << ", value=" << GetValue()->GetDefinition()->ToString();
-  }
-  ss << ")";
+  std::stringstream ss{};
+  ss << "StoreProperty(" << Name(GetInstance()) << ", " << GetProperty()->GetPropertyName()->GetData() << ", "
+     << Name(GetValue()) << ")";
   return ss.str();
 }
 
 auto LoadLocalInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "LoadLocal(";
-  ss << "local=" << GetLocal()->ToString();
-  ss << ")";
-  return ss.str();
+  return "LoadLocal(" + Name(GetLocal()) + ")";
+}
+
+auto StoreLocalInstr::ToString() const -> std::string {
+  return "StoreLocal(" + Name(GetLocal()) + ", " + Name(GetValue()) + ")";
 }
 
 auto NewListInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "NewListInstr(";
+  ss << "NewList(";
   const auto& values = GetInputs();
   for (auto idx = 0; idx < values.size(); idx++) {
-    if (!values[idx])
-      continue;
-    ss << values[idx]->ToString();
+    ss << Name(values[idx]);
     if (idx < values.size() - 1)
       ss << ", ";
   }
@@ -179,107 +165,96 @@ auto NewListInstr::ToString() const -> std::string {
 }
 
 auto SpreadInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "SpreadInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-  ss << ")";
-  return ss.str();
+  return "Spread(" + Name(GetInstance()) + ", " + Name(GetValue()) + ")";
 }
 
 auto StoreIndexInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "StoreIndexInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-  ss << ")";
-  return ss.str();
+  return "StoreIndex(" + Name(GetInstance()) + ", " + Name(GetIndex()) + ", " + Name(GetValue()) + ")";
 }
 
 auto LoadIndexInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "LoadIndexInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-  ss << ")";
-  return ss.str();
+  return "LoadIndex(" + Name(GetInstance()) + ", " + Name(GetIndex()) + ")";
+}
+
+auto LoadLengthInstr::ToString() const -> std::string {
+  return "LoadLength(" + Name(GetInstance()) + ")";
 }
 
 auto LoadPropertyInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "LoadPropertyInstr(";
-  ss << "instance=" << GetInstance()->ToString() << ", ";
-  ss << "property=" << GetProperty()->ToString();
-  ss << ")";
+  ss << "LoadProperty(" << Name(GetInstance()) << ", " << GetProperty()->GetPropertyName()->GetData() << ")";
   return ss.str();
 }
 
 auto LoadPropertySafelyInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "LoadPropertySafelyInstr(";
-  ss << "instance=" << GetInstance()->ToString() << ", ";
-  ss << "property=" << GetProperty()->ToString();
-  ss << ")";
+  ss << "LoadPropertySafely(" << Name(GetInstance()) << ", " << GetProperty()->GetPropertyName()->GetData() << ")";
   return ss.str();
 }
 
 auto LoadFunctionInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "LoadFunctionInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-  ss << ")";
+  ss << "LoadFunction(" << (GetFunction() ? std::string(GetFunction()->GetName()->GetData()) : "<none>") << ")";
   return ss.str();
 }
 
 auto ParameterInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "ParameterInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
+  ss << (IsCapture() ? "Capture(" : "Parameter(") << GetIndex() << ", " << Name(GetLocal()) << ")";
+  return ss.str();
+}
+
+auto NewVariantInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "NewVariant(" << GetVariantName();
+  if (HasPayload())
+    ss << ", " << Name(GetPayload());
+  ss << ")";
+  return ss.str();
+}
+
+auto TestVariantInstr::ToString() const -> std::string {
+  return "TestVariant(" + Name(GetValue()) + ", " + GetVariantName() + ")";
+}
+
+auto LoadVariantPayloadInstr::ToString() const -> std::string {
+  return "LoadVariantPayload(" + Name(GetValue()) + ", " + GetVariantName() + ")";
+}
+
+auto NewClosureInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "NewClosure(" << (GetTarget() ? GetTarget()->GetName() : std::string("<none>"));
+  for (const auto& capture : GetCaptures())
+    ss << ", " << Name(capture);
   ss << ")";
   return ss.str();
 }
 
 auto PhiInstr::Incoming::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "Incoming(";
-  ss << "predecessor=" << predecessor->ToString() << ", ";
-  ss << "value=" << value->ToString();
-  ss << ")";
-  return ss.str();
+  return Name(predecessor) + ":" + Name(value);
 }
 
 auto PhiInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "PhiInstr(";
-  ss << "incoming=[";
+  ss << "Phi(";
   for (auto idx = 0; idx < GetNumberOfIncoming(); idx++) {
-    ss << GetIncomingAt(idx);
+    ss << GetIncomingAt(idx).ToString();
     if (idx < GetNumberOfIncoming() - 1)
       ss << ", ";
   }
-  ss << "]";
-  ss << ")";
-  return ss.str();
-}
-
-auto StoreLocalInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "StoreLocalInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
   ss << ")";
   return ss.str();
 }
 
 auto AllocInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "AllocInstr(";
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-  ss << ")";
-  return ss.str();
+  return "Alloc()";
 }
 
 auto LabelInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "LabelInstr(";
+  ss << "Label(";
   if (HasLabel())
-    ss << "label=" << GetLabel()->ToString();
+    ss << GetLabel()->GetData();
   ss << ")";
   return ss.str();
 }

@@ -5,7 +5,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include(Antlr4)
 
 set(LLVM_LINK_LLVM_DYLIB ON) 
-find_package(LLVM 22.1 REQUIRED CONFIG)
+find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
@@ -14,6 +14,10 @@ llvm_map_components_to_libnames(llvm_libs
   asmparser 
   support
   core
+  analysis
+  native
+  orcjit
+  passes
 )
 
 find_package(glm CONFIG REQUIRED)

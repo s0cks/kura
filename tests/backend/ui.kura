@@ -1,0 +1,14 @@
+type Message = Tick | Inc
+
+fn labels(items: Seq<String>) => for item in items => #text(item)
+
+fn maybe(show: Bool) => if show { #text("shown") } else { None }
+
+fn view(count: Number) =>
+  #block {
+    let label = "Count"
+    #text(label)
+    #button(on-click: Tick) {
+      #text("tick")
+    }
+  }

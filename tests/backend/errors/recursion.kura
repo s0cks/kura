@@ -1,0 +1,2 @@
+// error: recursion needs a declared return type
+fn f(n: Int) => f(n)

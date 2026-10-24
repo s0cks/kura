@@ -1,0 +1,18 @@
+fn doubled(numbers: Seq<Number>): Seq<Number> => for n in numbers => n * 2
+fn big(numbers: Seq<Number>): Seq<Number> => for n in numbers if n > 10 => n
+fn total(numbers: Seq<Number>): Number => for n in numbers fold sum = 0 => sum + n
+fn total-big(numbers: Seq<Number>): Number => for n in numbers if n > 1 fold acc = 0 => acc + n
+
+// a loop whose body branches
+fn sign-sum(numbers: Seq<Number>): Number =>
+  for n in numbers fold acc = 0 => if n > 0 { acc + 1 } else { acc - 1 }
+
+// a loop over a loop
+fn flatten-sums(rows: Seq<Seq<Number>>): Seq<Number> =>
+  for row in rows => for n in row fold sum = 0 => sum + n
+
+fn loop-in-match(m: Number, numbers: Seq<Number>): Number =>
+  match m {
+    0 => for n in numbers fold s = 0 => s + n,
+    _ => 0,
+  }

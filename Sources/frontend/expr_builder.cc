@@ -389,8 +389,23 @@ auto ExprBuilder::visitParenExpr(KuraParser::ParenExprContext* ctx) -> std::any 
 // ╭──────────╮
 // │ Literals │
 // ╰──────────╯
+// `10` is an Int and `10.0` a Float. The lexer only allows digits with an
+// optional fractional part, so a `.` is what tells them apart.
+auto ExprBuilder::NumberLiteral(antlr4::ParserRuleContext* ctx, const std::string& text, const bool negate) -> Object* {
+  if (text.find('.') != std::string::npos) {
+    const auto value = std::stod(text);
+    return Float::New(negate ? -value : value);
+  }
+  try {
+    const auto value = std::stoll(negate ? "-" + text : text);
+    return Int::New(value);
+  } catch (const std::out_of_range&) {
+    Error(ctx, "integer literal `" + text + "` does not fit in a 64-bit Int");
+  }
+}
+
 auto ExprBuilder::visitNumberLit(KuraParser::NumberLitContext* ctx) -> std::any {
-  return Literal(Number::New(std::stod(ctx->NUMBER()->getText())));
+  return Literal(NumberLiteral(ctx, ctx->NUMBER()->getText(), false));
 }
 
 auto ExprBuilder::visitStringLit(KuraParser::StringLitContext* ctx) -> std::any {
@@ -552,8 +567,7 @@ auto ExprBuilder::visitMatchLit(KuraParser::MatchLitContext* ctx) -> std::any {
 auto ExprBuilder::BuildLiteralPattern(KuraParser::LiteralPatternContext* ctx) -> PatternExpr* {
   Expr* literal = nullptr;
   if (ctx->NUMBER()) {
-    const auto value = std::stod(ctx->NUMBER()->getText());
-    literal = Literal(Number::New(ctx->MINUS() ? -value : value));
+    literal = Literal(NumberLiteral(ctx, ctx->NUMBER()->getText(), ctx->MINUS() != nullptr));
   } else if (ctx->STRING()) {
     literal = Literal(String::New(UnescapeString(ctx->STRING()->getText())));
   } else if (ctx->TRUE()) {
@@ -622,7 +636,7 @@ auto ExprBuilder::visitForExpr(KuraParser::ForExprContext* ctx) -> std::any {
   Expr* guard = guard_ctx ? Build(guard_ctx) : nullptr;
 
   if (!ctx->FOLD())
-    return ListComprehensionExpr::New(iterable, Build(body_ctx), binding, guard);
+    return ListComprehensionExpr::New(iterable, Build(body_ctx), binding_local, binding, guard);
 
   const auto accumulator = ctx->IDENT(1)->getText();
   if (accumulator == binding)

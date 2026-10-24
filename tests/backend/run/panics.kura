@@ -1,0 +1,13 @@
+fn curry(a: Int) => (b) => a + b
+// run: any-ok => 3
+fn any-ok(): Int => curry(1)(2)
+// panic: mixed-any => can't mix Int and Float
+fn mixed-any(): Int => curry(1)(2.5)
+// panic: div-zero 5 => division by zero
+fn div-zero(a: Int): Int => a / 0
+// panic: rem-zero => division by zero
+fn rem-zero(): Int => 1 / (1 - 1)
+// panic: arity => takes 1 argument(s) but 0 were given
+fn arity(a: Int): Int => a
+// panic: wrong-type 1.5 => isn't a Int
+fn wrong-type(a: Int): Int => a

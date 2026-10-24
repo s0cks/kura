@@ -1,62 +1,73 @@
-#include "ir_printer.h"
+#include "backend/ir_printer.h"
 
+#include "backend/compile_type.h"
 #include "backend/ir.h"
 #include "common.h"
+#include "function.h"
+#include "local_scope.h"
 
 namespace kura {
 void IRPrinter::PrintInstruction(Instruction* instr) {
-  if (instr->IsLabel()) {
-    indent_.Decrement();
-    line();
-    const auto label = instr->AsLabel()->GetLabel();
-    out() << label->GetData() << ": " << std::endl;
-    indent_.Increment();
-    return;
+  out();
+  if (instr->IsDefinition() && !instr->IsReturn())
+    stream() << "%" << instr->GetId() << " = ";
+  stream() << instr->ToString();
+  if (instr->IsDefinition() && !instr->IsReturn() && instr->IsDefinition()) {
+    const auto type = static_cast<Definition*>(instr)->GetCompileType();
+    if (type)
+      stream() << " : " << type->ToString();
   }
-
-  out() << instr->ToString() << std::endl;
-  if (instr->IsBranch()) {
-    const auto branch = instr->AsBranch();
-    PushBlock(branch->GetThen());
-    if (branch->HasElse())
-      PushBlock(branch->GetElse());
-    PushBlock(branch->GetJoin());
-  } else if (instr->IsGoto()) {
-    PushBlock(instr->AsGoto()->GetTarget());
-  }
+  stream() << std::endl;
 }
 
-void IRPrinter::PrintInstructions(EntryInstr* entry) {
-  if (!entry)
-    return;
-
-  PushBlock(entry);
-  do {
-    const auto next_block = GetNextBlock();
-    if (!next_block)
-      return;
-
-#ifdef KURA_DEBUG
-
-    if (next_block->HasLabel()) {
-      line();
-      out() << next_block->GetLabel()->GetData() << ": " << std::endl;
-    } else {
-      line();
-      out() << "block_" << next_block->GetBlockId() << ": " << std::endl;
+void IRPrinter::PrintBlock(EntryInstr* block) {
+  out() << "B" << block->GetBlockId();
+  if (block->HasLabel())
+    stream() << " " << block->GetLabel()->GetData();
+  stream() << ":";
+  if (const auto n = block->GetNumberOfPredecessors(); n > 0 && !block->GetPredecessorAt(0)->IsGraphEntry()) {
+    stream() << "  ; preds:";
+    for (auto idx = 0; idx < n; idx++) {
+      if (!block->GetPredecessorAt(idx)->IsGraphEntry())
+        stream() << " B" << block->GetPredecessorAt(idx)->GetBlockId();
     }
+  }
+  stream() << std::endl;
 
-#endif  // KURA_DEBUG
+  indent_.Increment();
+  // a block's chain starts with its entry instruction, which was just printed
+  for (auto instr = block->GetNext(); instr != nullptr; instr = instr->GetNext())
+    PrintInstruction(instr);
+  indent_.Decrement();
+}
 
-    {
-      indent_.Increment();
-      ForwardInstructionIterator iter(next_block);
-      while (iter.HasNext()) {
-        const auto next = iter.Next();
-        PrintInstruction(next);
-      }
-      indent_.Decrement();
-    }
-  } while (true);
+void IRPrinter::PrintGraph(FlowGraph* graph) {
+  out() << "fn " << graph->GetName() << "(";
+  const auto& types = graph->GetParameterTypes();
+  for (auto idx = 0; idx < graph->GetNumberOfParameters(); idx++) {
+    stream() << (idx ? ", " : "");
+    if (idx < types.size())
+      stream() << types[idx]->ToString();
+    else
+      stream() << "?";
+  }
+  stream() << ")";
+  if (graph->GetReturnType())
+    stream() << " => " << graph->GetReturnType()->ToString();
+  stream() << ":" << std::endl;
+  indent_.Increment();
+  for (const auto block : graph->GetReversePostorder()) {
+    if (block->IsGraphEntry())
+      continue;
+    PrintBlock(block);
+  }
+  indent_.Decrement();
+}
+
+void IRPrinter::PrintModule(ModuleGraph* module) {
+  for (const auto graph : module->GetGraphs()) {
+    PrintGraph(graph);
+    stream() << std::endl;
+  }
 }
 }  // namespace kura

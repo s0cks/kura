@@ -1,0 +1,3 @@
+// error: may be None
+type P = { x: Int, }
+fn f(p: Optional<P>): Int => p.x

@@ -1,0 +1,24 @@
+fn nums(): Seq<Int> => [1, 5, 12, 20]
+fn rows(): Seq<Seq<Int>> => [[1, 2], [3, 4, 5], []]
+// run: nums => [1, 5, 12, 20]
+// run: doubled => [2, 10, 24, 40]
+fn doubled(): Seq<Int> => for n in nums() => n * 2
+// run: big => [12, 20]
+fn big(): Seq<Int> => for n in nums() if n > 10 => n
+// run: total => 38
+fn total(): Int => for n in nums() fold sum = 0 => sum + n
+// run: total-big => 37
+fn total-big(): Int => for n in nums() if n > 4 fold acc = 0 => acc + n
+// run: sign-sum => 0
+fn sign-sum(): Int => for n in [3, -1, 0, 7] fold acc = 0 => if n > 0 { acc + 1 } else { acc - 1 }
+// run: row-sums => [3, 12, 0]
+fn row-sums(): Seq<Int> => for row in rows() => for n in row fold s = 0 => s + n
+// run: empty => []
+fn empty(): Seq<Int> => for n in [] => n
+// run: joined => [1, 2, 3]
+fn joined(): Seq<Int> => [1, 2] + [3]
+// run: sum-of 3 4 => 7
+fn sum-of(a: Int, b: Int): Int => for n in [a, b] fold s = 0 => s + n
+// run: loop-in-match 0 => 38
+// run: loop-in-match 1 => 0
+fn loop-in-match(m: Int): Int => match m { 0 => total(), _ => 0, }

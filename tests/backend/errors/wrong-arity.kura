@@ -1,0 +1,3 @@
+// error: expected 1 argument(s) but got 2
+fn g(x: Int): Int => x
+fn f(): Int => g(1, 2)

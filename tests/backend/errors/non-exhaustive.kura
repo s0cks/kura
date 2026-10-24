@@ -1,0 +1,3 @@
+// error: returns Int | None but is declared to return Int
+type M = A | B
+fn f(m: M): Int => match m { A => 1, }

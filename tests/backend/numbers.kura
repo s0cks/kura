@@ -1,0 +1,20 @@
+// Int op Int is an Int, Float op Float is a Float, units scale by a number.
+fn ints(a: Int, b: Int): Int => a * b + a / b
+fn floats(a: Float, b: Float): Float => a * b + a / b
+fn literals(): Float => 1.5 * 2.0
+fn int-literals(): Int => 1 + 2 * 3
+fn negate(a: Int, b: Float): Float => -b + 1.0
+fn compare(a: Int, b: Int): Bool => a < b && a != b || a == 0
+
+// `Number` is an Int or a Float, and combines with either
+fn number(a: Number, b: Int): Number => a + b
+fn pass-int(a: Int): Number => number(a, 1)
+fn pass-float(a: Float): Number => number(a, 1)
+
+fn scale(a: Px, k: Int): Px => a * k + a / 2 + 2 * a
+fn ratio(a: Px, b: Px): Float => a / b
+fn same-unit(a: Px, b: Px): Bool => a + b > a - b
+fn percent(a: Pct): Pct => a * 2.0
+
+fn counter(items: Seq<String>): Int => for item in items fold n = 0 => n + 1
+fn mixed-branches(a: Bool): Number => if a { 1 } else { 1.5 }

@@ -1,0 +1,25 @@
+let base = 10
+let label = "Count"
+fn apply(op: (Int, Int) => Int, a: Int, b: Int): Int => op(a, b)
+fn add(a: Int, b: Int): Int => a + b
+// run: global-int 5 => 15
+fn global-int(x: Int): Int => x + base
+// run: global-str => "Count!"
+fn global-str(): String => label + "!"
+// run: no-capture 4 => 5
+fn no-capture(x: Int): Int => apply((a, b) => a + b, x, 1)
+// run: capture 5 => 19
+fn capture(k: Int): Int => apply((a, b) => a * k + b, 3, 4)
+// run: capture-two 5 6 => 39
+fn capture-two(k: Int, j: Int): Int => apply((a, b) => a * k + b * j, 3, 4)
+// run: by-name => 42
+fn by-name(): Int => apply(add, 20, 22)
+// run: nested 100 => 103
+fn nested(k: Int): Int => ((x) => ((y) => x + y + k)(2))(1)
+fn curry(a: Int) => (b) => a + b
+// run: use-curry => 3
+fn use-curry(): Int => curry(1)(2)
+// run: lambda-global 1 => 12
+fn lambda-global(x: Int): Int => apply((a, b) => a + b + base, x, 1)
+// run: captured-loop 10 => [11, 12, 13]
+fn captured-loop(k: Int): Seq<Int> => for n in [1, 2, 3] => apply((a, b) => a + b, n, k)

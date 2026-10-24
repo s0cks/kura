@@ -4,148 +4,88 @@
 #include "backend/flow_graph_builder.h"
 
 namespace kura {
+class ValueVisitor;
+
+// Lowers an expression whose result isn't needed: a statement of a block.
+//
+// Every lowering lives here; a ValueVisitor differs only in that it keeps the
+// result (`ReturnValue`) and that control flow joins with a phi. All emission
+// goes through the owning FlowGraphBuilder's cursor, so visitors are cheap,
+// short-lived objects and sub-expressions are evaluated with `Eval`.
 class EffectVisitor : public expr::ExprVisitor {
   friend class FlowGraphBuilder;
 
  private:
   FlowGraphBuilder* owner_;
-  Instruction* entry_ = nullptr;
-  Instruction* exit_ = nullptr;
-  EntryInstr* block_ = nullptr;
 
  protected:
-  inline void SetEntry(Instruction* instr) {
-    entry_ = instr;
+  inline auto Fail(const std::string& message) -> VisitResult {
+    return owner_->Fail(message);
   }
 
-  inline void SetExit(Instruction* instr) {
-    exit_ = instr;
+  // Whether the value of the expression being lowered is used.
+  virtual auto WantsValue() const -> bool {
+    return false;
   }
 
-  virtual void Do(Definition* defn) {
-    if (IsEmpty()) {
-      SetEntry(defn);
-    } else {
-      Instruction::Link(GetExit(), defn);
-    }
-    SetExit(defn);
+  // Called with the result of the expression. A value visitor keeps it.
+  virtual void ReturnValue(Value* value) {}
+
+  // Appends `defn`, then returns it.
+  void ReturnDefinition(Definition* defn);
+
+  // Lowers `expr` for its value; null if it couldn't be lowered.
+  auto Eval(expr::Expr* expr) -> Value*;
+
+  // Lowers `expr` as a statement.
+  auto EvalForEffect(expr::Expr* expr) -> bool;
+
+  // Lowers an arm of a control flow expression: for its value iff this
+  // expression's value is wanted. `value` is null for effects.
+  auto EvalArm(expr::Expr* expr, Value** value) -> bool;
+
+  auto EvalList(const expr::ExprList& exprs, ValueList* values) -> bool;
+
+  inline auto Bind(Definition* defn) -> Value* {
+    return owner_->Bind(defn);
   }
 
-  virtual void ReturnDefinition(Definition* defn) {
-    if (!defn->IsConstant())
-      Do(defn);
+  inline void Emit(Instruction* instr) {
+    owner_->Emit(instr);
   }
 
-  void Add(Instruction* instr) {
-    if (IsEmpty()) {
-      SetEntry(instr);
-      SetExit(instr);
-    } else {
-      Instruction::Link(GetExit(), instr);
-      SetExit(instr);
-    }
+  inline auto NoneValue() -> Value* {
+    return Bind(ConstantInstr::New(::kura::None::Get()));
   }
 
-#ifdef KURA_DEBUG
+  // Lowers `pattern` against `subject`: tests branch to `fail` when they don't
+  // hold and fall through (in the current block) when they do, and bindings
+  // are defined. Sets `irrefutable` if the pattern can't fail.
+  auto LowerPattern(expr::PatternExpr* pattern, Value* subject, TargetEntryInstr* fail, bool* irrefutable) -> bool;
+  auto LowerShortCircuit(expr::BinaryExpr* expr) -> VisitResult;
 
-  inline void AddLabel(String* message) {
-    return Add(LabelInstr::New(message));
-  }
-
-  inline void AddLabel(const std::string message) {
-    return AddLabel(String::New(message));
-  }
-
-#endif  // KURA_DEBUG
-
-  inline void AddGoto(EntryInstr* instr) {
-    Add(GotoInstr::New(instr));
-  }
-
-  inline void AddStoreProperty(Value* record, Property* property, Value* value) {
-    return Add(StorePropertyInstr::New(record, property, value));
-  }
-
-  void AddReturnExit(Value* value) {
-    Add(ReturnInstr::New(value));
-    exit_ = nullptr;
-  }
-
-  void AddReturnExit(Object* value) {
-    return AddReturnExit(Bind(ConstantInstr::New(value)));
-  }
-
-  void Append(const EffectVisitor& rhs) {
-    if (rhs.IsEmpty())
-      return;
-
-    if (IsEmpty()) {
-      SetEntry(rhs.GetEntry());
-    } else {
-      Instruction::Link(GetExit(), rhs.GetEntry());
-    }
-    SetExit(rhs.GetExit());
-  }
-
-  auto Bind(Definition* defn) -> Value* {
-    if (IsEmpty()) {
-      SetEntry(defn);
-    } else if (GetExit() != nullptr) {
-      Instruction::Link(GetExit(), defn);
-    }
-    SetExit(defn);
-    return Value::New(defn);
-  }
-
-  virtual void ReturnValue(Value* defn) {
-    // do nothing
-  }
-
-  virtual void AddBranch(Value* condition, TargetEntryInstr* then_expr, JoinEntryInstr* join) {
-    Add(BranchInstr::New(condition, then_expr, nullptr, join));
-  }
-
-  virtual void AddBranch(Value* condition, TargetEntryInstr* then_expr, TargetEntryInstr* else_expr,
-                         JoinEntryInstr* join) {
-    Add(BranchInstr::New(condition, then_expr, else_expr, join));
-  }
-
-  auto ProcessValueList(const expr::ExprList& expressions, ValueList& values) -> VisitResult;
-  auto ProcessValueList(expr::DynamicTemplateExpr& expression, ValueList& values)
-      -> VisitResult;  // TODO(@s0cks): add const to expression parameter
-
-  static inline void AppendFragment(TargetEntryInstr* target, const EffectVisitor& vis) {
-    Instruction::Link(target, vis.GetEntry());
-  }
+  // A loop over a Seq. `header` has the index phi; `body` runs once per element
+  // with the element in `item`, and the loop ends in `exit`.
+  struct Loop {
+    Value* iterable = nullptr;
+    Value* length = nullptr;
+    PhiInstr* index = nullptr;
+    JoinEntryInstr* header = nullptr;
+    EntryInstr* preheader = nullptr;
+    TargetEntryInstr* exit = nullptr;
+    Value* item = nullptr;
+  };
+  auto BeginLoop(Value* iterable, Loop* loop) -> bool;
+  void EndLoop(Loop* loop);
 
  public:
   explicit EffectVisitor(FlowGraphBuilder* owner) :
     expr::ExprVisitor(),
     owner_(owner) {}
-  virtual ~EffectVisitor() = default;
+  ~EffectVisitor() override = default;
 
   auto GetOwner() const -> FlowGraphBuilder* {
     return owner_;
-  }
-
-  auto GetEntry() const -> Instruction* {
-    return entry_;
-  }
-
-  auto GetExit() const -> Instruction* {
-    return exit_;
-  }
-
-  auto IsEmpty() const -> bool {
-    return GetEntry() == nullptr;
-  }
-
-  auto IsOpen() const -> bool {
-    return IsEmpty() || GetExit() != nullptr;
-  }
-
-  auto IsClosed() const -> bool {
-    return !IsOpen();
   }
 
   // clang-format off

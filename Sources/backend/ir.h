@@ -29,6 +29,11 @@ namespace kura {
   V(LoadProperty)               \
   V(LoadPropertySafely)         \
   V(LoadFunction)               \
+  V(LoadLength)                 \
+  V(NewVariant)                 \
+  V(TestVariant)                \
+  V(LoadVariantPayload)         \
+  V(NewClosure)                 \
   V(Parameter)                  \
   V(Call)                       \
   V(PipeCall)                   \
@@ -43,6 +48,8 @@ namespace kura {
 
 class Instruction;
 class EntryInstr;
+class FlowGraph;
+class CompileType;
 #define DECLARE_INSTRUCTION(Name) class Name##Instr;
 FOR_EACH_INSTRUCTION(DECLARE_INSTRUCTION);
 #undef DECLARE_INSTRUCTION
@@ -84,7 +91,16 @@ class InstructionIterator;
 class ForwardInstructionIterator;
 // TODO(@s0cks): implement BackwardInstructionIterator
 class Instruction {
+ public:
+  using InstructionId = uint64_t;
+
  private:
+  static inline auto NextId() -> InstructionId {
+    static InstructionId next = 0;
+    return ++next;
+  }
+
+  InstructionId id_ = NextId();
   Instruction* previous_ = nullptr;
   Instruction* next_ = nullptr;
 
@@ -105,6 +121,11 @@ class Instruction {
 
  public:
   virtual ~Instruction() = default;
+
+  // Unique and stable: the SSA name (`%id`) of a definition in printed IR.
+  auto GetId() const -> InstructionId {
+    return id_;
+  }
 
   auto GetPrevious() const -> Instruction* {
     return previous_;
@@ -231,7 +252,7 @@ class ForwardInstructionIterator : public InstructionIterator {
 template <const uint64_t NumberOfInputs>
 class TemplateInstruction : public Instruction {
  private:
-  Value* inputs_[NumberOfInputs];
+  Value* inputs_[NumberOfInputs]{};
 
  protected:
   TemplateInstruction() = default;
@@ -329,11 +350,27 @@ class DynamicTemplateInstruction : public Instruction {
 };
 
 class Definition : public Instruction {
+ private:
+  CompileType* compile_type_ = nullptr;
+
  protected:
   Definition() = default;
 
  public:
   ~Definition() override = default;
+
+  // The static type of the value, set by the type analysis (null before it).
+  auto GetCompileType() const -> CompileType* {
+    return compile_type_;
+  }
+
+  inline auto HasCompileType() const -> bool {
+    return compile_type_ != nullptr;
+  }
+
+  void SetCompileType(CompileType* type) {
+    compile_type_ = type;
+  }
 
   auto IsDefinition() const -> bool override {
     return true;
@@ -343,7 +380,7 @@ class Definition : public Instruction {
 template <const uint64_t NumberOfInputs>
 class TemplateDefinition : public Definition {
  private:
-  Value* inputs_[NumberOfInputs];
+  Value* inputs_[NumberOfInputs]{};
 
  protected:
   TemplateDefinition() = default;
@@ -552,57 +589,211 @@ class NewNodeInstr : public New {
 #undef DEFINE_NEW
 };
 
-class SpreadInstr : public Instruction {
+// `{ ...value }`: copies every property of `value` into `instance`.
+class SpreadInstr : public TemplateInstruction<2> {
  public:
-  SpreadInstr() = default;
+  SpreadInstr(Value* instance, Value* value) {
+    SetInstance(instance);
+    SetValue(value);
+  }
   ~SpreadInstr() override = default;
 
+  HAS_NAMED_INPUT(Instance, 0);
+  HAS_NAMED_INPUT(Value, 1);
   DECLARE_INSTRUCTION_TYPE(Spread);
 
  public:
-  static inline auto New() -> SpreadInstr* {
-    return new SpreadInstr();
+  static inline auto New(Value* instance, Value* value) -> SpreadInstr* {
+    return new SpreadInstr(instance, value);
   }
 };
 
-class LoadIndexInstr : public Definition {
- private:
-  uint64_t index_;
-
+// `instance[index]`
+class LoadIndexInstr : public TemplateDefinition<2> {
  public:
-  explicit LoadIndexInstr(const uint64_t index) :
-    index_(index) {}
+  LoadIndexInstr(Value* instance, Value* index) {
+    SetInstance(instance);
+    SetIndex(index);
+  }
   ~LoadIndexInstr() override = default;
 
-  auto GetIndex() const -> uint64_t {
-    return index_;
-  }
-
+  HAS_NAMED_INPUT(Instance, 0);
+  HAS_NAMED_INPUT(Index, 1);
   DECLARE_INSTRUCTION_TYPE(LoadIndex);
 
  public:
-  static inline auto New(const uint64_t index) -> LoadIndexInstr* {
-    return new LoadIndexInstr(index);
+  static inline auto New(Value* instance, Value* index) -> LoadIndexInstr* {
+    return new LoadIndexInstr(instance, index);
   }
 };
 
-class StoreIndexInstr : public TemplateInstruction<1> {
- private:
-  uint64_t index_;
-
+// `instance[index] = value`. Storing at `index == length` grows a Seq. For a
+// UI node the value is appended to the node's children instead (index is
+// ignored); a Seq child is flattened and a None child is skipped.
+class StoreIndexInstr : public TemplateInstruction<3> {
  public:
-  explicit StoreIndexInstr(const uint64_t index, Value* value) :
-    index_(index) {
+  StoreIndexInstr(Value* instance, Value* index, Value* value) {
+    SetInstance(instance);
+    SetIndex(index);
     SetValue(value);
   }
   ~StoreIndexInstr() override = default;
 
-  HAS_NAMED_INPUT(Value, 0);
+  HAS_NAMED_INPUT(Instance, 0);
+  HAS_NAMED_INPUT(Index, 1);
+  HAS_NAMED_INPUT(Value, 2);
   DECLARE_INSTRUCTION_TYPE(StoreIndex);
 
  public:
-  static inline auto New(uint64_t index, Value* value) -> StoreIndexInstr* {
-    return new StoreIndexInstr(index, value);
+  static inline auto New(Value* instance, Value* index, Value* value) -> StoreIndexInstr* {
+    return new StoreIndexInstr(instance, index, value);
+  }
+};
+
+// Number of elements in a Seq (or children in a node).
+class LoadLengthInstr : public TemplateDefinition<1> {
+ public:
+  explicit LoadLengthInstr(Value* instance) {
+    SetInstance(instance);
+  }
+  ~LoadLengthInstr() override = default;
+
+  HAS_NAMED_INPUT(Instance, 0);
+  DECLARE_INSTRUCTION_TYPE(LoadLength);
+
+ public:
+  static inline auto New(Value* instance) -> LoadLengthInstr* {
+    return new LoadLengthInstr(instance);
+  }
+};
+
+// `Click(payload)` / `Tick`. The payload is optional.
+class NewVariantInstr : public Definition {
+ private:
+  std::string name_;
+  Value* payload_;
+
+ public:
+  NewVariantInstr(const std::string name, Value* payload) :
+    Definition(),
+    name_(std::move(name)),
+    payload_(payload) {}
+  ~NewVariantInstr() override = default;
+
+  auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  auto GetPayload() const -> Value* {
+    return payload_;
+  }
+
+  inline auto HasPayload() const -> bool {
+    return GetPayload() != nullptr;
+  }
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return HasPayload() ? 1 : 0;
+  }
+
+  auto GetInputAt(const uint64_t idx) const -> Value* override {
+    return idx == 0 ? payload_ : nullptr;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(NewVariant);
+
+ public:
+  static inline auto New(const std::string name, Value* payload = nullptr) -> NewVariantInstr* {
+    return new NewVariantInstr(std::move(name), payload);
+  }
+};
+
+// Is `value` the variant `name`? Produces a Bool.
+//
+// `Some` is special: it matches any value but None (a bare value is its own
+// payload), as well as an explicitly constructed `Some(x)`.
+class TestVariantInstr : public TemplateDefinition<1> {
+ private:
+  std::string name_;
+
+ public:
+  TestVariantInstr(Value* value, const std::string name) :
+    name_(std::move(name)) {
+    SetValue(value);
+  }
+  ~TestVariantInstr() override = default;
+
+  auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(TestVariant);
+
+ public:
+  static inline auto New(Value* value, const std::string name) -> TestVariantInstr* {
+    return new TestVariantInstr(value, std::move(name));
+  }
+};
+
+// The payload of the variant `name` of `value`, after a TestVariantInstr for the
+// same name passed (None if it has none).
+class LoadVariantPayloadInstr : public TemplateDefinition<1> {
+ private:
+  std::string name_;
+
+ public:
+  LoadVariantPayloadInstr(Value* value, const std::string name) :
+    name_(std::move(name)) {
+    SetValue(value);
+  }
+  ~LoadVariantPayloadInstr() override = default;
+
+  auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(LoadVariantPayload);
+
+ public:
+  static inline auto New(Value* value, const std::string name) -> LoadVariantPayloadInstr* {
+    return new LoadVariantPayloadInstr(value, std::move(name));
+  }
+};
+
+// A closure over `target` (the lowered lambda) that captures the given values,
+// in the order of `FlowGraph::GetCaptures()`.
+class NewClosureInstr : public Definition {
+ private:
+  FlowGraph* target_;
+
+ public:
+  NewClosureInstr(FlowGraph* target, const ValueList captures) :
+    Definition(),
+    target_(target),
+    captures_(std::move(captures)) {}
+  ~NewClosureInstr() override = default;
+
+  auto GetTarget() const -> FlowGraph* {
+    return target_;
+  }
+
+  HAS_VALUE_LIST(Capture, captures_);
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return captures_.size();
+  }
+
+  auto GetInputAt(const uint64_t idx) const -> Value* override {
+    return GetCaptureAt(idx);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(NewClosure);
+
+ public:
+  static inline auto New(FlowGraph* target, const ValueList captures = {}) -> NewClosureInstr* {
+    return new NewClosureInstr(target, std::move(captures));
   }
 };
 
@@ -662,7 +853,7 @@ class LoadPropertySafelyInstr : public TemplateDefinition<1> {
   }
 };
 
-class StorePropertyInstr : public TemplateInstruction<3> {
+class StorePropertyInstr : public TemplateInstruction<2> {
  private:
   Property* property_;
 
@@ -709,6 +900,16 @@ class CallInstr : public Definition {
   }
 
   HAS_VALUE_LIST(Arg, args_);
+
+  // input 0 is the target, the arguments follow
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return 1 + args_.size();
+  }
+
+  auto GetInputAt(const uint64_t idx) const -> Value* override {
+    return idx == 0 ? target_ : GetArgAt(idx - 1);
+  }
+
   DECLARE_INSTRUCTION_TYPE(Call);
 
  public:
@@ -753,7 +954,7 @@ class ReturnInstr : public TemplateDefinition<1> {
 class PhiInstr : public Definition {
  public:
   struct Incoming {
-    TargetEntryInstr* predecessor;
+    EntryInstr* predecessor;
     Value* value;
 
     auto ToString() const -> std::string;
@@ -769,11 +970,13 @@ class PhiInstr : public Definition {
   JoinEntryInstr* join_;
   IncomingList incoming_{};
 
-  inline void AddIncoming(TargetEntryInstr* entry, Value* value) {
+ public:
+  // `entry` is the block the value flows in from: the block that ends in the
+  // jump to the join, which is not always the block the arm started in.
+  inline void AddIncoming(EntryInstr* entry, Value* value) {
     incoming_.push_back({entry, value});
   }
 
- public:
   explicit PhiInstr(JoinEntryInstr* join) :
     Definition(),
     join_(join) {}
@@ -917,29 +1120,63 @@ class LoadLocalInstr : public Definition {
   }
 };
 
+// The `index`th argument of a function. It names the value `local` has when the
+// function is entered. A lambda also receives each value it captured as a
+// parameter (`IsCapture()`), after its declared parameters.
 class ParameterInstr : public Definition {
+ private:
+  LocalVariable* local_;
+  uint64_t index_;
+  bool capture_;
+
  public:
-  ParameterInstr() = default;
+  ParameterInstr(LocalVariable* local, const uint64_t index, const bool capture = false) :
+    Definition(),
+    local_(local),
+    index_(index),
+    capture_(capture) {}
   ~ParameterInstr() override = default;
+
+  auto GetLocal() const -> LocalVariable* {
+    return local_;
+  }
+
+  auto GetIndex() const -> uint64_t {
+    return index_;
+  }
+
+  inline auto IsCapture() const -> bool {
+    return capture_;
+  }
 
   DECLARE_INSTRUCTION_TYPE(Parameter);
 
  public:
-  static inline auto New() -> ParameterInstr* {
-    return new ParameterInstr();
+  static inline auto New(LocalVariable* local, const uint64_t index, const bool capture = false) -> ParameterInstr* {
+    return new ParameterInstr(local, index, capture);
   }
 };
 
+// A reference to a module function as a first-class value.
 class LoadFunctionInstr : public Definition {
+ private:
+  Function* function_;
+
  public:
-  LoadFunctionInstr() = default;
+  explicit LoadFunctionInstr(Function* function) :
+    Definition(),
+    function_(function) {}
   ~LoadFunctionInstr() override = default;
+
+  auto GetFunction() const -> Function* {
+    return function_;
+  }
 
   DECLARE_INSTRUCTION_TYPE(LoadFunction);
 
  public:
-  static inline auto New() -> LoadFunctionInstr* {
-    return new LoadFunctionInstr();
+  static inline auto New(Function* function) -> LoadFunctionInstr* {
+    return new LoadFunctionInstr(function);
   }
 };
 
@@ -949,12 +1186,11 @@ class EntryInstr : public Instruction {
   friend class EffectVisitor;
   friend class ValueVisitor;
   friend class FlowGraphBuilder;
+  friend class FlowGraph;
 
  private:
   BlockId block_id_ = 0;
-#ifdef KURA_DEBUG
   String* label_ = nullptr;
-#endif  // KURA_DEBUG
 
  protected:
   EntryInstr() = default;
@@ -975,18 +1211,16 @@ class EntryInstr : public Instruction {
     // do nothing
   }
 
+ public:
+  ~EntryInstr() override = default;
+
   void SetBlockId(const BlockId rhs) {
     block_id_ = rhs;
   }
 
-#ifdef KURA_DEBUG
   void SetLabel(String* rhs) {
     label_ = rhs;
   }
-#endif  // KURA_DEBUG
-
- public:
-  ~EntryInstr() override = default;
 
   auto GetBlockId() const -> BlockId {
     return block_id_;
@@ -1016,8 +1250,6 @@ class EntryInstr : public Instruction {
     return GetPredecessorAt(idx) != nullptr;
   }
 
-#ifdef KURA_DEBUG
-
   auto GetLabel() const -> String* {
     return label_;
   }
@@ -1025,8 +1257,6 @@ class EntryInstr : public Instruction {
   inline auto HasLabel() const -> bool {
     return GetLabel() != nullptr;
   }
-
-#endif  // KURA_DEBUG
 
   virtual auto GetLastInstruction() -> Instruction*;
 
@@ -1136,6 +1366,8 @@ class JoinEntryInstr : public EntryInstr {
     return AddPhi(PhiInstr::New(this));
   }
 
+  HAS_SUCCESSOR_LIST;
+  HAS_PREDECESSOR_LIST;
   DECLARE_INSTRUCTION_TYPE(JoinEntry);
 
  public:

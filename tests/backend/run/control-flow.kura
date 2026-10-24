@@ -1,0 +1,30 @@
+// run: nested-if true true => 1
+// run: nested-if true false => 2
+// run: nested-if false true => 3
+fn nested-if(a: Bool, b: Bool): Number => if a { if b { 1 } else { 2 } } else { 3 }
+// run: chain 11 => 3
+// run: chain 6 => 2
+// run: chain 1 => 1
+// run: chain 0 => 0
+fn chain(n: Int): Int => if n > 10 { 3 } else if n > 5 { 2 } else if n > 0 { 1 } else { 0 }
+// run: short-circuit true true false => true
+// run: short-circuit false false true => false
+// run: short-circuit false true false => true
+fn short-circuit(a: Bool, b: Bool, c: Bool): Bool => a && b || !c
+// run: if-in-operand true 5 => 6
+// run: if-in-operand false 5 => 1
+fn if-in-operand(a: Bool, n: Int): Int => (if a { n } else { 0 }) + 1
+// run: match-in-if true 1 => 20
+// run: match-in-if true 9 => 30
+// run: match-in-if false 1 => 0
+fn match-in-if(a: Bool, n: Int): Int => if a { match n { 0 => 10, 1 => 20, _ => 30, } } else { 0 }
+// run: if-in-match 0 true => 1
+// run: if-in-match 0 false => 2
+// run: if-in-match 5 true => 3
+fn if-in-match(n: Int, a: Bool): Int => match n { 0 => if a { 1 } else { 2 }, _ => 3, }
+// run: shadow 4 => 10
+fn shadow(x: Int): Int => {
+  let x = x + 1
+  let x = x * 2
+  x
+}

@@ -1,0 +1,2 @@
+// error: need Bool operands
+fn f(a: Bool, n: Int): Bool => a && n

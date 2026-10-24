@@ -1,0 +1,19 @@
+type Message = Tick | Inc
+// run: labels => [#text(value: "a"), #text(value: "b")]
+fn labels(): Seq<Node> => for item in ["a", "b"] => #text(item)
+// run: maybe true => #text(value: "shown")
+// run: maybe false => None
+fn maybe(show: Bool): Node | None => if show { #text("shown") } else { None }
+// run: view 3 => #block { #text(value: "Count") #button(on-click: Tick) { #text(value: "tick") } }
+fn view(count: Int): Node =>
+  #block {
+    let label = "Count"
+    #text(label)
+    #button(on-click: Tick) {
+      #text("tick")
+    }
+  }
+// run: plain => #block
+fn plain(): Node => #block
+// run: sized 4 => #block(width: 10px, height: 8)
+fn sized(n: Int): Node => #block(width: 10px, height: n * 2)

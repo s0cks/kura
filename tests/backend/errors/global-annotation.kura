@@ -1,0 +1,2 @@
+// error: is declared String but its value is Int
+let name: String = 1
