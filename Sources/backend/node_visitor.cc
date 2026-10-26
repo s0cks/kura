@@ -101,4 +101,24 @@ auto NodeVisitor::VisitNode(expr::NodeExpr* expr) -> VisitResult {
       return ValueVisitor::VisitNode(expr);
   }
 }
+
+auto NodeVisitor::EvalArm(expr::Expr* expr, Value** value) -> bool {
+  *value = nullptr;
+  if (!WantsValue())
+    return EvalForEffect(expr);
+
+  if (!expr) {
+    *value = NoneValue();
+    return true;
+  }
+
+  NodeVisitor for_value(GetOwner());
+  if (!expr->Accept(&for_value))
+    return false;
+
+  *value = for_value.GetValue();
+  if (!for_value.HasValue())
+    (*value) = NoneValue();
+  return true;
+}
 }  // namespace kura

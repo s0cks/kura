@@ -11,6 +11,7 @@ class NodeVisitor : public ValueVisitor {
 
   auto VisitButton(expr::NodeExpr* node) -> VisitResult;
   auto VisitText(expr::NodeExpr* node) -> VisitResult;
+  auto EvalArm(expr::Expr* expr, Value** value) -> bool override;
 
  public:
   explicit NodeVisitor(FlowGraphBuilder* owner) :

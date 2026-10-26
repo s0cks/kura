@@ -37,6 +37,7 @@ concept HasBlockId = requires(I instr, const uint64_t id) {
 class FlowGraphBuilder {
   friend class EffectVisitor;
   friend class ValueVisitor;
+  friend class NodeVisitor;
 
  public:
   // State shared by the graphs of one module.

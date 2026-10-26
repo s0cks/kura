@@ -12,7 +12,9 @@ type State = { message: String }
 
 fn init() => { message: "Hello World" }
 
-fn view(message: String): Node =>
-  #button(){
-    #text(message)
+fn view(count: Int): Node => {
+  let text = if count > 1 { "Done" } else { "Hello World" }
+  #button{
+    #text(text)
   }
+}

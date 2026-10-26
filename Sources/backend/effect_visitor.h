@@ -42,7 +42,7 @@ class EffectVisitor : public expr::ExprVisitor {
 
   // Lowers an arm of a control flow expression: for its value iff this
   // expression's value is wanted. `value` is null for effects.
-  auto EvalArm(expr::Expr* expr, Value** value) -> bool;
+  virtual auto EvalArm(expr::Expr* expr, Value** value) -> bool;
 
   auto EvalList(const expr::ExprList& exprs, ValueList* values) -> bool;
 
