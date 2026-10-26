@@ -59,10 +59,6 @@ auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> Pars
     return Fail(ss);
   }
 
-#ifdef KURA_DEBUG
-  std::cout << "source:" << std::endl << source << std::endl;
-#endif  // KURA_DEBUG
-
   SyntaxErrorCollector errors{};
   antlr4::ANTLRInputStream stream(source);
   KuraLexer lexer(&stream);
@@ -75,11 +71,6 @@ auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> Pars
   auto* tree = parser.source();
   if (errors.HasErrors())
     return Fail(filename + ": syntax error(s):\n" + errors.GetErrors());
-#ifdef KURA_DEBUG
-  std::cout << "--- Parse Tree ---" << std::endl;
-  std::cout << tree->toStringTree(&parser) << std::endl;
-  std::cout << std::endl;
-#endif  // KURA_DEBUG
 
   expr::ModuleBuilder builder(GetScope());
   try {

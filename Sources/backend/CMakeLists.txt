@@ -5,6 +5,7 @@ target_sources(kura-runtime
          effect_visitor.cc
          flow_graph.cc
          flow_graph_builder.cc
+         flow_graph_compiler.cc
          ir.cc
          ir_printer.cc
          jit.cc

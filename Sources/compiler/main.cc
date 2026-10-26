@@ -1,7 +1,7 @@
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9,27 +9,27 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Linker/Linker.h>
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 #include <print>
 #include <stdlib.h>
 #include <yoga/Yoga.h>
 
-#include <llvm/Linker/Linker.h>
-
 #include "backend/c_compile.h"
 #include "backend/c_header.h"
-#include "c_import.h"
-#include "backend/flow_graph.h"
-#include "backend/purity_analysis.h"
-#include "backend/flow_graph_builder.h"
-#include "backend/ir.h"
 #include "backend/compile_type.h"
+#include "backend/flow_graph.h"
+#include "backend/flow_graph_builder.h"
+#include "backend/flow_graph_compiler.h"
+#include "backend/ir.h"
 #include "backend/ir_printer.h"
 #include "backend/jit.h"
 #include "backend/llvm_codegen.h"
+#include "backend/purity_analysis.h"
 #include "backend/runtime_abi.h"
 #include "backend/type_analysis.h"
+#include "c_import.h"
 #include "common.h"
 #include "element_compiler.h"
 #include "frontend/expr_printer.h"
@@ -74,11 +74,13 @@ class ModulePrinter {
         std::cerr << "error: " << error << std::endl;
       return false;
     }
+
     if (!TypeAnalysis::Run(rhs, graph, &errors) || !PurityAnalysis::Run(rhs, graph, &errors)) {
       for (const auto& error : errors)
         std::cerr << "error: " << error << std::endl;
       return false;
     }
+
     IRPrinter::Print(stream(), graph, indent());
     return true;
   }
@@ -178,8 +180,7 @@ auto ParseArgument(const std::string& text) -> rt::KuraValue {
     const auto value = std::stoll(text, &used);
     if (used == text.size())
       return {rt::kTagInt, static_cast<uint64_t>(value)};
-  } catch (...) {
-  }
+  } catch (...) {}
   try {
     size_t used = 0;
     const auto value = std::stod(text, &used);
@@ -192,8 +193,7 @@ auto ParseArgument(const std::string& text) -> rt::KuraValue {
       return {rt::kTagPct, bits_of(value)};
     if (unit == "fr")
       return {rt::kTagFr, bits_of(value)};
-  } catch (...) {
-  }
+  } catch (...) {}
   return rt::MakeString(text);
 }
 // The command line can only build scalars, so the arguments of a call from it
@@ -258,7 +258,8 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
     }
     if (!ok) {
       *error = "argument " + std::to_string(idx + 1) + " of `" + name + "` is " + rt::Format(args[idx]) +
-               ", which isn't a " + type->ToString() + " (the command line can only pass numbers, units, bools, none and strings)";
+               ", which isn't a " + type->ToString() +
+               " (the command line can only pass numbers, units, bools, none and strings)";
       return false;
     }
   }
@@ -268,7 +269,9 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
 
 auto main(int argc, char** argv) -> int {
   if (argc < 2) {
-    std::cerr << "usage: kurac <file> [<c-source>.c...] [--emit-llvm] [--emit-obj <file.o>] [--emit-header <file.h>] [--no-opt] [-I<dir>] [-D<name>] [-L<dir>] [-l<lib>] [--run <function> [args...]]" << std::endl;
+    std::cerr << "usage: kurac <file> [<c-source>.c...] [--emit-llvm] [--emit-obj <file.o>] [--emit-header <file.h>] "
+                 "[--no-opt] [-I<dir>] [-D<name>] [-L<dir>] [-l<lib>] [--run <function> [args...]]"
+              << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -316,12 +319,6 @@ auto main(int argc, char** argv) -> int {
 
   std::vector<std::string> errors{};
   const auto graphs = FlowGraphBuilder::BuildModuleGraph(m, &errors);
-  if (!graphs || !TypeAnalysis::Run(m, graphs, &errors) || !PurityAnalysis::Run(m, graphs, &errors)) {
-    for (const auto& error : errors)
-      std::cerr << "error: " << error << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if (!options.emit_header.empty()) {
     std::string guard = "KURA_";
     for (const char c : std::filesystem::path(options.emit_header).stem().string())
@@ -334,15 +331,23 @@ auto main(int argc, char** argv) -> int {
     }
     out << GenerateCHeader(m, guard);
   }
+
   if (!options.emit_llvm && !options.run && options.emit_object.empty())
     return EXIT_SUCCESS;
   auto context = std::make_unique<llvm::LLVMContext>();
-  std::string error;
-  auto module = GenerateLLVM(*context, m, graphs, &error);
-  if (!module) {
-    std::cerr << "error: " << error << std::endl;
+
+  std::string error{};
+  std::unique_ptr<llvm::LLVMContext> ctx{};
+  std::unique_ptr<llvm::Module> module{};
+  FlowGraphCompiler compiler(ctx, module, options.optimize);
+  if (!compiler.Compile(m, graphs, errors)) {
+    for (const auto& error : errors) {
+      std::cerr << error << std::endl;
+    }
+
     return EXIT_FAILURE;
   }
+
   // C sources named on the command line are compiled into the module, so the
   // program is one unit that LLVM can optimize across.
   for (const auto& path : options.c_sources) {
@@ -360,8 +365,6 @@ auto main(int argc, char** argv) -> int {
       return EXIT_FAILURE;
     }
   }
-  if (options.optimize)
-    OptimizeLLVM(*module);
 
   if (!options.emit_object.empty()) {
     if (!EmitObjectFile(*module, options.emit_object, &error)) {
@@ -390,7 +393,8 @@ auto main(int argc, char** argv) -> int {
       }
     }
   }
-  if (!jit || !jit->Add(std::move(module), std::move(context), &error) || !jit->Initialize(&error)) {
+
+  if (!jit || !jit->Add(std::move(module), std::move(ctx), &error) || !jit->Initialize(&error)) {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
@@ -402,11 +406,13 @@ auto main(int argc, char** argv) -> int {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
+
   rt::KuraValue result{};
   if (!jit->Call(options.function, args, &result, &error)) {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
+
   std::cout << "=> " << rt::Format(result) << std::endl;
   return EXIT_SUCCESS;
 }

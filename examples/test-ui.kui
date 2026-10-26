@@ -1,6 +1,15 @@
-fn view(message: String): Content =>
-  @meta(tags: [ Button, User ])
+fn init(): State => { value: 1 }
+
+type  Message = Click
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+      Click => { value: state.value + 1 }
+      _ => state
+    }
+
+fn view(state: State): Content =>
   #button(on-click: 1) {
-    #text("Hello World")
-    #text(message)
+    #text("Click")
+    #text(state.value)
   }

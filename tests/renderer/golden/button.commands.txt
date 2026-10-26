@@ -1,0 +1,9 @@
+frame 40x12
+fill-rect 0 0 40 12 #333340ff
+fill-rect 5 3 32 8 #00000080
+fill-rect 4 2 32 8 #0000ffff
+stroke-rect 4 2 32 8 #ffffffff
+push-clip 6 3 28 6
+text 8 3 8 #ffffffff "Go"
+line 6 8 33 8 #ffff00ff
+pop-clip

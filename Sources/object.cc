@@ -44,9 +44,7 @@ auto Bool::ToString() const -> std::string {
   return ss.str();
 }
 
-void Number::Init() {
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-}
+void Number::Init() {}
 
 auto Number::ToString() const -> std::string {
   std::stringstream ss{};
@@ -72,9 +70,7 @@ auto Float::ToString() const -> std::string {
   return ss.str();
 }
 
-void String::Init() {
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-}
+void String::Init() {}
 
 auto String::ToString() const -> std::string {
   std::stringstream ss{};
@@ -90,9 +86,7 @@ auto String::GetHash() const -> String::HashType {
   return static_cast<size_t>(XXH64(data, GetLength(), kHashSeed));
 }
 
-void Seq::Init() {
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-}
+void Seq::Init() {}
 
 auto Seq::ToString() const -> std::string {
   std::stringstream ss{};
@@ -121,12 +115,12 @@ auto Seq::VisitChildren(ObjectVisitor* vis) -> VisitResult {
   return VisitResult::kContinue;
 }
 
-#define DEFINE_UNIT_OBJECT_IMPL(Name)                    \
-  void Name::Init() {}                                   \
-  auto Name::ToString() const -> std::string {           \
-    std::stringstream ss{};                              \
-    ss << #Name << "(value=" << GetValue() << ")";       \
-    return ss.str();                                     \
+#define DEFINE_UNIT_OBJECT_IMPL(Name)              \
+  void Name::Init() {}                             \
+  auto Name::ToString() const -> std::string {     \
+    std::stringstream ss{};                        \
+    ss << #Name << "(value=" << GetValue() << ")"; \
+    return ss.str();                               \
   }
 DEFINE_UNIT_OBJECT_IMPL(Px)
 DEFINE_UNIT_OBJECT_IMPL(Pct)

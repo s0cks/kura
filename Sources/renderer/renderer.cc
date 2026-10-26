@@ -1,3 +1,5 @@
+#if defined(KURA_RENDER_TARGET_OPENGL) || defined(KURA_RENDER_TARGET_VULKAN)
+
 #include "renderer/renderer.h"
 
 #include "common.h"
@@ -21,3 +23,5 @@ auto Renderer::Get() -> Renderer* {
   return renderer_;
 }
 }  // namespace kura
+
+#endif  // KURA_RENDER_TARGET_OPENGL || KURA_RENDER_TARGET_VULKAN

@@ -6,6 +6,9 @@
     "jansson",
     "yoga",
     "xxhash",
-    "glm"
+    "glm",
+    "libpng",
+    "libjpeg-turbo",
+    "gtest"
   ]
 }

@@ -4,7 +4,7 @@ fn floats(a: Float, b: Float): Float => a * b + a / b
 fn literals(): Float => 1.5 * 2.0
 fn int-literals(): Int => 1 + 2 * 3
 fn negate(a: Int, b: Float): Float => -b + 1.0
-fn compare(a: Int, b: Int): Bool => a < b && a != b || a == 0
+fn compare(a: Int, b: Int): Int => if a < b { -1 } else if a > b { 1 } else { 0 }
 
 // `Number` is an Int or a Float, and combines with either
 fn number(a: Number, b: Int): Number => a + b

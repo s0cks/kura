@@ -1,0 +1,33 @@
+version: '3'
+vars:
+  BUILD_DIR: build
+  PRESET: clang-debug
+tasks:
+  cmake:
+    internal: true
+    cmds:
+      - |
+        cmake --preset {{.PRESET}} .
+      - |
+        cmake --build {{.BUILD_DIR}} --target {{.TARGET}}
+  build:
+    aliases:
+      - default
+    cmds:
+      - task: cmake
+        vars:
+          TARGET: all
+  build:renderer:
+    aliases:
+      - renderer
+    cmds:
+      - task: cmake
+        vars:
+          TARGET: renderer
+  build:renderer-tests:
+    aliases:
+      - renderer-tests
+    cmds:
+      - task: cmake
+        vars:
+          TARGET: kura-renderer-tests

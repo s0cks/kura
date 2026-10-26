@@ -3,9 +3,7 @@
 #include <sstream>
 
 namespace kura {
-void Record::Init() {
-  NOT_IMPLEMENTED;  // TODO(@s0cks): implement
-}
+void Record::Init() {}
 
 auto Record::ToString() const -> std::string {
   std::stringstream ss{};

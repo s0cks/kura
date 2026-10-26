@@ -11,4 +11,13 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 
+option(KURA_BUILD_TESTS "Build the unit tests (run them with ctest)" ON)
+if(KURA_BUILD_TESTS)
+  enable_testing()
+endif()
+
 add_subdirectory(Sources/)
+
+if(KURA_BUILD_TESTS)
+  add_subdirectory(tests/renderer)
+endif()

@@ -39,6 +39,8 @@ auto Spell(const CType& type) -> std::string {
       return "const char*";
     case CType::kHandle:
       return "void*";
+    default:
+      break;
   }
   return "void";
 }
@@ -46,7 +48,9 @@ auto Spell(const CType& type) -> std::string {
 // The Kura name when it's a valid C identifier (`damage-for`'s parameters can be
 // anything C accepts, but a kebab-case one isn't), and `arg<N>` otherwise.
 auto ParameterName(const CSignature& c, const size_t idx) -> std::string {
-  static const char* kReserved[] = {"auto", "char", "default", "do", "double", "float", "int", "long", "register", "short", "signed", "struct", "union", "unsigned", "void", "volatile", "while", "bool", "new", "class"};
+  static const char* kReserved[] = {"auto", "char",     "default", "do",     "double", "float", "int",
+                                    "long", "register", "short",   "signed", "struct", "union", "unsigned",
+                                    "void", "volatile", "while",   "bool",   "new",    "class"};
   if (idx < c.names.size()) {
     const auto& name = c.names[idx];
     bool valid = !name.empty() && !std::isdigit(static_cast<unsigned char>(name[0]));

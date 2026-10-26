@@ -1,0 +1,19 @@
+type Position = {
+  x: Number,
+  y: Number,
+  z?: Number,
+}
+
+type Message = Click(Position) | Tick | Set(Number)
+type Optional<T> = Some(T) | None
+type Op = (Number, Number) => Number
+type Content = Node | None
+type State = { message: String }
+
+fn init() => { message: "Hello World" }
+
+fn view(message: String): Node =>
+  #button(){
+    #text(message)
+  }
+  

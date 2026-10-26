@@ -25,9 +25,8 @@ auto Jit::Create(std::string* error) -> std::unique_ptr<Jit> {
   auto jit = std::move(*created);
 
   llvm::orc::SymbolMap symbols{};
-#define BIND_RUNTIME_FUNCTION(Name)                                                            \
-  symbols[jit->mangleAndIntern(#Name)] = {llvm::orc::ExecutorAddr::fromPtr(&Name),             \
-                                          llvm::JITSymbolFlags::Exported};
+#define BIND_RUNTIME_FUNCTION(Name) \
+  symbols[jit->mangleAndIntern(#Name)] = {llvm::orc::ExecutorAddr::fromPtr(&Name), llvm::JITSymbolFlags::Exported};
   KURA_RUNTIME_FUNCTIONS(BIND_RUNTIME_FUNCTION)
 #undef BIND_RUNTIME_FUNCTION
   if (auto err = jit->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(symbols)))) {
@@ -109,9 +108,8 @@ auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& ar
       return true;
     case 4:
       *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-                                                uint64_t, uint64_t)>(fn)(nullptr, a[0].tag, a[0].bits, a[1].tag,
-                                                                         a[1].bits, a[2].tag, a[2].bits, a[3].tag,
-                                                                         a[3].bits);
+                                               uint64_t, uint64_t)>(fn)(
+          nullptr, a[0].tag, a[0].bits, a[1].tag, a[1].bits, a[2].tag, a[2].bits, a[3].tag, a[3].bits);
       return true;
     default:
       if (error)

@@ -341,7 +341,7 @@ void kura_rt_panic(const char* message) {
   std::_Exit(101);
 }
 
-static void Panic(const std::string& message) {
+[[noreturn]] static inline void Panic(const std::string& message) {
   kura_rt_panic(message.c_str());
 }
 
@@ -418,6 +418,7 @@ int64_t kura_rt_len(void* object) {
   if (obj->kind == ObjKind::kNode)
     return static_cast<int64_t>(static_cast<NodeObj*>(object)->children.items.size());
   Panic("can't take the length of this value");
+  return 0;
 }
 
 void kura_rt_store_index(void* object, const int64_t index, const uint64_t tag, const uint64_t bits) {
@@ -463,6 +464,7 @@ static auto Props(void* object) -> RecordObj* {
   if (obj->kind == ObjKind::kNode)
     return &static_cast<NodeObj*>(object)->props;
   Panic("this value has no properties");
+  return nullptr;
 }
 
 void kura_rt_record_set(void* object, const uint64_t hash, const char* name, const uint64_t tag, const uint64_t bits) {
@@ -563,6 +565,7 @@ static auto Arith(const kura::BinaryOp op, const KuraValue& a, const KuraValue& 
   const auto bad = [&]() -> KuraValue {
     Panic(std::string("can't apply `") + std::string(kura::ToString(op)) + "` to " + TagName(a.tag) + " and " +
           TagName(b.tag));
+    return KuraValue{};
   };
 
   if (a.tag == kTagInt && b.tag == kTagInt) {
@@ -590,7 +593,9 @@ static auto Arith(const kura::BinaryOp op, const KuraValue& a, const KuraValue& 
   const auto number = [](const KuraValue& v) {
     return v.tag == kTagInt ? static_cast<double>(static_cast<int64_t>(v.bits)) : AsDouble(v.bits);
   };
-  const auto make = [](const uint64_t tag, const double value) { return KuraValue{tag, FromDouble(value)}; };
+  const auto make = [](const uint64_t tag, const double value) {
+    return KuraValue{tag, FromDouble(value)};
+  };
 
   if (a.tag == kTagFloat && b.tag == kTagFloat) {
     const auto x = AsDouble(a.bits);
@@ -699,8 +704,8 @@ KuraValue kura_rt_binop(const uint64_t op_code, const uint64_t a_tag, const uint
         return {kTagSeq, reinterpret_cast<uint64_t>(
                              kura_rt_seq_concat(reinterpret_cast<void*>(a.bits), reinterpret_cast<void*>(b.bits)))};
       if (a.tag == kTagRecord && b.tag == kTagRecord)
-        return {kTagRecord, reinterpret_cast<uint64_t>(
-                                kura_rt_record_merge(reinterpret_cast<void*>(a.bits), reinterpret_cast<void*>(b.bits)))};
+        return {kTagRecord, reinterpret_cast<uint64_t>(kura_rt_record_merge(reinterpret_cast<void*>(a.bits),
+                                                                            reinterpret_cast<void*>(b.bits)))};
       return Arith(op, a, b);
     default:
       return Arith(op, a, b);
@@ -724,6 +729,7 @@ KuraValue kura_rt_unop(const uint64_t op_code, const uint64_t tag, const uint64_
       if (tag == kTagFloat || IsUnit(tag))
         return {tag, FromDouble(-AsDouble(bits))};
       Panic("can't negate " + TagName(tag));
+      return {};
   }
 }
 }

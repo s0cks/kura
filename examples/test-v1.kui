@@ -7,7 +7,6 @@ type Position = {
 type Message = Click(Position) | Tick | Set(Number)
 type Optional<T> = Some(T) | None
 type Op = (Number, Number) => Number
-type Content = Node | None
 
 @vec
 let origin: Seq<Number> = [ 0, 0, 0, ]
@@ -43,7 +42,7 @@ fn nested(m: Optional<Message>): Number =>
   }
 
 @meta(tags: [ Player ])
-fn view(count: Number): Content =>
+fn view(count: Number): Node =>
   @meta(tags: [ Button ])
   #button(on-click: Tick) {
     let label = "Count"

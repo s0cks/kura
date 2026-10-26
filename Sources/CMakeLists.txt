@@ -104,8 +104,12 @@ target_link_libraries(kura-runtime
          glm::glm
 )
 
+option(KURA_BUILD_DEBUGGER "Build kura-debugger (needs GTK4, EGL and epoxy)" ON)
+
 add_subdirectory(compiler/)
-add_subdirectory(debugger/)
+if(KURA_BUILD_DEBUGGER)
+  add_subdirectory(debugger/)
+endif()
 add_subdirectory(renderer/)
 add_subdirectory(frontend/)
 add_subdirectory(backend/)
