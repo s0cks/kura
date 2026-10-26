@@ -20,13 +20,16 @@ auto EffectVisitor::Eval(expr::Expr* expr) -> Value* {
     Fail("missing expression");
     return nullptr;
   }
+
   ValueVisitor for_expr(owner_);
   if (!expr->Accept(&for_expr))
     return nullptr;
+
   if (!for_expr.HasValue()) {
     Fail(std::string("expression produced no value: ") + std::string(expr->GetName()));
     return nullptr;
   }
+
   return for_expr.GetValue();
 }
 
@@ -196,8 +199,8 @@ auto EffectVisitor::VisitCase(expr::CaseExpr*) -> VisitResult {
   return Fail("a case can only appear in a match");
 }
 
-auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, TargetEntryInstr* fail,
-                                 bool* irrefutable) -> bool {
+auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, TargetEntryInstr* fail, bool* irrefutable)
+    -> bool {
   *irrefutable = false;
   if (pattern->IsWildcardPattern()) {
     *irrefutable = true;

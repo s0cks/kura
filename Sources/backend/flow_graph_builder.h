@@ -111,6 +111,7 @@ class FlowGraphBuilder {
 
   // Lowers `body` and ends the graph with a Return of its value.
   auto BuildBody(expr::Expr* body) -> bool;
+  auto BuildViewBody(expr::Expr* body) -> bool;
   auto BuildInit(const std::vector<expr::StoreLocalExpr*>& bindings) -> bool;
   auto Finish() -> FlowGraph*;
 

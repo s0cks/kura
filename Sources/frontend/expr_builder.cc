@@ -654,8 +654,7 @@ auto ExprBuilder::visitUnaryExpr(KuraParser::UnaryExprContext* ctx) -> std::any 
   return UnaryExpr::New(op, Build(ctx->operation()));
 }
 
-#define DEFINE_BINARY_VISIT(Ctx, Op)                                         \
-  return BinaryExpr::New((Op), Build(ctx->operation(0)), Build(ctx->operation(1)))
+#define DEFINE_BINARY_VISIT(Ctx, Op) return BinaryExpr::New((Op), Build(ctx->operation(0)), Build(ctx->operation(1)))
 
 auto ExprBuilder::visitMultiplicativeExpr(KuraParser::MultiplicativeExprContext* ctx) -> std::any {
   DEFINE_BINARY_VISIT(Multiplicative, ctx->op->getType() == KuraLexer::STAR ? BinaryOp::kMultiply : BinaryOp::kDivide);
@@ -841,7 +840,8 @@ auto ExprBuilder::BuildBinding(const std::vector<KuraParser::DirectiveContext*>&
   return store;
 }
 
-auto ExprBuilder::BuildBlock(antlr4::ParserRuleContext* ctx, const std::vector<KuraParser::StatementContext*>& statements,
+auto ExprBuilder::BuildBlock(antlr4::ParserRuleContext* ctx,
+                             const std::vector<KuraParser::StatementContext*>& statements,
                              KuraParser::ExpressionContext* result) -> SeqExpr* {
   LocalsScope block_scope(GetOwner());
   ExprList body{};
@@ -969,14 +969,24 @@ auto ExprBuilder::visitForExpr(KuraParser::ForExprContext* ctx) -> std::any {
 // │ UI element │
 // ╰────────────╯
 static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind> {
+  // clang-format off
   static const std::unordered_map<std::string, NodeExpr::Kind> kKinds{
 #define DEFINE_ENTRY(Name, Text) {Text, NodeExpr::Kind::k##Name},
-      DEFINE_ENTRY(Document, "document") DEFINE_ENTRY(Fragment, "fragment") DEFINE_ENTRY(Block, "block")
-      DEFINE_ENTRY(Button, "button") DEFINE_ENTRY(List, "list") DEFINE_ENTRY(Text, "text")
-      DEFINE_ENTRY(Image, "image") DEFINE_ENTRY(Viewport, "viewport") DEFINE_ENTRY(Canvas, "canvas")
-      DEFINE_ENTRY(Input, "input") DEFINE_ENTRY(Scroll, "scroll")
+      DEFINE_ENTRY(Document, "document")
+      DEFINE_ENTRY(Fragment, "fragment")
+      DEFINE_ENTRY(Block, "block")
+      DEFINE_ENTRY(Button, "button")
+      DEFINE_ENTRY(List, "list")
+      DEFINE_ENTRY(Text, "text")
+      DEFINE_ENTRY(Image, "image")
+      DEFINE_ENTRY(Viewport, "viewport")
+      DEFINE_ENTRY(Canvas, "canvas")
+      DEFINE_ENTRY(Input, "input")
+      DEFINE_ENTRY(Scroll, "scroll")
+      DEFINE_ENTRY(Surface, "surface")
 #undef DEFINE_ENTRY
   };
+  // clang-format on
   const auto pos = kKinds.find(rhs);
   if (pos == std::end(kKinds))
     return std::nullopt;

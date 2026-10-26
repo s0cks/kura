@@ -23,6 +23,7 @@
 
 #include "backend/c_compile.h"
 #include "backend/compile_type.h"
+#include "backend/gir.h"
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
 #include "c_type.h"
@@ -507,6 +508,33 @@ class Generator {
            CompileType::Any());
   }
 
+  void EmitCheckRenererStatusInstr(CheckRendererStatusInstr* instr) {
+    CallRt("kura_rt_check_renderer", void_ty_, {});
+  }
+
+  void EmitBeginFrame(BeginFrameInstr* draw) {
+    llvm::Value* width = b_.getInt32(draw->GetWidth());
+    llvm::Value* height = b_.getInt32(draw->GetHeight());
+    CallRt("kura_rt_begin_frame", void_ty_, {width, height});
+  }
+
+  void EmitEndFrame(EndFrameInstr* draw) {
+    CallRt("kura_rt_end_frame", void_ty_, {});
+  }
+
+  void EmitDrawRect(DrawRectInstr* draw) {
+    CallRt("kura_rt_draw_rect", void_ty_, {});
+  }
+
+  void EmitFillRect(FillRectInstr* draw) {
+    CallRt("kura_rt_fill_rect", void_ty_, {});
+  }
+
+  void EmitDrawText(DrawTextInstr* draw) {
+    const auto a = Val(draw->GetValue());
+    CallRt("kura_rt_draw_text", void_ty_, {a});
+  }
+
   // ── calls ────────────────────────────────────────────────────────────────
   // A direct call to an extern that needs the call site: a variadic one
   // (`printf("%d", n)`), or one that takes a callback, which is the name of a
@@ -604,6 +632,18 @@ class Generator {
       return EmitUnary(u);
     if (const auto c = instr->AsCall())
       return EmitCall(c);
+    if (const auto d = instr->AsDrawRect())
+      return EmitDrawRect(d);
+    if (const auto d = instr->AsFillRect())
+      return EmitFillRect(d);
+    if (const auto d = instr->AsDrawText())
+      return EmitDrawText(d);
+    if (const auto d = instr->AsBeginFrame())
+      return EmitBeginFrame(d);
+    if (const auto d = instr->AsEndFrame())
+      return EmitEndFrame(d);
+    if (const auto d = instr->AsCheckRendererStatus())
+      return EmitCheckRenererStatusInstr(d->AsCheckRendererStatus());
 
     if (const auto phi = instr->AsPhi()) {
       const auto node = b_.CreatePHI(Lower(phi->GetCompileType()), phi->GetNumberOfIncoming());

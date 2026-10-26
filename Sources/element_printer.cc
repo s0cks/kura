@@ -46,5 +46,6 @@ DEFINE_VISIT(Canvas);
 DEFINE_VISIT(Input);
 DEFINE_VISIT(Block);
 DEFINE_VISIT(Text);
+DEFINE_VISIT(Surface);
 #undef DEFINE_VISIT
 }  // namespace kura::elem

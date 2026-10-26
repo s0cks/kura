@@ -7,10 +7,12 @@ target_sources(kura-runtime
          flow_graph_builder.cc
          flow_graph_compiler.cc
          ir.cc
+         gir.cc
          ir_printer.cc
          jit.cc
          llvm_codegen.cc
          purity_analysis.cc
          runtime_abi.cc
          type_analysis.cc
+         node_visitor.cc
          value_visitor.cc)

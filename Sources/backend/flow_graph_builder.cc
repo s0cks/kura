@@ -10,9 +10,12 @@
 #include "backend/value_visitor.h"
 #include "common.h"
 #include "frontend/expr.h"
+#include "frontend/expr_printer.h"
 #include "function.h"
+#include "gir.h"
 #include "local_scope.h"
 #include "module.h"
+#include "node_visitor.h"
 
 namespace kura {
 FlowGraphBuilder::FlowGraphBuilder(Context* ctx, const std::string& name, Function* function) :
@@ -29,6 +32,7 @@ FlowGraphBuilder::FlowGraphBuilder(Context* ctx, const std::string& name, Functi
 void FlowGraphBuilder::Emit(Instruction* instr) {
   if (!tail_)  // unreachable
     return;
+
   Instruction::Link(tail_, instr);
   tail_ = instr;
 }
@@ -60,6 +64,7 @@ auto FlowGraphBuilder::IsGlobal(LocalVariable* local) -> bool {
 auto FlowGraphBuilder::FindFunction(LocalVariable* local) const -> Function* {
   if (!IsGlobal(local))
     return nullptr;
+
   const auto it = ctx_->functions.find(std::string(local->GetName()->GetData()));
   return it == ctx_->functions.end() ? nullptr : it->second;
 }
@@ -78,22 +83,65 @@ void FlowGraphBuilder::AddParameters(const std::vector<LocalVariable*>& params,
     Define(local, param);
     Emit(param);
   }
+
   for (const auto local : captures) {
     const auto param = ParameterInstr::New(local, index++, true);
     graph_->AddParameter(param);
     Define(local, param);
     Emit(param);
   }
+
   graph_->SetCaptures(captures);
 }
 
-auto FlowGraphBuilder::BuildBody(expr::Expr* body) -> bool {
-  ValueVisitor for_body(this);
+auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
+  std::cout << "building view body" << std::endl;
+  expr::ExprPrinter printer(std::cout, Indent{});
+  if (!body->Accept(&printer))
+    return false;
+  std::cout << std::endl;
+
+  {
+    const auto defn = BeginFrameInstr::New(1024, 1024);
+#ifdef KURA_DEBUG
+    Emit(CheckRendererStatusInstr::New(Bind(defn)));
+#else
+    Emit(defn);
+#endif  // KURA_DEBUG
+  }
+
+  NodeVisitor for_body(this);
   if (!body->Accept(&for_body))
     return false;
+
+  {
+    const auto defn = EndFrameInstr::New();
+#ifdef KURA_DEBUG
+    Emit(CheckRendererStatusInstr::New(Bind(defn)));
+#else
+    Emit(defn);
+#endif  // KURA_DEBUG
+  }
+
   Value* value = for_body.GetValue();
   if (!value)
     value = Bind(ConstantInstr::New(None::Get()));
+  Terminate(ReturnInstr::New(value));
+  return true;
+}
+
+auto FlowGraphBuilder::BuildBody(expr::Expr* body) -> bool {
+  if (name_ == "view")
+    return BuildViewBody(body);
+
+  ValueVisitor for_body(this);
+  if (!body->Accept(&for_body))
+    return false;
+
+  Value* value = for_body.GetValue();
+  if (!value)
+    value = Bind(ConstantInstr::New(None::Get()));
+
   Terminate(ReturnInstr::New(value));
   return true;
 }
@@ -104,6 +152,7 @@ auto FlowGraphBuilder::BuildInit(const std::vector<expr::StoreLocalExpr*>& bindi
     if (!binding->Accept(&for_binding))
       return false;
   }
+
   Terminate(ReturnInstr::New(Bind(ConstantInstr::New(None::Get()))));
   return true;
 }
@@ -113,6 +162,7 @@ auto FlowGraphBuilder::Finish() -> FlowGraph* {
   std::string error;
   if (!graph_->Verify(&error))
     ctx_->errors.push_back("internal error: " + error);
+
   return graph_;
 }
 
@@ -152,6 +202,7 @@ class FreeLocals : public expr::ExprVisitor {
       if (!Walk(child))
         return false;
     }
+
     return true;
   }
 
@@ -166,10 +217,12 @@ class FreeLocals : public expr::ExprVisitor {
   auto VisitMatch(expr::MatchExpr* expr) -> VisitResult override {
     if (!Walk(expr->GetSubject()))
       return false;
+
     for (const auto c : expr->GetCases()) {
       if (!Walk(c))
         return false;
     }
+
     return Walk(expr->GetWildcard());
   }
 
@@ -178,10 +231,17 @@ class FreeLocals : public expr::ExprVisitor {
       if (!Walk(prop))
         return false;
     }
+
+    if (expr->IsText())
+      std::cout << "building text node" << std::endl;
+
     for (const auto child : expr->GetChildren()) {
+      if (expr->IsText())
+        std::cout << "child: " << child->GetName() << std::endl;
       if (!Walk(child))
         return false;
     }
+
     return true;
   }
 
@@ -190,6 +250,7 @@ class FreeLocals : public expr::ExprVisitor {
       if (!Walk(child))
         return false;
     }
+
     return true;
   }
 
@@ -198,6 +259,7 @@ class FreeLocals : public expr::ExprVisitor {
       if (!Walk(child))
         return false;
     }
+
     return true;
   }
 
@@ -211,6 +273,7 @@ class FreeLocals : public expr::ExprVisitor {
       if (!Walk(entry))
         return false;
     }
+
     return true;
   }
 
@@ -259,12 +322,15 @@ class FreeLocals : public expr::ExprVisitor {
     FreeLocals inner{};
     for (const auto param : expr->GetParams())
       inner.defs.insert(param);
+
     if (!inner.Walk(expr->GetBody()))
       return false;
+
     for (const auto local : inner.order) {
       if (!inner.defs.contains(local))
         Use(local);
     }
+
     return true;
   }
 
@@ -281,10 +347,12 @@ class FreeLocals : public expr::ExprVisitor {
   auto VisitCall(expr::CallExpr* expr) -> VisitResult override {
     if (!Walk(expr->GetTarget()))
       return false;
+
     for (const auto arg : expr->GetArgs()) {
       if (!Walk(arg))
         return false;
     }
+
     return true;
   }
 };
@@ -298,6 +366,7 @@ auto FlowGraphBuilder::BuildLambda(Context* ctx, expr::LambdaExpr* lambda, const
   builder.AddParameters(lambda->GetParams(), captures);
   if (!builder.BuildBody(lambda->GetBody()))
     return nullptr;
+
   const auto graph = builder.Finish();
   ctx->graph->Add(graph);
   return ctx->errors.empty() ? graph : nullptr;
@@ -312,6 +381,7 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
   const auto report = [&]() -> ModuleGraph* {
     if (errors)
       errors->insert(errors->end(), ctx.errors.begin(), ctx.errors.end());
+
     return nullptr;
   };
 
@@ -319,6 +389,7 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
     FlowGraphBuilder builder(&ctx, "init", nullptr);
     if (!builder.BuildInit(module->bindings))
       return report();
+
     ctx.graph->SetInit(builder.Finish());
   }
 
@@ -329,34 +400,43 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
     }
     if (!func->HasBody())
       continue;
+
     FlowGraphBuilder builder(&ctx, std::string(func->GetName()->GetData()), func);
     std::vector<LocalVariable*> params{};
     for (const auto& param : func->GetParameters())
       params.push_back(param.local);
+
     builder.AddParameters(params, {});
     if (!builder.BuildBody(func->GetBody()))
       return report();
+
     ctx.graph->Add(builder.Finish());
   }
+
   if (!ctx.errors.empty())
     return report();
+
   return ctx.graph;
 }
 
 auto FlowGraphBuilder::BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph* {
   if (!expr)
     return nullptr;
+
   Context ctx{};
   ctx.graph = new ModuleGraph();
   FlowGraphBuilder builder(&ctx, "anonymous", nullptr);
   if (!builder.BuildBody(expr)) {
     for (const auto& error : ctx.errors)
       std::cerr << error << std::endl;
+
     return nullptr;
   }
+
   const auto graph = builder.Finish();
   for (const auto& error : ctx.errors)
     std::cerr << error << std::endl;
+
   return ctx.errors.empty() ? graph : nullptr;
 }
 
@@ -365,13 +445,16 @@ auto CollectCaptures(expr::LambdaExpr* lambda) -> std::vector<LocalVariable*> {
   FreeLocals free{};
   for (const auto param : lambda->GetParams())
     free.defs.insert(param);
+
   free.Walk(lambda->GetBody());
   std::vector<LocalVariable*> captures{};
   for (const auto local : free.order) {
     if (free.defs.contains(local) || FlowGraphBuilder::IsGlobal(local))
       continue;
+
     captures.push_back(local);
   }
+
   return captures;
 }
 }  // namespace kura

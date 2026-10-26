@@ -116,7 +116,13 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_string_from_cstr)     \
   V(kura_rt_string_from_cstr_opt) \
   V(kura_rt_ffi_overflow)         \
-  V(kura_rt_ffi_error)
+  V(kura_rt_ffi_error)            \
+  V(kura_rt_check_renderer)       \
+  V(kura_rt_begin_frame)          \
+  V(kura_rt_end_frame)            \
+  V(kura_rt_fill_rect)            \
+  V(kura_rt_draw_rect)            \
+  V(kura_rt_draw_text)
 // clang-format on
 
 extern "C" {
@@ -137,6 +143,13 @@ void* kura_rt_seq_concat(void* a, void* b);
 // Seqs and nodes (children)
 int64_t kura_rt_len(void* object);
 void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bits);
+
+void kura_rt_check_renderer();
+void kura_rt_begin_frame(uint32_t width, uint32_t height);
+void kura_rt_end_frame();
+void kura_rt_fill_rect();
+void kura_rt_draw_rect();
+void kura_rt_draw_text(void* text);
 
 // Records and nodes (properties)
 void* kura_rt_record_new();

@@ -24,7 +24,8 @@ namespace kura::elem {
   V(Viewport)                    \
   V(Canvas)                      \
   V(Input)                       \
-  V(Scroll)
+  V(Scroll)                      \
+  V(Surface)
 
 class Node;
 // clang-format off
@@ -449,6 +450,19 @@ class Viewport : public LayoutNode {
  public:
   static inline auto New() -> Viewport* {
     return new Viewport();
+  }
+};
+
+class Surface : public LayoutNode {
+ public:
+  Surface() = default;
+  ~Surface() override = default;
+
+  DECLARE_ELEMENT_NODE_TYPE(Surface);
+
+ public:
+  static inline auto New() -> Surface* {
+    return new Surface();
   }
 };
 }  // namespace kura::elem

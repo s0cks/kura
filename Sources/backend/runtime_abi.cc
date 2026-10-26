@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "binary_op.h"
+#include "common.h"
 #include "unary_op.h"
 
 namespace kura::rt {
@@ -409,6 +410,30 @@ void* kura_rt_seq_concat(void* a, void* b) {
   result->items = x->items;
   result->items.insert(result->items.end(), y->items.begin(), y->items.end());
   return result;
+}
+
+void kura_rt_begin_frame(uint32_t width, uint32_t height) {
+  std::cout << "renering frame " << width << "x" << height << std::endl;
+}
+
+void kura_rt_end_frame() {
+  NOT_IMPLEMENTED;
+}
+
+void kura_rt_fill_rect() {
+  NOT_IMPLEMENTED;
+}
+
+void kura_rt_draw_rect() {
+  NOT_IMPLEMENTED;
+}
+
+void kura_rt_draw_text(void* a) {
+  std::cout << "rendering text: " << static_cast<StringObj*>(a)->value << std::endl;
+}
+
+void kura_rt_check_renderer() {
+  NOT_IMPLEMENTED;
 }
 
 int64_t kura_rt_len(void* object) {

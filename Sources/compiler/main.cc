@@ -1,4 +1,5 @@
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -72,12 +73,14 @@ class ModulePrinter {
     if (!graph) {
       for (const auto& error : errors)
         std::cerr << "error: " << error << std::endl;
+
       return false;
     }
 
     if (!TypeAnalysis::Run(rhs, graph, &errors) || !PurityAnalysis::Run(rhs, graph, &errors)) {
       for (const auto& error : errors)
         std::cerr << "error: " << error << std::endl;
+
       return false;
     }
 
@@ -149,16 +152,19 @@ auto ParseOptions(int argc, char** argv, Options* options) -> bool {
         std::cerr << "--run needs a function name" << std::endl;
         return false;
       }
+
       options->run = true;
       options->function = argv[++idx];
       // everything after the function is an argument for it
       while (idx + 1 < argc)
         options->args.push_back(argv[++idx]);
+
     } else {
       std::cerr << "unknown option: " << arg << std::endl;
       return false;
     }
   }
+
   return true;
 }
 
@@ -173,27 +179,35 @@ auto ParseArgument(const std::string& text) -> rt::KuraValue {
   };
   if (text == "true" || text == "false")
     return {rt::kTagBool, text == "true" ? 1ULL : 0ULL};
+
   if (text == "none")
     return {rt::kTagNone, 0};
+
   try {
     size_t used = 0;
     const auto value = std::stoll(text, &used);
     if (used == text.size())
       return {rt::kTagInt, static_cast<uint64_t>(value)};
+
   } catch (...) {}
+
   try {
     size_t used = 0;
     const auto value = std::stod(text, &used);
     if (used == text.size())
       return {rt::kTagFloat, bits_of(value)};
+
     const auto unit = text.substr(used);
     if (unit == "px")
       return {rt::kTagPx, bits_of(value)};
+
     if (unit == "%")
       return {rt::kTagPct, bits_of(value)};
+
     if (unit == "fr")
       return {rt::kTagFr, bits_of(value)};
   } catch (...) {}
+
   return rt::MakeString(text);
 }
 // The command line can only build scalars, so the arguments of a call from it
@@ -206,16 +220,19 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
     if (std::string(function->GetName()->GetData()) == name)
       graph = graphs->GetGraphFor(function);
   }
+
   if (!graph || !graph->GetReturnType()) {
     *error = "there is no function `" + name + "`";
     return false;
   }
+
   const auto& params = graph->GetParameterTypes();
   if (params.size() != args.size()) {
     *error = "`" + name + "` takes " + std::to_string(params.size()) + " argument(s) but " +
              std::to_string(args.size()) + " were given";
     return false;
   }
+
   for (size_t idx = 0; idx < args.size(); idx++) {
     const auto type = params[idx];
     const auto tag = args[idx].tag;
@@ -225,37 +242,48 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
         case CompileType::kAny:
           ok = true;
           break;
+
         case CompileType::kNumber:
           ok |= tag == rt::kTagInt || tag == rt::kTagFloat;
           break;
+
         case CompileType::kInt:
           ok |= tag == rt::kTagInt;
           break;
+
         case CompileType::kFloat:
           ok |= tag == rt::kTagFloat;
           break;
+
         case CompileType::kBool:
           ok |= tag == rt::kTagBool;
           break;
+
         case CompileType::kNone:
           ok |= tag == rt::kTagNone;
           break;
+
         case CompileType::kString:
           ok |= tag == rt::kTagString;
           break;
+
         case CompileType::kPx:
           ok |= tag == rt::kTagPx;
           break;
+
         case CompileType::kPct:
           ok |= tag == rt::kTagPct;
           break;
+
         case CompileType::kFr:
           ok |= tag == rt::kTagFr;
           break;
+
         default:
           break;
       }
     }
+
     if (!ok) {
       *error = "argument " + std::to_string(idx + 1) + " of `" + name + "` is " + rt::Format(args[idx]) +
                ", which isn't a " + type->ToString() +
@@ -263,6 +291,7 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
       return false;
     }
   }
+
   return true;
 }
 }  // namespace
@@ -304,6 +333,7 @@ auto main(int argc, char** argv) -> int {
   Module* m = nullptr;
   Parser parser(scope);
 
+  const auto comp_start = std::chrono::high_resolution_clock::now();
   {
     const auto result = parser.ParseModuleFromFile(options.filename, &m);
     if (!result) {
@@ -398,21 +428,29 @@ auto main(int argc, char** argv) -> int {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
+  const auto comp_end = std::chrono::high_resolution_clock::now();
+  const auto comp_dur = std::chrono::duration_cast<std::chrono::milliseconds>(comp_end - comp_start);
+
+  std::cout << "compilation finished in " << comp_dur.count() << "ms" << std::endl;
 
   std::vector<rt::KuraValue> args{};
   for (const auto& arg : options.args)
     args.push_back(ParseArgument(arg));
+
   if (!CheckArguments(m, graphs, options.function, args, &error)) {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
 
+  const auto exec_start = std::chrono::high_resolution_clock::now();
   rt::KuraValue result{};
   if (!jit->Call(options.function, args, &result, &error)) {
     std::cerr << "error: " << error << std::endl;
     return EXIT_FAILURE;
   }
+  const auto exec_end = std::chrono::high_resolution_clock::now();
+  const auto exec_dur = std::chrono::duration_cast<std::chrono::microseconds>((exec_end - exec_start));
 
-  std::cout << "=> " << rt::Format(result) << std::endl;
+  std::cout << "=> " << rt::Format(result) << "  (" << exec_dur.count() << "us)" << std::endl;
   return EXIT_SUCCESS;
 }

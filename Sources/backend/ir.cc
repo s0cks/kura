@@ -4,6 +4,7 @@
 
 #include "backend/flow_graph.h"
 #include "function.h"
+#include "gir.h"
 #include "local_scope.h"
 
 namespace kura {

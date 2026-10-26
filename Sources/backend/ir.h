@@ -44,7 +44,27 @@ namespace kura {
   V(Label)                      \
   V(StoreLocal)                 \
   V(LoadLocal)                  \
-  V(Alloc)
+  V(Alloc)                      \
+  V(CheckRendererStatus)        \
+  V(BeginFrame)                 \
+  V(EndFrame)                   \
+  V(PushClip)                   \
+  V(PopClip)                    \
+  V(MeasureText)                \
+  V(FillRect)                   \
+  V(FillRoundRect)              \
+  V(FillCircle)                 \
+  V(FillPolygon)                \
+  V(FillBezier)                 \
+  V(DrawLine)                   \
+  V(DrawRect)                   \
+  V(DrawRoundRect)              \
+  V(DrawCircle)                 \
+  V(DrawElipse)                 \
+  V(DrawPolygon)                \
+  V(DrawText)                   \
+  V(DrawStrokeBezier)           \
+  V(DrawQuadBezier)
 
 class Instruction;
 class EntryInstr;

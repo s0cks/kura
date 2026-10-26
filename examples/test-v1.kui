@@ -48,3 +48,25 @@ fn view(count: Number): Node =>
     let label = "Count"
     #text(label)
   }
+
+fn view2(count: Number): Content =>
+  #button(on-click: Tick) {
+    let label = "Count"
+    #text(label)
+  }
+
+
+type State = {
+  message: String
+}
+
+fn view(): Content => {
+  let state: State = {
+    message: "This is a button",
+  }
+  #button(on-click: Tick) {
+    #text(state.message)
+    #text("Hello World")
+    #surface()
+  }
+}
