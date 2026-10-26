@@ -46,6 +46,7 @@ enum Tag : uint64_t {
   kTagSeq = 11,
   kTagRecord = 12,
   kTagFunction = 13,
+  kTagHandle = 14,
 };
 
 static constexpr const uint64_t kVariantBit = 1ULL << 63;
@@ -110,7 +111,12 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_unop)                 \
   V(kura_rt_eq)                   \
   V(kura_rt_sdiv)                 \
-  V(kura_rt_srem)
+  V(kura_rt_srem)                 \
+  V(kura_rt_string_cstr)          \
+  V(kura_rt_string_from_cstr)     \
+  V(kura_rt_string_from_cstr_opt) \
+  V(kura_rt_ffi_overflow)         \
+  V(kura_rt_ffi_error)
 // clang-format on
 
 extern "C" {
@@ -157,6 +163,15 @@ KuraValue kura_rt_unop(uint64_t op, uint64_t tag, uint64_t bits);
 uint64_t kura_rt_eq(uint64_t a_tag, uint64_t a_bits, uint64_t b_tag, uint64_t b_bits);
 int64_t kura_rt_sdiv(int64_t a, int64_t b);
 int64_t kura_rt_srem(int64_t a, int64_t b);
+
+// C interop. A String is handed to C as its NUL-terminated bytes, which stay
+// valid for the life of the program. A null pointer from C is a panic unless
+// the result is declared nullable (`_opt`).
+const char* kura_rt_string_cstr(void* string);
+void* kura_rt_string_from_cstr(const char* data, const char* what);
+void* kura_rt_string_from_cstr_opt(const char* data);
+[[noreturn]] void kura_rt_ffi_overflow(int64_t value, const char* what);
+[[noreturn]] void kura_rt_ffi_error(const char* message);
 }
 
 #endif  // KURA_RUNTIME_ABI_H

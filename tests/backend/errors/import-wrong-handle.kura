@@ -1,0 +1,5 @@
+// error: argument 1 is Handle<geometry_canvas> but Handle<FILE> | None is expected
+// flags: -I$DIR
+use "stdio.h"
+use "geometry.h" as g
+fn f(c: g.geometry_canvas): Int => stdio.fclose(c)

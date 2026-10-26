@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "common.h"
+#include "c_type.h"
 #include "frontend/type_expr.h"
 #include "object.h"
 
@@ -37,6 +38,16 @@ class Function {
   ParameterList parameters_{};
   expr::TypeExpr* return_type_ = nullptr;
   expr::DirectiveList directives_{};
+  bool c_export_ = false;
+  CSignature* c_signature_ = nullptr;
+
+  void SetCSignature(CSignature* rhs) {
+    c_signature_ = rhs;
+  }
+
+  void SetCExport(const bool rhs) {
+    c_export_ = rhs;
+  }
 
   void SetBody(expr::SeqExpr* rhs) {
     body_ = rhs;
@@ -82,6 +93,21 @@ class Function {
 
   auto GetDirectives() const -> const expr::DirectiveList& {
     return directives_;
+  }
+
+  // Declared `extern fn name(...): T => body`: callable from C under the C ABI.
+  auto IsCExport() const -> bool {
+    return c_export_;
+  }
+
+  // The C signature of an `extern fn` (an import has no body, an export has one).
+  auto GetCSignature() const -> CSignature* {
+    return c_signature_;
+  }
+
+  // Declared `extern fn name(...): T` with no body: the code is in C.
+  auto IsExtern() const -> bool {
+    return c_signature_ != nullptr && !c_export_;
   }
 
   auto GetEntry() const -> GraphEntryInstr* {

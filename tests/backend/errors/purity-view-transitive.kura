@@ -1,0 +1,8 @@
+// error: view is not pure: view -> helper -> os.getpid
+use "unistd.h" as os
+type Model = { count: Int, }
+fn helper(): Int => os.getpid()
+fn view(model: Model): Node => {
+  let pid = helper()
+  #text("x")
+}

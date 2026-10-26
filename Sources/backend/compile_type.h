@@ -18,6 +18,8 @@ namespace kura {
 //            `Number` annotation means.
 //   Variant  one constructor of a sum type: `Click(Position)`, `Tick`.
 //   Union    `Node | None`, `Click(Position) | Tick`.
+//   Handle   an opaque pointer that came from C (`FILE*`, `Texture*`). It can be
+//            held and handed back to C, and compared, but not looked into.
 class CompileType {
  public:
   enum Kind {
@@ -39,6 +41,7 @@ class CompileType {
     kVariant,
     kFunction,
     kUnion,
+    kHandle,
   };
 
   struct Field {
@@ -97,6 +100,7 @@ class CompileType {
   DEFINE_KIND_CHECK(Variant)
   DEFINE_KIND_CHECK(Function)
   DEFINE_KIND_CHECK(Union)
+  DEFINE_KIND_CHECK(Handle)
 #undef DEFINE_KIND_CHECK
 
   // Int, Float, or Number.
@@ -120,6 +124,10 @@ class CompileType {
   auto FindField(const std::string& name) const -> const Field*;
 
   auto GetVariantName() const -> const std::string& {
+    return name_;
+  }
+
+  auto GetHandleName() const -> const std::string& {
     return name_;
   }
 
@@ -172,6 +180,7 @@ class CompileType {
   static auto Fr() -> CompileType*;
   static auto Node() -> CompileType*;
   static auto Seq(CompileType* element) -> CompileType*;
+  static auto Handle(const std::string& name) -> CompileType*;
   static auto Record(std::vector<Field> fields) -> CompileType*;
   static auto Variant(const std::string& name, CompileType* payload = nullptr) -> CompileType*;
   static auto Function(std::vector<CompileType*> params, CompileType* result) -> CompileType*;

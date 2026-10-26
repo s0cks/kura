@@ -81,6 +81,9 @@ auto CompileType::Intern(CompileType* proto) -> CompileType* {
         ss << (idx ? " | " : "") << proto->members_[idx]->ToString();
       break;
     }
+    case kHandle:
+      ss << "Handle<" << proto->name_ << ">";
+      break;
   }
   proto->repr_ = ss.str();
   // a function inside a union needs parentheses to read unambiguously
@@ -119,6 +122,12 @@ DEFINE_SIMPLE(Node)
 auto CompileType::Seq(CompileType* element) -> CompileType* {
   const auto type = new CompileType(kSeq);
   type->element_ = element;
+  return Intern(type);
+}
+
+auto CompileType::Handle(const std::string& name) -> CompileType* {
+  const auto type = new CompileType(kHandle);
+  type->name_ = name;
   return Intern(type);
 }
 

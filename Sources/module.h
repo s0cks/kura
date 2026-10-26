@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 
+#include "frontend/c_decl.h"
 #include "frontend/expr.h"
 #include "function.h"
 #include "view.h"
@@ -18,6 +19,7 @@ struct Module {
   std::string name{};
   std::vector<Function*> functions{};
   std::vector<expr::TypeDecl*> types{};
+  std::vector<expr::UseDecl*> uses{};
   // Top-level `let` / redefinition, in source order.
   std::vector<expr::StoreLocalExpr*> bindings{};
   View* view = nullptr;
@@ -42,6 +44,11 @@ struct Module {
   inline void AddType(expr::TypeDecl* decl) {
     types.push_back(decl);
   }
+
+  inline void AddUse(expr::UseDecl* decl) {
+    uses.push_back(decl);
+  }
+
 
   inline void AddBinding(expr::StoreLocalExpr* binding) {
     bindings.push_back(binding);

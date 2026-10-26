@@ -1,0 +1,2 @@
+// error: is not a C type
+extern fn f(x: Number): Int

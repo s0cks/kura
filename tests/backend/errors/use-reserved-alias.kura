@@ -1,0 +1,2 @@
+// error: 'c' is the name of the built-in C types
+use "math.h" as c

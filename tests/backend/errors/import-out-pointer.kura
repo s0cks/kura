@@ -1,0 +1,4 @@
+// error: a pointer to `double`
+// flags: -I$DIR
+use "geometry.h" as g
+fn f(c: g.geometry_canvas): Int => g.canvas_fill(c, 1, 2.0)

@@ -20,7 +20,7 @@ source
   ;
 
 item
-  : directive* ( typeDecl | fnDecl | letBinding | redefinition )
+  : directive* ( typeDecl | fnDecl | externDecl | useDecl | letBinding | redefinition )
   ;
 
 // `@vec`, `@meta(tags: [ Button, User ])` — hints only (see wiki Language-Directives).
@@ -45,6 +45,41 @@ typeParams
 // the "required for init/update/view" rule is a semantic check.
 fnDecl
   : FN IDENT LPAREN paramList? RPAREN ( COLON typeExpr )? FAT_ARROW expression
+  ;
+
+// `use "math.h"` binds the header's declarations to `math`; `use "math.h" as m`
+// binds them to `m`. The `.h` says the header is C.
+useDecl
+  : USE STRING ( AS qualifier )?
+  ;
+
+// `extern fn sqrt(x: Float): Float` imports a C function. With a body it
+// defines a function that C can call. The return type is always written.
+// `extern "getenv" fn getenv-nonnull(...)` names the C symbol when it isn't the
+// function's name. A trailing `...` is a variadic C function (`printf`): the
+// parameters before it are the fixed ones, and a call may pass more.
+externDecl
+  : EXTERN STRING? FN cName LPAREN externParams? RPAREN COLON typeExpr ( FAT_ARROW expression )?
+  ;
+
+externParams
+  : paramList ( COMMA SPREAD )? COMMA?
+  | SPREAD
+  ;
+
+// A name that comes from C. A backticked name is for one that is a keyword.
+cName
+  : IDENT
+  | UPPER_IDENT
+  | RAW_IDENT
+  ;
+
+// What can follow a `.`: any name, including the ones that are keywords in
+// Kura (`event.type`).
+memberName
+  : cName
+  | LET | FN | TYPE | IF | ELSE | MATCH | FOR | IN | FOLD
+  | TRUE | FALSE | NONE | USE | AS | EXTERN | COLOR_LIT
   ;
 
 paramList
@@ -81,6 +116,7 @@ typeExpr
 typeMember
   : UPPER_IDENT LPAREN typeExpr RPAREN        # VariantType   // Click(Position)
   | UPPER_IDENT typeArgs?                     # NamedType     // Tick, Number, Seq<Px>
+  | qualifier DOT cName typeArgs?             # QualifiedType // rl.Vector2, math.uint8_t
   | NONE                                      # NoneType
   | recordType                                # RecordTypeMember
   | functionType                              # FunctionTypeMember
@@ -88,6 +124,11 @@ typeMember
 
 typeArgs
   : LT typeExpr ( COMMA typeExpr )* GT
+  ;
+
+qualifier
+  : IDENT
+  | UPPER_IDENT
   ;
 
 // There is no bare `Record` type: properties are always listed.
@@ -119,8 +160,8 @@ pipeTarget
   ;
 
 pipeCallee
-  : IDENT ( DOT IDENT )*
-  | UPPER_IDENT
+  : IDENT ( DOT memberName )*
+  | UPPER_IDENT ( DOT memberName )*
   | LPAREN expression RPAREN
   ;
 
@@ -128,7 +169,7 @@ pipeCallee
 // Binary minus is its own token (BIN_MINUS) because it needs whitespace on
 // both sides; unary minus is MINUS.
 operation
-  : operation DOT IDENT                                   # PropertyAccess
+  : operation DOT memberName                              # PropertyAccess
   | operation LPAREN argumentList? RPAREN                 # CallExpr
   | op = ( MINUS | BANG ) operation                       # UnaryExpr
   | operation op = ( STAR | SLASH ) operation             # MultiplicativeExpr

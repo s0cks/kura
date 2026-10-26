@@ -1,0 +1,36 @@
+@pure(sqrt, floor)
+use "math.h"
+use "stdlib.h"
+use "unistd.h" as os
+
+@pure
+extern fn labs(x: c.long): c.long
+
+type Model = { count: Int, }
+
+fn init(): Model => { count: os.getpid() * 0, }
+
+fn update(delta: Int, model: Model): Model => {
+  let pid = os.getpid()
+  { count: model.count + stdlib.abs(delta) + pid * 0, }
+}
+
+fn view(model: Model): Node => {
+  let root = math.sqrt(2.0)
+  let magnitude = stdlib.abs(model.count)
+  let wide = labs(model.count)
+  #text("count")
+}
+
+// run: initial => 0
+fn initial(): Int => init().count
+// run: stepped => 3
+fn stepped(): Int => update(-3, init()).count
+// run: stepped-twice => 7
+fn stepped-twice(): Int => update(4, update(-3, init())).count
+// run: rooted => 5.0
+fn rooted(): Float => math.sqrt(25.0)
+// run: floored => 2.0
+fn floored(): Float => math.floor(2.7)
+// run: pid-is-positive => true
+fn pid-is-positive(): Bool => os.getpid() > 0

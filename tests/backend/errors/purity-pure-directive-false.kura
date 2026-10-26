@@ -1,0 +1,4 @@
+// error: @pure function 'f' is not pure: f -> os.getpid
+use "unistd.h" as os
+@pure
+fn f(): Int => os.getpid()

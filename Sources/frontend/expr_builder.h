@@ -12,6 +12,9 @@
 #include "KuraParserBaseVisitor.h"
 // clang-format on
 
+#include "c_import.h"
+#include "c_type.h"
+#include "frontend/c_decl.h"
 #include "frontend/expr.h"
 #include "function.h"
 #include "local_scope.h"
@@ -120,6 +123,12 @@ class ExprBuilder : public KuraParserBaseVisitor {
   ModuleBuilder* owner_;
   LocalScope* module_scope_ = nullptr;
   std::unordered_set<std::string> function_names_{};
+  std::unordered_set<std::string> use_aliases_{};
+  std::unordered_map<std::string, std::shared_ptr<CHeader>> headers_{};
+  std::unordered_set<std::string> imported_{};
+  std::unordered_set<std::string> pure_headers_{};
+  std::unordered_map<std::string, std::unordered_set<std::string>> pure_names_{};
+  Module* module_ = nullptr;
 
   [[noreturn]] static void Error(antlr4::ParserRuleContext* ctx, const std::string& message);
 
@@ -142,6 +151,12 @@ class ExprBuilder : public KuraParserBaseVisitor {
   auto BuildTypeMember(KuraParser::TypeMemberContext* ctx) -> TypeExpr*;
   auto BuildTypeDecl(KuraParser::TypeDeclContext* ctx, const std::vector<KuraParser::DirectiveContext*>& directives)
       -> TypeDecl*;
+  auto BuildUseDecl(KuraParser::UseDeclContext* ctx, const std::vector<KuraParser::DirectiveContext*>& directives)
+      -> UseDecl*;
+  auto BuildCSignature(KuraParser::ExternDeclContext* ctx, const std::string& name) -> CSignature*;
+  auto ToCType(antlr4::ParserRuleContext* where, TypeExpr* type, const bool is_result, const std::string& what)
+      -> CType;
+  auto ResolveImport(antlr4::ParserRuleContext* ctx, const std::string& alias, const std::string& member) -> Expr*;
   auto BuildUnit(KuraParser::UnitLiteralContext* ctx, const bool negate) -> Object*;
   auto BuildCall(antlr4::ParserRuleContext* ctx, Expr* target, ExprList args) -> Expr*;
   auto BuildPipeTarget(KuraParser::PipeTargetContext* ctx, Expr* lhs) -> Expr*;

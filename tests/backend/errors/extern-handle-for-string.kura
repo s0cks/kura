@@ -1,0 +1,4 @@
+// error: argument 1 is Handle<ptr> but String is expected
+extern fn strdup(s: String): c.ptr
+extern fn strlen(s: String): c.size_t
+fn f(): Int => strlen(strdup("x"))

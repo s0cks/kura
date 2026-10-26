@@ -1,0 +1,2 @@
+// error: c.out is only for parameters
+extern fn f(): c.out<c.int>

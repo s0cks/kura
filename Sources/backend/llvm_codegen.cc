@@ -1,20 +1,31 @@
 #include "backend/llvm_codegen.h"
 
+#include <llvm/Config/llvm-config.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Linker/Linker.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/CodeGen.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
-
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
 #include <map>
 #include <set>
 #include <unordered_map>
 #include <vector>
 
+#include "backend/c_compile.h"
 #include "backend/compile_type.h"
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
+#include "c_type.h"
 #include "function.h"
 #include "local_scope.h"
 #include "module.h"
@@ -36,6 +47,7 @@ enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged };
 auto RepOf(CompileType* type) -> Rep {
   switch (type->GetKind()) {
     case CompileType::kInt:
+    case CompileType::kHandle:
       return Rep::kInt;
     case CompileType::kFloat:
     case CompileType::kPx:
@@ -86,6 +98,8 @@ auto TagOf(CompileType* type) -> uint64_t {
       return rt::kTagRecord;
     case CompileType::kFunction:
       return rt::kTagFunction;
+    case CompileType::kHandle:
+      return rt::kTagHandle;
     default:
       return rt::kTagNone;
   }
@@ -119,6 +133,7 @@ class Generator {
   llvm::Type* void_ty_;
 
   std::unordered_map<FlowGraph*, llvm::Function*> natives_{};
+  std::unordered_map<FlowGraph*, llvm::Function*> adapters_{};
   std::unordered_map<FlowGraph*, llvm::Function*> thunks_{};
   std::unordered_map<LocalVariable*, llvm::GlobalVariable*> globals_{};
   std::vector<std::pair<std::string, llvm::GlobalVariable*>> strings_{};
@@ -493,6 +508,26 @@ class Generator {
   }
 
   // ── calls ────────────────────────────────────────────────────────────────
+  // A direct call to an extern that needs the call site: a variadic one
+  // (`printf("%d", n)`), or one that takes a callback, which is the name of a
+  // function.
+  void EmitExternCall(CallInstr* call, FlowGraph* graph) {
+    const auto& c = *graph->GetFunction()->GetCSignature();
+    const auto& args = call->GetArgs();
+    const auto& kura_params = graph->GetParameterTypes();
+    std::vector<llvm::Value*> values{};
+    size_t next = 0;
+    for (const auto& param : c.params) {
+      if (param.kind == CType::kOut)
+        continue;
+      values.push_back(param.kind == CType::kCallback ? nullptr : As(args[next], kura_params[next]));
+      next++;
+    }
+    for (; next < args.size(); next++)
+      values.push_back(Val(args[next]));
+    Define(call, CallC(graph, values, call), graph->GetReturnType());
+  }
+
   void EmitCall(CallInstr* call) {
     const auto& args = call->GetArgs();
     const auto target = call->GetTarget();
@@ -501,6 +536,9 @@ class Generator {
     if (const auto load = target->GetDefinition()->AsLoadFunction()) {
       const auto graph = graphs_->GetGraphFor(load->GetFunction());
       const auto native = graph ? natives_[graph] : nullptr;
+      if (native && graph->IsExtern() &&
+          (load->GetFunction()->GetCSignature()->variadic || load->GetFunction()->GetCSignature()->HasCallbacks()))
+        return EmitExternCall(call, graph);
       if (native) {
         const auto& params = graph->GetParameterTypes();
         std::vector<llvm::Value*> values{};
@@ -512,7 +550,8 @@ class Generator {
 
     // anything else is a closure: its thunk takes tagged arguments
     const auto closure_ty = Type(target);
-    const auto closure = RepOf(closure_ty) == Rep::kPtr ? Val(target) : As(target, CompileType::Function({}, CompileType::Any()));
+    const auto closure =
+        RepOf(closure_ty) == Rep::kPtr ? Val(target) : As(target, CompileType::Function({}, CompileType::Any()));
     const auto fn = CallRt("kura_rt_closure_fn", ptr_ty_, {closure, b_.getInt64(args.size())});
     std::vector<llvm::Type*> types{ptr_ty_};
     std::vector<llvm::Value*> values{closure};
@@ -534,8 +573,7 @@ class Generator {
       case kIntType:
         return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
       case kFloatType:
-        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()),
-                      CompileType::Float());
+        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()), CompileType::Float());
       case kPxType:
         return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Px*>(value)->GetValue()), CompileType::Px());
       case kPctType:
@@ -580,7 +618,8 @@ class Generator {
       if (!thunk)
         return Fail("internal error: no code for function `" + std::string(l->GetFunction()->GetName()->GetData()) +
                     "`");
-      const auto closure = CallRt("kura_rt_closure_new", ptr_ty_, {thunk, b_.getInt64(graph->GetNumberOfParameters()), b_.getInt64(0)});
+      const auto closure = CallRt("kura_rt_closure_new", ptr_ty_,
+                                  {thunk, b_.getInt64(graph->GetParameterTypes().size()), b_.getInt64(0)});
       return Define(l, closure, l->GetCompileType());
     }
 
@@ -590,8 +629,8 @@ class Generator {
       if (!thunk)
         return Fail("internal error: no code for " + graph->GetName());
       const auto arity = graph->GetNumberOfParameters() - graph->GetCaptures().size();
-      const auto closure = CallRt("kura_rt_closure_new", ptr_ty_,
-                                  {thunk, b_.getInt64(arity), b_.getInt64(n->GetCaptures().size())});
+      const auto closure =
+          CallRt("kura_rt_closure_new", ptr_ty_, {thunk, b_.getInt64(arity), b_.getInt64(n->GetCaptures().size())});
       uint64_t index = 0;
       for (const auto capture : n->GetCaptures())
         CallRt("kura_rt_closure_capture", void_ty_, {closure, b_.getInt64(index++), As(capture, CompileType::Any())});
@@ -653,9 +692,9 @@ class Generator {
     if (const auto n = instr->AsNewNode()) {
       std::string kind = "node";
       switch (n->GetKind()) {
-#define DEFINE_CASE(Name)       \
+#define DEFINE_CASE(Name)           \
   case NewNodeInstr::Kind::k##Name: \
-    kind = ToLower(#Name);      \
+    kind = ToLower(#Name);          \
     break;
         FOR_EACH_ELEMENT_NODE(DEFINE_CASE)
 #undef DEFINE_CASE
@@ -762,7 +801,459 @@ class Generator {
          " has no terminator");
   }
 
+  // ── C interop ────────────────────────────────────────────────────────────
+  auto CAbi(const CType& c) -> llvm::Type* {
+    switch (c.kind) {
+      case CType::kVoid:
+        return void_ty_;
+      case CType::kBool:
+        return i1_;
+      case CType::kI8:
+      case CType::kU8:
+        return i8_;
+      case CType::kI16:
+      case CType::kU16:
+        return llvm::Type::getInt16Ty(ctx_);
+      case CType::kI32:
+      case CType::kU32:
+        return llvm::Type::getInt32Ty(ctx_);
+      case CType::kI64:
+      case CType::kU64:
+        return i64_;
+      case CType::kF32:
+        return llvm::Type::getFloatTy(ctx_);
+      case CType::kF64:
+        return f64_;
+      case CType::kCString:
+      case CType::kHandle:
+      case CType::kOut:
+      case CType::kCallback:
+      case CType::kRecord:
+        return ptr_ty_;
+    }
+    return void_ty_;
+  }
+
+  // The C ABI wants a value narrower than an int extended to one.
+  static auto Extension(const CType& c) -> llvm::Attribute::AttrKind {
+    if (c.kind == CType::kBool)
+      return llvm::Attribute::ZExt;
+    if (c.IsInteger() && c.Bits() < 32)
+      return c.IsSigned() ? llvm::Attribute::SExt : llvm::Attribute::ZExt;
+    return llvm::Attribute::None;
+  }
+
+  auto Describe(const std::string& text) -> llvm::Value* {
+    return b_.CreateGlobalString(text, "kura.ffi");
+  }
+
+  // An Int on its way to a narrower C integer: it must be exactly representable.
+  auto NarrowToC(llvm::Value* value, const CType& c, const std::string& what) -> llvm::Value* {
+    if (c.kind == CType::kI64)
+      return value;
+    llvm::Value* narrow = value;
+    llvm::Value* fits = nullptr;
+    if (c.kind == CType::kU64) {
+      fits = b_.CreateICmpSGE(value, b_.getInt64(0));
+    } else {
+      narrow = b_.CreateTrunc(value, CAbi(c));
+      const auto back = c.IsSigned() ? b_.CreateSExt(narrow, i64_) : b_.CreateZExt(narrow, i64_);
+      fits = b_.CreateICmpEQ(back, value);
+    }
+    const auto function = b_.GetInsertBlock()->getParent();
+    const auto good = llvm::BasicBlock::Create(ctx_, "ffi.ok", function);
+    const auto bad = llvm::BasicBlock::Create(ctx_, "ffi.overflow", function);
+    b_.CreateCondBr(fits, good, bad);
+    b_.SetInsertPoint(bad);
+    CallRt("kura_rt_ffi_overflow", void_ty_, {value, Describe(what)});
+    b_.CreateUnreachable();
+    b_.SetInsertPoint(good);
+    return narrow;
+  }
+
+  // `value` holds a Kura value of `kura`; the result is what C is passed.
+  auto ToC(llvm::Value* value, CompileType* kura, const CType& c, const std::string& what) -> llvm::Value* {
+    switch (c.kind) {
+      case CType::kBool:
+        return value;
+      case CType::kF32:
+        return b_.CreateFPTrunc(value, CAbi(c));
+      case CType::kF64:
+        return value;
+      case CType::kCString: {
+        llvm::Value* object = value;
+        if (RepOf(kura) == Rep::kTagged)
+          object = b_.CreateIntToPtr(BitsOfValue(value), ptr_ty_);
+        return CallRt("kura_rt_string_cstr", ptr_ty_, {object});
+      }
+      case CType::kHandle: {
+        llvm::Value* bits = value;
+        if (RepOf(kura) == Rep::kTagged)
+          bits = BitsOfValue(value);
+        return b_.CreateIntToPtr(bits, ptr_ty_);
+      }
+      default:
+        return NarrowToC(value, c, what + " (" + c.ToString() + ")");
+    }
+  }
+
+  // What C returned, as a Kura value of `kura`.
+  auto FromC(llvm::Value* value, const CType& c, CompileType* kura, const std::string& what) -> llvm::Value* {
+    switch (c.kind) {
+      case CType::kVoid:
+        return b_.getInt8(0);
+      case CType::kBool:
+      case CType::kF64:
+        return value;
+      case CType::kF32:
+        return b_.CreateFPExt(value, f64_);
+      case CType::kCString: {
+        if (!c.nullable)
+          return CallRt("kura_rt_string_from_cstr", ptr_ty_, {value, Describe(what)});
+        const auto object = CallRt("kura_rt_string_from_cstr_opt", ptr_ty_, {value});
+        const auto missing = b_.CreateIsNull(object);
+        const auto tag = b_.CreateSelect(missing, b_.getInt64(rt::kTagNone), b_.getInt64(rt::kTagString));
+        return Pack(tag, b_.CreatePtrToInt(object, i64_));
+      }
+      case CType::kHandle: {
+        const auto bits = b_.CreatePtrToInt(value, i64_);
+        if (c.nullable) {
+          const auto tag =
+              b_.CreateSelect(b_.CreateIsNull(value), b_.getInt64(rt::kTagNone), b_.getInt64(rt::kTagHandle));
+          return Pack(tag, bits);
+        }
+        const auto function = b_.GetInsertBlock()->getParent();
+        const auto good = llvm::BasicBlock::Create(ctx_, "ffi.ok", function);
+        const auto bad = llvm::BasicBlock::Create(ctx_, "ffi.null", function);
+        b_.CreateCondBr(b_.CreateIsNull(value), bad, good);
+        b_.SetInsertPoint(bad);
+        CallRt("kura_rt_ffi_error", void_ty_,
+               {Describe(what + " returned NULL, but its result is not declared `| None`")});
+        b_.CreateUnreachable();
+        b_.SetInsertPoint(good);
+        return bits;
+      }
+      default:
+        break;
+    }
+    if (c.kind == CType::kU64) {
+      const auto function = b_.GetInsertBlock()->getParent();
+      const auto good = llvm::BasicBlock::Create(ctx_, "ffi.ok", function);
+      const auto bad = llvm::BasicBlock::Create(ctx_, "ffi.large", function);
+      b_.CreateCondBr(b_.CreateICmpSLT(value, b_.getInt64(0)), bad, good);
+      b_.SetInsertPoint(bad);
+      CallRt("kura_rt_ffi_error", void_ty_, {Describe("the result of " + what + " is too large for an Int")});
+      b_.CreateUnreachable();
+      b_.SetInsertPoint(good);
+      return value;
+    }
+    if (c.Bits() == 64)
+      return value;
+    return c.IsSigned() ? b_.CreateSExt(value, i64_) : b_.CreateZExt(value, i64_);
+  }
+
+  auto FieldPtr(llvm::Value* base, const uint64_t offset) -> llvm::Value* {
+    return offset ? b_.CreateConstInBoundsGEP1_64(i8_, base, offset) : base;
+  }
+
+  // Copies a record's fields into C memory, laid out as the struct is.
+  void StoreCRecord(llvm::Value* record, const CRecord& rec, llvm::Value* dst, const std::string& what) {
+    for (const auto& field : rec.fields) {
+      const auto tagged = CallRt("kura_rt_record_get", value_ty_, {record, b_.getInt64(rt::HashName(field.name))});
+      const auto kura = field.type.ToKuraType();
+      const auto value = Convert(tagged, CompileType::Any(), kura);
+      const auto where = FieldPtr(dst, field.offset);
+      const auto label = what + " field `" + field.name + "`";
+      if (field.type.kind == CType::kRecord)
+        StoreCRecord(value, *field.type.record, where, label);
+      else
+        b_.CreateStore(ToC(value, kura, field.type, label), where);
+    }
+  }
+
+  // Builds a record from the fields of a struct in C memory.
+  auto LoadCRecord(const CRecord& rec, llvm::Value* src, const std::string& what) -> llvm::Value* {
+    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {});
+    for (const auto& field : rec.fields) {
+      const auto where = FieldPtr(src, field.offset);
+      const auto kura = field.type.ToKuraType();
+      const auto label = what + " field `" + field.name + "`";
+      llvm::Value* value = nullptr;
+      if (field.type.kind == CType::kRecord)
+        value = LoadCRecord(*field.type.record, where, label);
+      else
+        value = FromC(b_.CreateLoad(CAbi(field.type), where), field.type, kura, label);
+      CallRt("kura_rt_record_set", void_ty_,
+             {record, b_.getInt64(rt::HashName(field.name)), NameConstant(field.name),
+              Convert(value, kura, CompileType::Any())});
+    }
+    return record;
+  }
+
+  // A function with a struct in its signature, or no symbol of its own, is
+  // reached through a C function that takes every argument by pointer (it is
+  // compiled by clang, which does the calling convention).
+  void DefineShimNative(FlowGraph* graph) {
+    const auto function = graph->GetFunction();
+    const auto& c = *function->GetCSignature();
+    const auto native = natives_[graph];
+    const auto name = std::string(function->GetName()->GetData());
+    b_.SetInsertPoint(llvm::BasicBlock::Create(ctx_, "entry", native));
+
+    const auto slot = [&](const CType& type) -> llvm::Value* {
+      if (type.kind == CType::kRecord) {
+        const auto alloca = b_.CreateAlloca(llvm::ArrayType::get(i8_, type.record->size));
+        alloca->setAlignment(llvm::Align(type.record->align));
+        return alloca;
+      }
+      return b_.CreateAlloca(CAbi(type));
+    };
+    std::vector<llvm::Value*> slots{};
+    for (const auto& param : c.params)
+      slots.push_back(slot(param));
+    const auto result_slot = c.result.kind == CType::kVoid ? nullptr : slot(c.result);
+
+    const auto& kura_params = graph->GetParameterTypes();
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      const auto what = "argument " + std::to_string(idx + 1) + " of `" + name + "`";
+      if (c.params[idx].kind == CType::kRecord)
+        StoreCRecord(native->getArg(idx), *c.params[idx].record, slots[idx], what);
+      else
+        b_.CreateStore(ToC(native->getArg(idx), kura_params[idx], c.params[idx], what), slots[idx]);
+    }
+    std::vector<llvm::Value*> args = slots;
+    if (result_slot)
+      args.push_back(result_slot);
+    const auto shim = module_->getOrInsertFunction(
+        c.shim_symbol, llvm::FunctionType::get(void_ty_, std::vector<llvm::Type*>(args.size(), ptr_ty_), false));
+    b_.CreateCall(shim, args);
+
+    if (!result_slot) {
+      b_.CreateRet(b_.getInt8(0));
+      return;
+    }
+    if (c.result.kind == CType::kRecord) {
+      b_.CreateRet(LoadCRecord(*c.result.record, result_slot, "the result of `" + name + "`"));
+      return;
+    }
+    b_.CreateRet(FromC(b_.CreateLoad(CAbi(c.result), result_slot), c.result, graph->GetReturnType(), "`" + name + "`"));
+  }
+
+  // The C function a callback parameter takes: Kura's function, behind C's
+  // calling convention.
+  auto CallbackAdapter(FlowGraph* target, const CSignature& callback, const std::string& what) -> llvm::Function* {
+    if (const auto it = adapters_.find(target); it != adapters_.end())
+      return it->second;
+    std::vector<llvm::Type*> types{};
+    for (const auto& param : callback.params)
+      types.push_back(CAbi(param));
+    const auto adapter =
+        llvm::Function::Create(llvm::FunctionType::get(CAbi(callback.result), types, false),
+                               llvm::GlobalValue::InternalLinkage, "kura.callback." + target->GetName(), module_.get());
+    adapters_[target] = adapter;
+    for (size_t idx = 0; idx < callback.params.size(); idx++) {
+      if (const auto ext = Extension(callback.params[idx]); ext != llvm::Attribute::None)
+        adapter->addParamAttr(idx, ext);
+    }
+    if (const auto ext = Extension(callback.result); ext != llvm::Attribute::None)
+      adapter->addRetAttr(ext);
+    llvm::IRBuilderBase::InsertPointGuard guard(b_);
+    b_.SetInsertPoint(llvm::BasicBlock::Create(ctx_, "entry", adapter));
+    const auto& target_params = target->GetParameterTypes();
+    if (target_params.size() != callback.params.size()) {
+      Fail(what + ": the callback `" + target->GetName() + "` takes " + std::to_string(target_params.size()) +
+           " argument(s) but C calls it with " + std::to_string(callback.params.size()));
+      b_.CreateUnreachable();
+      return adapter;
+    }
+    std::vector<llvm::Value*> args{};
+    for (size_t idx = 0; idx < callback.params.size(); idx++) {
+      const auto kura = callback.params[idx].ToKuraType();
+      const auto value = FromC(adapter->getArg(idx), callback.params[idx], kura, what + " callback argument");
+      args.push_back(Convert(value, kura, target_params[idx]));
+    }
+    const auto result = b_.CreateCall(natives_[target], args);
+    if (callback.result.kind == CType::kVoid) {
+      b_.CreateRetVoid();
+    } else {
+      const auto declared = callback.result.ToKuraType();
+      b_.CreateRet(ToC(Convert(result, target->GetReturnType(), declared), declared, callback.result,
+                       "the result of the callback `" + target->GetName() + "`"));
+    }
+    return adapter;
+  }
+
+  // What to hand C for a callback parameter: a function in Kura is the name of
+  // a function; a closure has no address C could call.
+  auto CallbackPointer(const CType& type, Value* arg, const std::string& what) -> llvm::Value* {
+    const auto null = llvm::ConstantPointerNull::get(ptr_ty_);
+    const auto load = arg ? arg->GetDefinition()->AsLoadFunction() : nullptr;
+    if (!arg) {
+      CallRt("kura_rt_ffi_error", void_ty_,
+             {Describe(what + " is a callback, which can only be passed when the function is called directly")});
+      return null;
+    }
+    if (!load) {
+      Fail(what + ": a callback must be the name of a function, not a closure or a value");
+      return null;
+    }
+    const auto target = graphs_->GetGraphFor(load->GetFunction());
+    if (!target || target->IsExtern() || !natives_.contains(target)) {
+      Fail(what + ": a callback must be a function written in Kura");
+      return null;
+    }
+    return CallbackAdapter(target, *type.callback, what);
+  }
+
+  // Calls the C function of an extern. `args` are the Kura values of the
+  // parameters a Kura call passes (`KuraParams`), then the extra arguments of a
+  // variadic function, which are passed as what they are: an Int is a `long`, a
+  // Float a `double`, a Bool an `int`, a String a `const char *`, a handle a
+  // pointer. `site` is the call being compiled, if any. The result is C's, in
+  // Kura's terms, or a record of it and what C wrote through `c.out` pointers.
+  auto CallC(FlowGraph* graph, const std::vector<llvm::Value*>& args, CallInstr* site) -> llvm::Value* {
+    const auto function = graph->GetFunction();
+    const auto& c = *function->GetCSignature();
+    const auto name = std::string(function->GetName()->GetData());
+    std::vector<llvm::Type*> param_types{};
+    for (const auto& param : c.params)
+      param_types.push_back(CAbi(param));
+    const auto callee =
+        module_->getOrInsertFunction(c.symbol, llvm::FunctionType::get(CAbi(c.result), param_types, c.variadic));
+
+    const auto& kura_params = graph->GetParameterTypes();
+    std::vector<llvm::Value*> values{};
+    std::vector<llvm::Value*> slots(c.params.size(), nullptr);
+    size_t next = 0;
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      const auto& param = c.params[idx];
+      const auto what = "argument " + std::to_string(idx + 1) + " of `" + name + "`";
+      if (param.kind == CType::kOut) {
+        const auto type = CAbi(*param.pointee);
+        slots[idx] = b_.CreateAlloca(type);
+        b_.CreateStore(llvm::Constant::getNullValue(type), slots[idx]);
+        values.push_back(slots[idx]);
+      } else if (param.kind == CType::kCallback) {
+        values.push_back(CallbackPointer(param, site ? site->GetArgs()[next] : nullptr, what));
+        next++;
+      } else {
+        values.push_back(ToC(args[next], kura_params[next], param, what));
+        next++;
+      }
+    }
+    for (; next < args.size(); next++) {
+      const auto type = Type(site->GetArgs()[next]);
+      switch (RepOf(type)) {
+        case Rep::kInt:
+          values.push_back(type->IsHandle() ? b_.CreateIntToPtr(args[next], ptr_ty_) : args[next]);
+          break;
+        case Rep::kFloat:
+          values.push_back(args[next]);
+          break;
+        case Rep::kBool:
+          values.push_back(b_.CreateZExt(args[next], llvm::Type::getInt32Ty(ctx_)));
+          break;
+        case Rep::kPtr:
+          values.push_back(CallRt("kura_rt_string_cstr", ptr_ty_, {args[next]}));
+          break;
+        default:
+          Fail("internal error: can't pass " + type->ToString() + " to `" + name + "`");
+          return llvm::UndefValue::get(Lower(graph->GetReturnType()));
+      }
+    }
+    const auto call = b_.CreateCall(callee, values);
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      if (const auto ext = Extension(c.params[idx]); ext != llvm::Attribute::None)
+        call->addParamAttr(idx, ext);
+    }
+    if (const auto ext = Extension(c.result); ext != llvm::Attribute::None)
+      call->addRetAttr(ext);
+    const auto kura_result = c.result.ToKuraType();
+    const auto result = FromC(call, c.result, kura_result, "`" + name + "`");
+    if (!c.HasOuts())
+      return result;
+
+    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {});
+    const auto set = [&](const std::string& field, llvm::Value* value, CompileType* type) {
+      CallRt("kura_rt_record_set", void_ty_,
+             {record, b_.getInt64(rt::HashName(field)), NameConstant(field), Convert(value, type, CompileType::Any())});
+    };
+    if (c.result.kind != CType::kVoid)
+      set("result", result, kura_result);
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      if (c.params[idx].kind != CType::kOut)
+        continue;
+      const auto& pointee = *c.params[idx].pointee;
+      const auto value = FromC(b_.CreateLoad(CAbi(pointee), slots[idx]), pointee, pointee.ToKuraType(),
+                               "`" + c.OutName(idx) + "` of `" + name + "`");
+      set(c.OutName(idx), value, pointee.ToKuraType());
+    }
+    return record;
+  }
+
+  // The body of an `extern fn` import: convert the arguments, call C, convert
+  // the result.
+  void DefineExternNative(FlowGraph* graph) {
+    if (!graph->GetFunction()->GetCSignature()->shim_symbol.empty())
+      return DefineShimNative(graph);
+    const auto native = natives_[graph];
+    b_.SetInsertPoint(llvm::BasicBlock::Create(ctx_, "entry", native));
+    std::vector<llvm::Value*> args{};
+    for (auto& arg : native->args())
+      args.push_back(&arg);
+    b_.CreateRet(CallC(graph, args, nullptr));
+  }
+
+  // C's view of an argument it passes in: the Kura value of the parameter.
+  auto FromCArgument(llvm::Value* value, const CType& c, const std::string& what) -> llvm::Value* {
+    return FromC(value, c, nullptr, what);
+  }
+
+  // `extern fn name(...): T => body` is callable from C: a function with C's
+  // types that converts the arguments, calls the Kura function, and converts the
+  // result back.
+  void DefineCExport(FlowGraph* graph) {
+    const auto function = graph->GetFunction();
+    const auto& c = *function->GetCSignature();
+    const auto name = std::string(function->GetName()->GetData());
+    const auto symbol = c.symbol;
+    if (module_->getFunction(symbol)) {
+      Fail("extern fn " + name + ": the C symbol `" + symbol + "` is already used");
+      return;
+    }
+    std::vector<llvm::Type*> param_types{};
+    for (const auto& param : c.params)
+      param_types.push_back(CAbi(param));
+    const auto wrapper = llvm::Function::Create(llvm::FunctionType::get(CAbi(c.result), param_types, false),
+                                                llvm::GlobalValue::ExternalLinkage, symbol, module_.get());
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      if (const auto ext = Extension(c.params[idx]); ext != llvm::Attribute::None)
+        wrapper->addParamAttr(idx, ext);
+    }
+    if (const auto ext = Extension(c.result); ext != llvm::Attribute::None)
+      wrapper->addRetAttr(ext);
+    b_.SetInsertPoint(llvm::BasicBlock::Create(ctx_, "entry", wrapper));
+
+    const auto& kura_params = graph->GetParameterTypes();
+    std::vector<llvm::Value*> args{};
+    for (size_t idx = 0; idx < c.params.size(); idx++) {
+      const auto what = "argument " + std::to_string(idx + 1) + " of `" + symbol + "`";
+      args.push_back(Convert(FromCArgument(wrapper->getArg(idx), c.params[idx], what), c.params[idx].ToKuraType(),
+                             kura_params[idx]));
+    }
+    const auto result = b_.CreateCall(natives_[graph], args);
+    const auto declared = c.result.ToKuraType();
+    const auto converted = Convert(result, graph->GetReturnType(), declared);
+    if (c.result.kind == CType::kVoid) {
+      b_.CreateRetVoid();
+      return;
+    }
+    b_.CreateRet(ToC(converted, declared, c.result, "the result of `" + symbol + "`"));
+  }
+
   void DefineNative(FlowGraph* graph) {
+    if (graph->IsExtern())
+      return DefineExternNative(graph);
     FnState state{graph, natives_[graph]};
     fn_ = &state;
     for (const auto block : graph->GetReversePostorder()) {
@@ -837,11 +1328,11 @@ class Generator {
       thunk_params.push_back(i64_);
       thunk_params.push_back(i64_);
     }
-    const auto exported = graph->GetFunction() != nullptr;
-    thunks_[graph] = llvm::Function::Create(llvm::FunctionType::get(value_ty_, thunk_params, false),
-                                            exported ? llvm::GlobalValue::ExternalLinkage
-                                                     : llvm::GlobalValue::InternalLinkage,
-                                            exported ? EntryPointName(name) : "kura.thunk." + name, module_.get());
+    const auto exported = graph->GetFunction() != nullptr && !graph->IsExtern();
+    thunks_[graph] =
+        llvm::Function::Create(llvm::FunctionType::get(value_ty_, thunk_params, false),
+                               exported ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage,
+                               exported ? EntryPointName(name) : "kura.thunk." + name, module_.get());
   }
 
   // Registers the names and string literals the code uses, then runs the
@@ -885,6 +1376,8 @@ class Generator {
         DefineNative(graph);
         if (thunks_.contains(graph))
           DefineThunk(graph);
+        if (graph->GetFunction() && graph->GetFunction()->IsCExport())
+          DefineCExport(graph);
       }
     }
     DefineInit();
@@ -908,7 +1401,77 @@ class Generator {
 auto GenerateLLVM(llvm::LLVMContext& context, Module* module, ModuleGraph* graphs, std::string* error)
     -> std::unique_ptr<llvm::Module> {
   Generator generator(context, graphs);
-  return generator.Generate(error);
+  auto result = generator.Generate(error);
+  if (!result)
+    return nullptr;
+
+  // The C functions that reach C through a shim: compiled together, once.
+  std::set<std::string> headers{};
+  std::string text{};
+  for (const auto function : module->functions) {
+    if (!function->IsExtern() || function->GetCSignature()->shim_source.empty())
+      continue;
+    headers.insert(function->GetCSignature()->header);
+    text += function->GetCSignature()->shim_source;
+  }
+  if (text.empty())
+    return result;
+  std::string source{};
+  for (const auto& header : headers)
+    source += "#include \"" + header + "\"\n";
+  auto shims = CompileCSource(context, source + text, error);
+  if (!shims)
+    return nullptr;
+  if (result->getDataLayoutStr().empty())
+    result->setDataLayout(shims->getDataLayout());
+  if (result->getTargetTriple().empty())
+    result->setTargetTriple(shims->getTargetTriple());
+  if (llvm::Linker::linkModules(*result, std::move(shims))) {
+    if (error)
+      *error = "can't link the C shims into the module";
+    return nullptr;
+  }
+  return result;
+}
+
+auto EmitObjectFile(llvm::Module& module, const std::string& path, std::string* error) -> bool {
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  const auto name = llvm::sys::getDefaultTargetTriple();
+  // LLVM 21 passes triples around as llvm::Triple rather than strings.
+#if LLVM_VERSION_MAJOR >= 21
+  const llvm::Triple triple(name);
+#else
+  const auto& triple = name;
+#endif
+  std::string problem{};
+  const auto target = llvm::TargetRegistry::lookupTarget(triple, problem);
+  if (!target) {
+    if (error)
+      *error = "no target for " + name + ": " + problem;
+    return false;
+  }
+  llvm::TargetOptions options{};
+  const auto machine = std::unique_ptr<llvm::TargetMachine>(
+      target->createTargetMachine(triple, "generic", "", options, llvm::Reloc::PIC_));
+  module.setDataLayout(machine->createDataLayout());
+  module.setTargetTriple(triple);
+  std::error_code code;
+  llvm::raw_fd_ostream out(path, code, llvm::sys::fs::OF_None);
+  if (code) {
+    if (error)
+      *error = "can't write " + path + ": " + code.message();
+    return false;
+  }
+  llvm::legacy::PassManager passes;
+  if (machine->addPassesToEmitFile(passes, out, nullptr, llvm::CodeGenFileType::ObjectFile)) {
+    if (error)
+      *error = "the target can't emit object files";
+    return false;
+  }
+  passes.run(module);
+  out.flush();
+  return true;
 }
 
 void OptimizeLLVM(llvm::Module& module) {

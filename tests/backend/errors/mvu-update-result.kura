@@ -1,0 +1,3 @@
+// error: update must produce the model: it returns Int but its model parameter is
+type Model = { count: Int, }
+fn update(delta: Int, model: Model): Int => model.count + delta

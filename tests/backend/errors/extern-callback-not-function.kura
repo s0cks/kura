@@ -1,0 +1,2 @@
+// error: is a parameter type
+extern fn f(x: c.callback<Int>): c.int

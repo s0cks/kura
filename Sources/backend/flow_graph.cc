@@ -1,9 +1,14 @@
 #include "backend/flow_graph.h"
+#include "function.h"
 
 #include <algorithm>
 #include <unordered_set>
 
 namespace kura {
+auto FlowGraph::IsExtern() const -> bool {
+  return function_ && function_->IsExtern();
+}
+
 auto FlowGraph::GetTerminator(EntryInstr* block) -> Instruction* {
   Instruction* last = block;
   while (last->HasNext())

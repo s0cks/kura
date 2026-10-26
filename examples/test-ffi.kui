@@ -1,0 +1,7 @@
+use "math.h"
+use "stdio.h"
+
+fn sqrt(x: Float): Float => math.sqrt(x)
+
+fn print(x: String) => stdio.printf("%s\n", x)
+

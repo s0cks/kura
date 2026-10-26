@@ -1,0 +1,2 @@
+// error: is not a type C understands
+extern fn f(x: Seq<Int>): Int

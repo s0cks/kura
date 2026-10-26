@@ -1,4 +1,5 @@
 #include "backend/type_analysis.h"
+#include "c_type.h"
 
 #include <algorithm>
 #include <functional>
@@ -97,6 +98,11 @@ class Analyzer {
       if (args.empty()) {
         if (const auto it = params.find(name); it != params.end())
           return it->second;
+      }
+
+      if (name.starts_with("c.")) {
+        if (const auto c = CType::FromName(name))
+          return c->ToKuraType();
       }
 
       const auto simple = [&](CompileType* type) -> CompileType* {
@@ -201,6 +207,11 @@ class Analyzer {
     if (!inserted)
       return sig;
     const std::string name(function->GetName()->GetData());
+    if (const auto c = function->IsExtern() ? function->GetCSignature() : nullptr) {
+      sig.params = c->KuraParams();
+      sig.declared = sig.result = c->KuraResult();
+      return sig;
+    }
     for (const auto& param : function->GetParameters())
       sig.params.push_back(Resolve(param.type, {}, "fn " + name));
     if (function->GetReturnType()) {
@@ -221,6 +232,11 @@ class Analyzer {
     if (!graph || analyzed_.contains(function))
       return;
     auto& sig = GetSignature(function);
+    if (function->IsExtern()) {
+      analyzed_.insert(function);
+      graph->SetSignature(sig.params, sig.result);
+      return;
+    }
     // a declared return type is all a caller needs, even while the body is
     // being analyzed (recursion)
     if (in_progress_.contains(function)) {
@@ -751,11 +767,37 @@ class Analyzer {
       return CompileType::Any();
     }
     const auto& params = target->GetParameters();
-    if (params.size() != args.size()) {
-      Report(call, "expected " + std::to_string(params.size()) + " argument(s) but got " + std::to_string(args.size()));
+    const auto direct = target_value->GetDefinition()->AsLoadFunction();
+    // a callback is handed to C as the address of a function, so it has to be one
+    if (direct && direct->GetFunction()->IsExtern()) {
+      size_t position = 0;
+      for (const auto& param : direct->GetFunction()->GetCSignature()->params) {
+        if (param.kind == CType::kOut)
+          continue;
+        if (param.kind == CType::kCallback && position < args.size()) {
+          const auto given = args[position]->GetDefinition()->AsLoadFunction();
+          if (!given || given->GetFunction()->IsExtern())
+            Report(call, "argument " + std::to_string(position + 1) +
+                             ": a callback must be the name of a function written in Kura, not a closure or a value");
+        }
+        position++;
+      }
+    }
+    // a variadic C function takes any number of arguments past its fixed ones
+    const auto variadic = direct && direct->GetFunction()->IsExtern() && direct->GetFunction()->GetCSignature()->variadic;
+    if (variadic ? args.size() < params.size() : params.size() != args.size()) {
+      Report(call, std::string("expected ") + (variadic ? "at least " : "") + std::to_string(params.size()) +
+                       " argument(s) but got " + std::to_string(args.size()));
       return target->GetResult();
     }
     for (size_t idx = 0; idx < args.size(); idx++) {
+      if (idx >= params.size()) {
+        const auto extra = TypeOf(args[idx]);
+        if (!(extra->IsInt() || extra->IsFloat() || extra->IsBool() || extra->IsString() || extra->IsHandle()))
+          Report(call, "argument " + std::to_string(idx + 1) + " is " + extra->ToString() +
+                           ", which can't be passed to a variadic C function (use an Int, Float, Bool, String or handle)");
+        continue;
+      }
       // a lambda argument is typed from the parameter it's passed for
       if (const auto closure = IsPendingClosure(args[idx])) {
         std::vector<CompileType*> expected(ClosureArity(closure), CompileType::Any());
@@ -946,7 +988,7 @@ class Analyzer {
       init->SetSignature({}, CompileType::None());
     }
     for (const auto function : module_->functions) {
-      if (function->HasBody())
+      if (function->HasBody() || function->IsExtern())
         EnsureAnalyzed(function);
     }
     for (const auto& [local, type] : globals_)

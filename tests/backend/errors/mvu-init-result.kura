@@ -1,0 +1,5 @@
+// error: init must produce the model
+type Model = { count: Int, }
+type Other = { name: String, }
+fn init(): Other => { name: "x", }
+fn update(delta: Int, model: Model): Model => model

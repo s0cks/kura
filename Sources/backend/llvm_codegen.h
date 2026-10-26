@@ -35,6 +35,11 @@ auto GenerateLLVM(llvm::LLVMContext& context, Module* module, ModuleGraph* graph
 // Runs LLVM's optimization pipeline over the module.
 void OptimizeLLVM(llvm::Module& module);
 
+// Writes the module as a native object file for the host's own target. The code
+// is position independent, so it can go into a shared library. It calls the
+// runtime library (`kura_rt_*`) and whatever C it imports, which the host links.
+auto EmitObjectFile(llvm::Module& module, const std::string& path, std::string* error) -> bool;
+
 // The exported name of the entry point for a module function.
 auto EntryPointName(const std::string& function) -> std::string;
 }  // namespace kura

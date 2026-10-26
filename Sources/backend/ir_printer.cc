@@ -66,6 +66,10 @@ void IRPrinter::PrintGraph(FlowGraph* graph) {
 
 void IRPrinter::PrintModule(ModuleGraph* module) {
   for (const auto graph : module->GetGraphs()) {
+    if (graph->IsExtern()) {
+      stream() << "extern fn " << graph->GetName() << std::endl << std::endl;
+      continue;
+    }
     PrintGraph(graph);
     stream() << std::endl;
   }

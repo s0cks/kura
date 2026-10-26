@@ -1,0 +1,3 @@
+// error: a mutable `char *`
+use "string.h"
+fn f(): Int => string.strcpy("a", "b")

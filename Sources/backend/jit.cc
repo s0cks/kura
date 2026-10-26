@@ -1,7 +1,10 @@
 #include "backend/jit.h"
 
 #include <llvm/ExecutionEngine/Orc/Core.h>
+#include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/ExecutorProcessControl.h>
+#include <llvm/ExecutionEngine/Orc/Mangling.h>
+#include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/TargetSelect.h>
 
@@ -32,7 +35,28 @@ auto Jit::Create(std::string* error) -> std::unique_ptr<Jit> {
       *error = "failed to bind the runtime: " + llvm::toString(std::move(err));
     return nullptr;
   }
+  // Whatever the process itself links (libc, libm) is callable too.
+  const auto prefix = jit->getDataLayout().getGlobalPrefix();
+  auto process = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(prefix);
+  if (!process) {
+    if (error)
+      *error = "failed to expose the process symbols: " + llvm::toString(process.takeError());
+    return nullptr;
+  }
+  jit->getMainJITDylib().addGenerator(std::move(*process));
   return std::unique_ptr<Jit>(new Jit(std::move(jit)));
+}
+
+auto Jit::LoadLibrary(const std::string& path, std::string* error) -> bool {
+  const auto prefix = jit_->getDataLayout().getGlobalPrefix();
+  auto library = llvm::orc::DynamicLibrarySearchGenerator::Load(path.c_str(), prefix);
+  if (!library) {
+    if (error)
+      *error = "can't load library " + path + ": " + llvm::toString(library.takeError());
+    return false;
+  }
+  jit_->getMainJITDylib().addGenerator(std::move(*library));
+  return true;
 }
 
 auto Jit::Add(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context, std::string* error)

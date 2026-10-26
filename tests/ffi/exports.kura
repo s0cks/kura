@@ -1,0 +1,11 @@
+extern fn add(a: c.int, b: c.int): c.int => a + b
+extern fn scale(x: Float, k: c.float): Float => x * k
+extern fn is_even(n: c.long): Bool => n / 2 * 2 == n
+extern fn greet(name: String): String => "hello, " + name
+extern fn maybe_name(name: String | None): String | None => name
+extern fn nothing(): c.ptr | None => None
+extern fn big(): c.ulong => 5000000000
+extern fn too_big(): c.int => 5000000000
+extern fn byte_of(n: Int): c.uchar => n
+extern fn damage-for(level: c.int): c.int => level * 10
+extern fn noop(): None => None

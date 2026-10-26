@@ -24,6 +24,10 @@ class Jit {
  public:
   ~Jit() = default;
 
+  // Makes the symbols of a shared library (`libm.so`, a path) visible to
+  // generated code, like linking against it.
+  auto LoadLibrary(const std::string& path, std::string* error) -> bool;
+
   // Takes ownership of the module and the context it lives in.
   auto Add(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context, std::string* error)
       -> bool;

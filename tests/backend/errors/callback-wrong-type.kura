@@ -1,0 +1,5 @@
+// error: argument 1 is
+// flags: -I$DIR
+use "geometry.h" as g
+fn add(a: Int, b: Int): Int => a + b
+fn f(): Int => g.apply_twice(add, 5)

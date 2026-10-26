@@ -1,0 +1,3 @@
+// error: @pure(nothing): 'math.h' doesn't declare a function named 'nothing'
+@pure(nothing)
+use "math.h"

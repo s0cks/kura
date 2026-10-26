@@ -323,6 +323,10 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
   }
 
   for (const auto func : module->functions) {
+    if (func->IsExtern()) {
+      ctx.graph->Add(FlowGraph::New(std::string(func->GetName()->GetData()), func, nullptr));
+      continue;
+    }
     if (!func->HasBody())
       continue;
     FlowGraphBuilder builder(&ctx, std::string(func->GetName()->GetData()), func);

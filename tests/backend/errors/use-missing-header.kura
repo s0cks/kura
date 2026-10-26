@@ -1,0 +1,2 @@
+// error: can't use "no_such_header_xyz.h"
+use "no_such_header_xyz.h"

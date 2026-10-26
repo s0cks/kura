@@ -1,0 +1,8 @@
+let itemCount = 10
+let item_count = 10
+let _private = 1
+let __x = 2
+let item-count = 10
+let mixed-Case_name = 3
+
+fn main(): Int => match itemCount { _ => 1 }

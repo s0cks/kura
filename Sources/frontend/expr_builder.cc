@@ -1,8 +1,11 @@
 #include "frontend/expr_builder.h"
 
+#include <cctype>
 #include <optional>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "KuraParser.h"
 #include "function.h"
@@ -25,6 +28,69 @@ void ExprBuilder::Unsupported(antlr4::ParserRuleContext* ctx, const std::string&
 // ╭─────────╮
 // │ Helpers │
 // ╰─────────╯
+namespace {
+auto Unquote(const std::string& text) -> std::string {
+  if (text.size() >= 2 && (text.front() == '`' || text.front() == '"') && text.back() == text.front())
+    return text.substr(1, text.size() - 2);
+  return text;
+}
+
+// A type from a C header, written as a Kura type expression: a struct is the
+// record with the same fields.
+auto TypeExprOf(const CType& c) -> TypeExpr* {
+  if (c.kind == CType::kRecord) {
+    std::vector<RecordTypeExpr::Field> fields{};
+    for (const auto& field : c.record->fields)
+      fields.push_back({field.name, TypeExprOf(field.type), false});
+    return new RecordTypeExpr(std::move(fields));
+  }
+  TypeExpr* named = new NamedTypeExpr(c.ToName());
+  if (c.nullable)
+    return new UnionTypeExpr({named, new NamedTypeExpr("None")});
+  return named;
+}
+
+auto IsKeyword(const std::string& name) -> bool {
+  static const std::unordered_set<std::string> kKeywords{
+      "let",    "fn",    "type",    "if",     "else",    "match",   "for",     "in",   "fold",
+      "use",    "as",    "extern",  "true",   "false",   "None",    "black",   "white", "red",
+      "green",  "blue",  "yellow",  "cyan",   "magenta", "gray",    "orange",  "purple", "transparent"};
+  return kKeywords.contains(name);
+}
+
+// Whether `name` lexes as a single IDENT or UPPER_IDENT.
+auto IsPlainName(const std::string& name) -> bool {
+  if (name.empty() || IsKeyword(name))
+    return false;
+  const auto head = static_cast<unsigned char>(name.front());
+  const auto upper = std::isupper(head) != 0;
+  if (!upper && !std::islower(head) && head != '_')
+    return false;
+  for (size_t i = 1; i < name.size(); i++) {
+    const auto c = static_cast<unsigned char>(name[i]);
+    if (std::isalnum(c) || c == '_')
+      continue;
+    const auto kebab = c == '-' && !upper && i + 1 < name.size() && name[i + 1] != '-';
+    if (!kebab)
+      return false;
+  }
+  return true;
+}
+
+// `use "math.h"` is named `math`; `use "SDL2/SDL.h"` is named `SDL`.
+auto DeriveAlias(const std::string& header) -> std::optional<std::string> {
+  constexpr auto kSuffix = std::string_view(".h");
+  if (header.size() <= kSuffix.size() || header.substr(header.size() - kSuffix.size()) != kSuffix)
+    return std::nullopt;
+  const auto slash = header.find_last_of('/');
+  const auto begin = slash == std::string::npos ? 0 : slash + 1;
+  const auto stem = header.substr(begin, header.size() - kSuffix.size() - begin);
+  if (!IsPlainName(stem))
+    return std::nullopt;
+  return stem;
+}
+}  // namespace
+
 auto ExprBuilder::Build(antlr4::tree::ParseTree* tree) -> Expr* {
   const auto value = visit(tree);
   if (!value.has_value())
@@ -117,59 +183,278 @@ auto ModuleBuilder::Build(KuraParser::SourceContext* ctx) -> Module* {
 auto ExprBuilder::visitSource(KuraParser::SourceContext* ctx) -> std::any {
   // TODO(@s0cks): get module name from parse tree
   const auto m = Module::New("Kura");
+  module_ = m;
   module_scope_ = GetScope();
+
+  // Pass 0: `use` declarations. Their aliases are known before anything else
+  // is built, so `alias.name` can be told apart from a property access.
+  for (const auto item : ctx->item()) {
+    if (const auto use = item->useDecl())
+      m->AddUse(BuildUseDecl(use, item->directive()));
+  }
 
   // Pass 1: declare every function so calls may refer to functions declared
   // later in the file. (Recursion is rejected later, by the call-graph check.)
+  // An `extern fn` with a body is a function that C can call.
   struct Pending {
     KuraParser::ItemContext* item;
-    KuraParser::FnDeclContext* decl;
+    antlr4::ParserRuleContext* decl;
+    std::string name;
+    KuraParser::ParamListContext* params;
+    KuraParser::TypeExprContext* result;
+    KuraParser::ExpressionContext* body;
+    bool exported;
+    bool imported;
     Function* func;
   };
   std::vector<Pending> pending{};
   for (const auto item : ctx->item()) {
-    const auto decl = item->fnDecl();
-    if (!decl)
+    Pending next{item, nullptr, {}, nullptr, nullptr, nullptr, false, false, nullptr};
+    if (const auto fn = item->fnDecl()) {
+      next.decl = fn;
+      next.name = fn->IDENT()->getText();
+      next.params = fn->paramList();
+      next.result = fn->typeExpr();
+      next.body = fn->expression();
+    } else if (const auto ext = item->externDecl()) {
+      next.decl = ext;
+      next.name = Unquote(ext->cName()->getText());
+      next.params = ext->externParams() ? ext->externParams()->paramList() : nullptr;
+      next.result = ext->typeExpr();
+      next.body = ext->expression();
+      next.exported = next.body != nullptr;
+      next.imported = next.body == nullptr;
+    } else {
       continue;
-    const auto name = decl->IDENT()->getText();
-    if (function_names_.contains(name))
-      Error(decl, "function '" + name + "' is already defined");
-    const auto func = Function::New(name);
-    if (!GetScope()->CreateLocal(func->GetName()))
-      Error(decl, "failed to declare function '" + name + "'");
-    function_names_.insert(name);
-    pending.push_back({item, decl, func});
+    }
+    if (function_names_.contains(next.name))
+      Error(next.decl, "function '" + next.name + "' is already defined");
+    next.func = Function::New(next.name);
+    if (!GetScope()->CreateLocal(next.func->GetName()))
+      Error(next.decl, "failed to declare function '" + next.name + "'");
+    function_names_.insert(next.name);
+    if (next.exported) {
+      next.func->SetCSignature(BuildCSignature(item->externDecl(), next.name));
+      next.func->SetCExport(true);
+    }
+    if (next.imported) {
+      const auto signature = BuildCSignature(item->externDecl(), next.name);
+      next.func->SetCSignature(signature);
+      next.func->SetDirectives(BuildDirectives(item->directive()));
+      for (const auto directive : next.func->GetDirectives())
+        signature->pure = signature->pure || directive->name == "pure";
+      m->AddFunction(next.func);
+      continue;
+    }
+    pending.push_back(std::move(next));
   }
 
-  // Pass 2: type declarations and top-level bindings, in source order. They are
-  // built before any function body so bodies can use every top-level name.
+  // Pass 2: type declarations, extern imports and top-level bindings, in source
+  // order. They are built before any function body so bodies can use every
+  // top-level name.
   for (const auto item : ctx->item()) {
-    if (item->typeDecl())
+    if (item->typeDecl()) {
       m->AddType(BuildTypeDecl(item->typeDecl(), item->directive()));
-    else if (item->letBinding() || item->redefinition())
+    } else if (item->letBinding() || item->redefinition()) {
       m->AddBinding(BuildBinding(item->directive(), item->letBinding(), item->redefinition()));
+    }
   }
 
   // Pass 3: function bodies.
-  for (const auto& [item, decl, func] : pending) {
+  for (const auto& [item, decl, name, params, result, body, exported, imported, func] : pending) {
     LocalsScope func_scope(GetOwner());
     Function::ParameterList parameters{};
-    if (const auto params = decl->paramList()) {
+    if (params) {
       for (const auto param : params->param()) {
         const auto local = CreateLocal(param, param->IDENT()->getText());
         parameters.push_back({local, BuildType(param->typeExpr())});
       }
     }
     func->SetParameters(std::move(parameters));
-    if (decl->typeExpr())
-      func->SetReturnType(BuildType(decl->typeExpr()));
+    if (result)
+      func->SetReturnType(BuildType(result));
     func->SetDirectives(BuildDirectives(item->directive()));
+    func->SetCExport(exported);
 
     LocalsScope body_scope(GetOwner());
-    func->SetBody(BuildSeq(decl->expression()));
+    func->SetBody(BuildSeq(body));
     m->AddFunction(func);
   }
   return m;
+}
+
+auto ExprBuilder::BuildUseDecl(KuraParser::UseDeclContext* ctx,
+                               const std::vector<KuraParser::DirectiveContext*>& directives) -> UseDecl* {
+  const auto header = Unquote(ctx->STRING()->getText());
+  std::string alias{};
+  if (const auto as = ctx->qualifier()) {
+    alias = as->getText();
+  } else if (const auto derived = DeriveAlias(header)) {
+    alias = *derived;
+  } else if (header.size() < 3 || header.substr(header.size() - 2) != ".h") {
+    Error(ctx, "'" + header + "' is not a C header: use \"name.h\" (Kura modules are not supported yet)");
+  } else {
+    Error(ctx, "cannot derive a name from '" + header + "'; write: use \"" + header + "\" as <name>");
+  }
+  if (alias == "c")
+    Error(ctx, "'c' is the name of the built-in C types (c.int, c.float, ...); write: use \"" + header + "\" as <name>");
+  if (!use_aliases_.insert(alias).second)
+    Error(ctx, "'" + alias + "' already names another use; write: use \"" + header + "\" as <name>");
+  std::string problem{};
+  auto loaded = CHeader::Load(header, &problem);
+  if (!loaded)
+    Error(ctx, "can't use \"" + header + "\": " + problem);
+  headers_.emplace(alias, std::move(loaded));
+  // `@pure use "m.h"` and `@pure(sqrt, sin) use "m.h"` say which of the
+  // header's functions have no effects.
+  std::vector<KuraParser::DirectiveContext*> others{};
+  for (const auto directive : directives) {
+    if (directive->DIRECTIVE()->getText() != "@pure") {
+      others.push_back(directive);
+      continue;
+    }
+    const auto list = directive->uiArgList();
+    if (!list) {
+      pure_headers_.insert(alias);
+      continue;
+    }
+    for (const auto arg : list->uiArg()) {
+      const auto positional = dynamic_cast<KuraParser::PositionalUiArgContext*>(arg);
+      if (!positional)
+        Error(arg, "@pure takes the names of functions");
+      const auto name = positional->expression()->getText();
+      const auto function = headers_.at(alias)->FindFunction(name);
+      if (!function)
+        Error(arg, "@pure(" + name + "): '" + header + "' doesn't declare a function named '" + name + "'");
+      pure_names_[alias].insert(name);
+    }
+  }
+  return new UseDecl(header, alias, BuildDirectives(others));
+}
+
+auto ExprBuilder::ToCType(antlr4::ParserRuleContext* where, TypeExpr* type, const bool is_result,
+                          const std::string& what) -> CType {
+  const auto fail = [&](const std::string& why) {
+    Error(where, "extern fn " + what + ": " + why);
+  };
+  std::vector<TypeExpr*> alternatives{};
+  if (const auto onion = type->AsUnion()) {
+    alternatives = onion->GetMembers();
+  } else {
+    alternatives.push_back(type);
+  }
+  // `c.out<c.int>`: a pointer C writes through. `c.callback<(c.int) => c.int>`:
+  // a function pointer, which a program fills with the name of a function.
+  if (alternatives.size() == 1) {
+    if (const auto named = alternatives[0]->AsNamed(); named && named->GetArgs().size() == 1) {
+      if (named->GetTypeName() == "c.out") {
+        if (is_result)
+          fail("c.out is only for parameters");
+        auto pointee = ToCType(where, named->GetArgs()[0], true, what);
+        if (!pointee.IsInteger() && !pointee.IsFloat() && pointee.kind != CType::kBool)
+          fail("c.out takes a number or a Bool, not " + pointee.ToString());
+        auto out = CType::Make(CType::kOut);
+        out.pointee = std::make_shared<CType>(pointee);
+        return out;
+      }
+      if (named->GetTypeName() == "c.callback") {
+        const auto function = named->GetArgs()[0]->AsFunction();
+        if (is_result || !function)
+          fail("c.callback<(...) => T> is a parameter type");
+        auto callback = std::make_shared<CSignature>();
+        for (const auto param : function->GetParams())
+          callback->params.push_back(ToCType(where, param, false, what + " callback"));
+        callback->result = ToCType(where, function->GetResult(), true, what + " callback");
+        if (callback->HasOuts() || callback->HasCallbacks())
+          fail("a callback can't take c.out or callback parameters");
+        auto type = CType::Make(CType::kCallback);
+        type.callback = callback;
+        return type;
+      }
+    }
+  }
+  bool nullable = false;
+  std::optional<CType> found{};
+  for (const auto alternative : alternatives) {
+    const auto named = alternative->AsNamed();
+    if (!named || !named->GetArgs().empty())
+      fail("'" + alternative->ToString() + "' is not a type C understands");
+    const auto& name = named->GetTypeName();
+    if (name == "None" && alternatives.size() > 1) {
+      nullable = true;
+      continue;
+    }
+    const auto c = CType::FromName(name);
+    if (!c)
+      fail("'" + name + "' is not a C type; use Int, Float, Bool, String, or c.int, c.float, c.ptr and the like");
+    if (found)
+      fail("a union of C types isn't supported");
+    found = c;
+  }
+  if (!found)
+    fail("'" + type->ToString() + "' is not a type C understands");
+  if (nullable) {
+    if (!found->IsPointer())
+      fail("only String and c.ptr can be `| None`");
+    found->nullable = true;
+  }
+  if (found->kind == CType::kVoid && !is_result)
+    fail("None is only a result type");
+  return *found;
+}
+
+auto ExprBuilder::ResolveImport(antlr4::ParserRuleContext* ctx, const std::string& alias, const std::string& member)
+    -> Expr* {
+  const auto& header = headers_.at(alias);
+  const auto name = alias + "." + member;
+  if (const auto fn = header->FindFunction(member)) {
+    if (!fn->problem.empty())
+      Error(ctx, name + " can't be called from Kura: " + fn->problem);
+    if (imported_.insert(name).second) {
+      const auto function = Function::New(name);
+      const auto signature = new CSignature(fn->signature);
+      signature->pure = signature->pure || pure_headers_.contains(alias) || pure_names_[alias].contains(member);
+      function->SetCSignature(signature);
+      if (!module_scope_->CreateLocal(function->GetName()))
+        Error(ctx, "failed to declare " + name);
+      module_->AddFunction(function);
+    }
+    return LoadName(ctx, name);
+  }
+  if (const auto constant = header->FindConstant(member)) {
+    switch (constant->kind) {
+      case CHeader::Constant::kInt:
+        return Literal(Int::New(constant->integer));
+      case CHeader::Constant::kFloat:
+        return Literal(Float::New(constant->real));
+      case CHeader::Constant::kString:
+        return Literal(String::New(constant->text));
+    }
+  }
+  Error(ctx, "'" + header->GetPath() + "' doesn't declare '" + member + "'");
+}
+
+auto ExprBuilder::BuildCSignature(KuraParser::ExternDeclContext* ctx, const std::string& name) -> CSignature* {
+  const auto signature = new CSignature();
+  const auto exported = ctx->expression() != nullptr;
+  signature->symbol = ctx->STRING() ? Unquote(ctx->STRING()->getText()) : exported ? CSymbolName(name) : name;
+  if (ctx->externParams() && ctx->externParams()->SPREAD()) {
+    if (exported)
+      Error(ctx, "extern fn " + name + ": a function C calls can't be variadic");
+    signature->variadic = true;
+  }
+  const auto list = ctx->externParams() ? ctx->externParams()->paramList() : nullptr;
+  if (list) {
+    for (const auto param : list->param()) {
+      const auto what = name + " parameter '" + param->IDENT()->getText() + "'";
+      signature->names.push_back(param->IDENT()->getText());
+      signature->params.push_back(ToCType(param, BuildType(param->typeExpr()), false, what));
+    }
+  }
+  signature->result = ToCType(ctx, BuildType(ctx->typeExpr()), true, name);
+  if (exported && (signature->HasOuts() || signature->HasCallbacks()))
+    Error(ctx, "extern fn " + name + ": a function C calls can't have c.out or callback parameters");
+  return signature;
 }
 
 auto ExprBuilder::visitFnDecl(KuraParser::FnDeclContext* ctx) -> std::any {
@@ -236,6 +521,27 @@ auto ExprBuilder::BuildTypeMember(KuraParser::TypeMemberContext* ctx) -> TypeExp
     return new NamedTypeExpr(named->UPPER_IDENT()->getText(), std::move(args));
   }
 
+  if (const auto qualified = dynamic_cast<KuraParser::QualifiedTypeContext*>(ctx)) {
+    std::vector<TypeExpr*> args{};
+    if (const auto type_args = qualified->typeArgs()) {
+      for (const auto arg : type_args->typeExpr())
+        args.push_back(BuildType(arg));
+    }
+    const auto alias = qualified->qualifier()->getText();
+    const auto name = Unquote(qualified->cName()->getText());
+    if (alias != "c" && !use_aliases_.contains(alias))
+      Error(qualified, "'" + alias + "' is not a use");
+    if (alias != "c") {
+      const auto type = headers_.at(alias)->FindType(name);
+      if (!type)
+        Error(qualified, "'" + headers_.at(alias)->GetPath() + "' doesn't declare a type named '" + name + "'");
+      if (!type->problem.empty())
+        Error(qualified, alias + "." + name + " can't be used: " + type->problem);
+      return TypeExprOf(type->type);
+    }
+    return new NamedTypeExpr(alias + "." + name, std::move(args));
+  }
+
   if (dynamic_cast<KuraParser::NoneTypeContext*>(ctx))
     return new NamedTypeExpr("None");
 
@@ -285,7 +591,7 @@ auto ExprBuilder::visitExpression(KuraParser::ExpressionContext* ctx) -> std::an
 auto ExprBuilder::BuildPipeTarget(KuraParser::PipeTargetContext* ctx, Expr* lhs) -> Expr* {
   const auto callee = ctx->pipeCallee();
   Expr* target = nullptr;
-  if (callee->UPPER_IDENT()) {
+  if (callee->UPPER_IDENT() && callee->memberName().empty()) {
     // `payload |> Click()` is `Click(payload)`.
     if (ctx->argumentList() && !ctx->argumentList()->expression().empty())
       Error(ctx, "a piped variant takes no further arguments");
@@ -293,10 +599,18 @@ auto ExprBuilder::BuildPipeTarget(KuraParser::PipeTargetContext* ctx, Expr* lhs)
   } else if (callee->expression()) {
     target = Build(callee->expression());
   } else {
-    const auto names = callee->IDENT();
-    target = LoadName(callee, names.at(0)->getText());
-    for (size_t i = 1; i < names.size(); i++) {
-      const auto property = Property::FindOrCreate(String::New(names.at(i)->getText()), Type::NoneType());
+    const auto head = callee->IDENT() ? callee->IDENT() : callee->UPPER_IDENT();
+    const auto members = callee->memberName();
+    size_t first = 0;
+    if (use_aliases_.contains(head->getText()) && !members.empty()) {
+      target = ResolveImport(callee, head->getText(), Unquote(members.front()->getText()));
+      first = 1;
+    } else {
+      target = LoadName(callee, head->getText());
+    }
+    for (size_t idx = first; idx < members.size(); idx++) {
+      const auto member = members[idx];
+      const auto property = Property::FindOrCreate(String::New(Unquote(member->getText())), Type::NoneType());
       target = GetPropertyExpr::New(target, property);
     }
   }
@@ -308,8 +622,14 @@ auto ExprBuilder::BuildPipeTarget(KuraParser::PipeTargetContext* ctx, Expr* lhs)
 }
 
 auto ExprBuilder::visitPropertyAccess(KuraParser::PropertyAccessContext* ctx) -> std::any {
+  const auto member = Unquote(ctx->memberName()->getText());
+  if (const auto primary = dynamic_cast<KuraParser::PrimaryExprContext*>(ctx->operation())) {
+    const auto base = primary->primary()->getText();
+    if (use_aliases_.contains(base))
+      return ResolveImport(ctx, base, member);
+  }
   const auto target = Build(ctx->operation());
-  const auto property = Property::FindOrCreate(String::New(ctx->IDENT()->getText()), Type::NoneType());
+  const auto property = Property::FindOrCreate(String::New(member), Type::NoneType());
   return GetPropertyExpr::New(target, property);
 }
 

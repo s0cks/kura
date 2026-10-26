@@ -1,0 +1,4 @@
+// error: a callback must be the name of a function
+// flags: -I$DIR
+use "geometry.h" as g
+fn f(): Int => g.apply_twice((n) => n + 1, 5)

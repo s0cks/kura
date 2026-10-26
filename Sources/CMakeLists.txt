@@ -20,6 +20,30 @@ llvm_map_components_to_libnames(llvm_libs
   passes
 )
 
+# Clang reads the C headers a program `use`s. Its resource directory holds the
+# compiler's own headers (stddef.h, stdint.h): override it at run time with
+# KURA_CLANG_RESOURCE_DIR.
+find_package(Clang REQUIRED CONFIG)
+message(STATUS "Found Clang ${CLANG_PACKAGE_VERSION}")
+if(NOT KURA_CLANG_RESOURCE_DIR)
+  foreach(candidate
+      "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}"
+      "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
+    if(IS_DIRECTORY "${candidate}/include")
+      set(KURA_CLANG_RESOURCE_DIR "${candidate}")
+      break()
+    endif()
+  endforeach()
+endif()
+message(STATUS "Clang resource dir: ${KURA_CLANG_RESOURCE_DIR}")
+if(NOT KURA_CLANG_EXECUTABLE)
+  find_program(KURA_CLANG_EXECUTABLE clang HINTS "${LLVM_TOOLS_BINARY_DIR}" NO_DEFAULT_PATH)
+  if(NOT KURA_CLANG_EXECUTABLE)
+    find_program(KURA_CLANG_EXECUTABLE clang)
+  endif()
+endif()
+message(STATUS "C compiler for imports and shims: ${KURA_CLANG_EXECUTABLE}")
+
 find_package(glm CONFIG REQUIRED)
 find_package(yoga CONFIG REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
@@ -51,6 +75,7 @@ add_library(kura-runtime SHARED
   layout.cc
   unary_op.cc
   binary_op.cc
+  c_import.cc
   local_scope.cc
   module.cc
   object.cc
@@ -63,12 +88,16 @@ add_library(kura-runtime SHARED
 
 target_compile_definitions(kura-runtime
   PUBLIC ${LLVM_DEFINITIONS}
+         KURA_CLANG_EXECUTABLE="${KURA_CLANG_EXECUTABLE}"
+  PRIVATE KURA_CLANG_RESOURCE_DIR="${KURA_CLANG_RESOURCE_DIR}"
 )
 target_include_directories(kura-runtime
   PUBLIC ${LLVM_INCLUDE_DIRS}
+         ${CLANG_INCLUDE_DIRS}
 )
 target_link_libraries(kura-runtime
   PUBLIC LLVM
+         clang-cpp
          PkgConfig::XXHASH
          yogacore
          antlr::antlr4

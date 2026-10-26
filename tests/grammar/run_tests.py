@@ -41,12 +41,12 @@ def parse(path):
 
 
 failed = 0
-for f in sorted((here / "tests/valid").glob("*.kura")):
+for f in sorted((here / "valid").glob("*.kura")):
     errs = parse(f)
     print(("FAIL" if errs else "ok  "), "(valid)  ", f.name)
     for e in errs: print("      ", e)
     failed += bool(errs)
-for f in sorted((here / "tests/invalid").glob("*.kura")):
+for f in sorted((here / "invalid").glob("*.kura")):
     errs = parse(f)
     print(("ok  " if errs else "FAIL"), "(invalid)", f.name, "->", errs[0] if errs else "parsed cleanly")
     failed += not errs

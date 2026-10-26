@@ -76,6 +76,10 @@ class FlowGraph {
     return GetEntry() != nullptr;
   }
 
+  // The stand-in for an `extern fn` with no body: it has a signature but no
+  // blocks, and code generation fills in a call to the C function.
+  auto IsExtern() const -> bool;
+
   auto GetParameters() const -> const std::vector<ParameterInstr*>& {
     return parameters_;
   }

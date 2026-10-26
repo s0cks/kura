@@ -1,0 +1,2 @@
+// error: None is only a result type
+extern fn f(x: None): Int

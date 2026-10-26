@@ -117,6 +117,8 @@ auto TagName(const uint64_t tag) -> std::string {
       return "Record";
     case kTagFunction:
       return "Function";
+    case kTagHandle:
+      return "Handle";
     default:
       break;
   }
@@ -233,6 +235,7 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
       return x->kind_name == y->kind_name && RecordEqual(&x->props, &y->props) && SeqEqual(&x->children, &y->children);
     }
     case kTagFunction:
+    case kTagHandle:
       return a.bits == b.bits;
     default:
       break;
@@ -306,6 +309,11 @@ auto Format(const KuraValue& value) -> std::string {
     }
     case kTagFunction:
       return "<function>";
+    case kTagHandle: {
+      std::stringstream ss{};
+      ss << "<handle 0x" << std::hex << value.bits << ">";
+      return ss.str();
+    }
     default:
       break;
   }
@@ -335,6 +343,28 @@ void kura_rt_panic(const char* message) {
 
 static void Panic(const std::string& message) {
   kura_rt_panic(message.c_str());
+}
+
+const char* kura_rt_string_cstr(void* string) {
+  return string ? static_cast<StringObj*>(string)->value.c_str() : nullptr;
+}
+
+void* kura_rt_string_from_cstr_opt(const char* data) {
+  return data ? new StringObj(data) : nullptr;
+}
+
+void* kura_rt_string_from_cstr(const char* data, const char* what) {
+  if (!data)
+    Panic(std::string(what) + " returned NULL, but its result is not declared `| None`");
+  return new StringObj(data);
+}
+
+void kura_rt_ffi_overflow(const int64_t value, const char* what) {
+  Panic(std::to_string(value) + " doesn't fit " + what);
+}
+
+void kura_rt_ffi_error(const char* message) {
+  Panic(message);
 }
 
 void kura_rt_expect_tag(const uint64_t tag, const uint64_t expected) {

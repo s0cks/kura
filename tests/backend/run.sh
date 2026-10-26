@@ -13,72 +13,91 @@ kurac="${1:?usage: run.sh path/to/kurac}"
 dir="$(cd "$(dirname "$0")" && pwd)"
 status=0
 
+# The C libraries in c/ are built as shared libraries, so programs that `use`
+# their headers can call them. A program opts in with a line such as
+# `// flags: -I$DIR -L$LIB -lgeometry` in its first lines ($DIR is c/, $LIB is
+# where the libraries are built).
+libs="$(mktemp -d)"
+for c in "$dir"/c/*.c; do
+    [ -e "$c" ] || continue
+    "${CC:-cc}" -shared -fPIC -I"$dir/c" -o "$libs/lib$(basename "$c" .c).so" "$c" || status=1
+done
+flags_of() {
+    sed -n 's|^// flags: ||p' "$1" | head -n 1 | sed "s|\$DIR|$dir/c|g; s|\$LIB|$libs|g"
+}
+
 for f in "$dir"/*.kura; do
-  if out="$("$kurac" "$f" 2>&1)"; then
-    echo "ok    $(basename "$f")"
-  else
-    echo "FAIL  $(basename "$f")"
-    echo "$out" | grep -E "error" | sed 's/^/      /'
-    status=1
-  fi
+    if out="$("$kurac" "$f" 2>&1)"; then
+        echo "ok    $(basename "$f")"
+    else
+        echo "FAIL  $(basename "$f")"
+        echo "$out" | grep -E "error" | sed 's/^/      /'
+        status=1
+    fi
 done
 
 for f in "$dir"/errors/*.kura; do
-  want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
-  if out="$("$kurac" "$f" 2>&1)"; then
-    echo "FAIL  errors/$(basename "$f") (accepted)"
-    status=1
-  elif echo "$out" | grep -qF -- "$want"; then
-    echo "ok    errors/$(basename "$f")"
-  else
-    echo "FAIL  errors/$(basename "$f") (wanted: $want)"
-    echo "$out" | grep -E "error" | sed 's/^/      /'
-    status=1
-  fi
+    want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
+    flags="$(flags_of "$f")"
+    # shellcheck disable=SC2086
+    if out="$("$kurac" "$f" $flags 2>&1)"; then
+        echo "FAIL  errors/$(basename "$f") (accepted)"
+        status=1
+    elif echo "$out" | grep -qF -- "$want"; then
+        echo "ok    errors/$(basename "$f")"
+    else
+        echo "FAIL  errors/$(basename "$f") (wanted: $want)"
+        echo "$out" | grep -E "error" | sed 's/^/      /'
+        status=1
+    fi
 done
 
 # Programs in run/ are compiled and executed. Each `// run: <fn> [args] => <value>`
 # line calls a function and compares what it returns, as `kurac --run` prints
 # it. Each `// panic: <fn> [args] => <text>` line must abort with <text>.
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp" "$tmp.err"; rm -rf "$libs"' EXIT
 for f in "$dir"/run/*.kura; do
-  name="run/$(basename "$f")"
-  grep -hE '^// (run|panic): ' "$f" > "$tmp"
-  if ! "$kurac" "$f" --emit-llvm > /dev/null 2> "$tmp.err"; then
-    echo "FAIL  $name (does not compile)"
-    sed 's/^/      /' "$tmp.err" | head -5
-    status=1
-    continue
-  fi
-  pass=0
-  while IFS= read -r line; do
-    kind="${line#// }"; kind="${kind%%:*}"
-    spec="${line#// $kind: }"
-    call="${spec%% => *}"
-    want="${spec#* => }"
+    name="run/$(basename "$f")"
+    grep -hE '^// (run|panic): ' "$f" >"$tmp"
+    flags="$(flags_of "$f")"
     # shellcheck disable=SC2086
-    out="$("$kurac" "$f" --run $call 2>&1)"; code=$?
-    if [ "$kind" = run ]; then
-      got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1)"
-      if [ "$got" = "$want" ]; then
-        pass=$((pass + 1))
-      else
-        echo "FAIL  $name: $call"
-        echo "      wanted: $want"
-        echo "      got:    ${got:-$(echo "$out" | grep -E 'error|panic' | head -n 1)}"
+    if ! "$kurac" "$f" $flags --emit-llvm >/dev/null 2>"$tmp.err"; then
+        echo "FAIL  $name (does not compile)"
+        sed 's/^/      /' "$tmp.err" | head -5
         status=1
-      fi
-    else
-      if [ "$code" -ne 0 ] && echo "$out" | grep -qF -- "$want"; then
-        pass=$((pass + 1))
-      else
-        echo "FAIL  $name: $call (wanted a panic: $want)"
-        status=1
-      fi
+        continue
     fi
-  done < "$tmp"
-  echo "ok    $name ($pass checks)"
+    pass=0
+    while IFS= read -r line; do
+        kind="${line#// }"
+        kind="${kind%%:*}"
+        spec="${line#// $kind: }"
+        call="${spec%% => *}"
+        want="${spec#* => }"
+        # shellcheck disable=SC2086
+        out="$("$kurac" "$f" $flags --run $call 2>&1)"
+        code=$?
+        if [ "$kind" = run ]; then
+            got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1)"
+            if [ "$got" = "$want" ]; then
+                pass=$((pass + 1))
+            else
+                echo "FAIL  $name: $call"
+                echo "      wanted: $want"
+                echo "      got:    ${got:-$(echo "$out" | grep -E 'error|panic' | head -n 1)}"
+                status=1
+            fi
+        else
+            if [ "$code" -ne 0 ] && echo "$out" | grep -qF -- "$want"; then
+                pass=$((pass + 1))
+            else
+                echo "FAIL  $name: $call (wanted a panic: $want)"
+                status=1
+            fi
+        fi
+    done <"$tmp"
+    echo "ok    $name ($pass checks)"
 done
 rm -f "$tmp.err"
 exit $status

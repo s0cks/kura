@@ -1,0 +1,14 @@
+// flags: -I$DIR $DIR/inlined.c
+use "inlined.h" as c-lib
+
+// run: tripled 14 => 42
+fn tripled(n: Int): Int => c-lib.triple(n)
+// run: swapped => 2
+fn swapped(): Int => c-lib.pair_swap({ a: 1, b: 2, }).a
+// run: summed => 9
+fn summed(): Int => c-lib.pair_sum({ a: 4, b: 5, })
+// run: greets => "from C"
+fn greets(): String => match c-lib.greeting() {
+  Some(s) => s,
+  None => "",
+}

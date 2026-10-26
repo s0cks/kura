@@ -1,0 +1,145 @@
+// flags: -I$DIR -L$LIB -lgeometry
+use "math.h"
+use "string.h" as str
+use "stdlib.h"
+use "stdio.h" as io
+use "geometry.h" as g
+
+type Canvas = g.geometry_canvas
+type Kind = g.shape_kind
+
+// run: hyp 3.0 4.0 => 5.0
+fn hyp(a: Float, b: Float): Float => math.sqrt(a * a + b * b)
+// run: pi => 3.141592653589793
+fn pi(): Float => math.M_PI
+// run: len hello => 5
+fn len(s: String): Int => str.strlen(s)
+// run: up -5 => 5
+fn up(n: Int): Int => stdlib.abs(n)
+// run: piped -2.5 => 2.5
+fn piped(x: Float): Float => x |> math.fabs()
+// run: rand-max => 2147483647
+fn rand-max(): Int => stdlib.RAND_MAX
+// run: opens => "closed"
+fn opens(): String => match io.fopen("/nonexistent", "r") {
+  Some(f) => "opened",
+  None => "closed",
+}
+// run: printed => 5
+fn printed(): Int => io.printf("%ld-%s\n", 42, "x")
+// run: printed-float => 4
+fn printed-float(): Int => io.printf("%.1f\n", 2.5)
+// run: printed-plain => 6
+fn printed-plain(): Int => io.printf("hello\n")
+// run: eof => -1
+fn eof(): Int => io.EOF
+
+// run: version => 3
+fn version(): Int => g.GEOMETRY_VERSION
+// run: scale => 0.5
+fn scale(): Float => g.GEOMETRY_SCALE
+// run: name => "geometry"
+fn name(): String => g.GEOMETRY_NAME
+// run: limit => -4
+fn limit(): Int => g.GEOMETRY_LIMIT
+// run: square-sides => 4
+fn square-sides(): Int => g.shape_sides(g.SHAPE_SQUARE)
+// run: sides-of 3 => 3
+fn sides-of(kind: Kind): Int => g.shape_sides(kind)
+// run: ratio => 2.5
+fn ratio(): Float => g.shape_ratio(5.0, 2.0)
+// run: area 6 7 => 42
+fn area(w: Int, h: Int): Int => match g.canvas_new(w, h) {
+  Some(c) => measured(c),
+  None => 0 - 1,
+}
+fn measured(c: Canvas): Int => {
+  let a = g.canvas_area(c)
+  let freed = g.canvas_free(c)
+  a
+}
+// run: area 0 7 => -1
+// run: contains => true
+fn contains(): Bool => match g.canvas_new(10, 10) {
+  Some(c) => g.canvas_contains(c, 3.0, 4.0),
+  None => false,
+}
+// run: outside => false
+fn outside(): Bool => match g.canvas_new(10, 10) {
+  Some(c) => g.canvas_contains(c, 30.0, 4.0),
+  None => false,
+}
+// run: labelled => "hi"
+fn labelled(): String => match g.canvas_new(1, 1) {
+  Some(c) => relabel(c),
+  None => "none",
+}
+fn relabel(c: Canvas): String => {
+  let set = g.canvas_set_label(c, "hi")
+  match g.canvas_label(c) {
+    Some(s) => s,
+    None => "unset",
+  }
+}
+// run: unlabelled => "unset"
+fn unlabelled(): String => match g.canvas_new(1, 1) {
+  Some(c) => match g.canvas_label(c) {
+    Some(s) => s,
+    None => "unset",
+  },
+  None => "none",
+}
+// run: counter => 2
+fn counter(): Int => {
+  let first = g.counter_next()
+  g.counter_next()
+}
+
+// run: add-x => 4.0
+fn add-x(): Float => g.vec2_add({ x: 1.0, y: 2.0, }, { x: 3.0, y: 4.0, }).x
+// run: add-y => 6.0
+fn add-y(): Float => g.vec2_add({ x: 1.0, y: 2.0, }, { x: 3.0, y: 4.0, }).y
+// run: length => 5.0
+fn length(): Float => g.vec2_length({ x: 3.0, y: 4.0, })
+// run: made-height => 4.0
+fn made-height(): Float => g.rect_make(1.0, 2.0, 3.0, 4.0, 7).size.y
+// run: made-id => 7
+fn made-id(): Int => g.rect_make(1.0, 2.0, 3.0, 4.0, 7).id
+// run: made-origin => 2.0
+fn made-origin(): Float => g.rect_make(1.0, 2.0, 3.0, 4.0, 7).origin.y
+// run: area-of => 12.0
+fn area-of(): Float => g.rect_area(g.rect_make(0.0, 0.0, 3.0, 4.0, 1))
+// run: grown-width => 5.0
+fn grown-width(): Float => g.rect_grow(g.rect_make(0.0, 0.0, 3.0, 4.0, 1), 2.0).size.x
+// run: untagged => "none"
+fn untagged(): String => match g.rect_tag(g.rect_make(0.0, 0.0, 1.0, 1.0, 1)) {
+  Some(s) => s,
+  None => "none",
+}
+// run: tagged => "hero"
+fn tagged(): String => match g.rect_tag({ origin: { x: 0.0, y: 0.0, }, size: { x: 1.0, y: 1.0, }, id: 1, tag: "hero", }) {
+  Some(s) => s,
+  None => "none",
+}
+// run: big => 6.0
+fn big(): Float => g.big3_scale({ x: 1.0, y: 2.0, z: 3.0, flag: 1, }, 2.0).z
+// run: big-flag => 1
+fn big-flag(): Int => g.big3_scale({ x: 1.0, y: 2.0, z: 3.0, flag: 1, }, 2.0).flag
+// run: clamped => 10
+fn clamped(): Int => g.clamp_i(15, 0, 10)
+// run: clamped-low => 0
+fn clamped-low(): Int => g.clamp_i(-5, 0, 10)
+// run: typed => 3.0
+fn typed(): Float => g.vec2_length({ x: 0.0, y: 3.0, })
+type V = g.vec2
+
+fn plus-three(n: Int): Int => n + 3
+fn square(x: Float): Float => x * x
+fn is-even(n: Int): Int => if n / 2 * 2 == n { 1 } else { 0 }
+// run: twice => 11
+fn twice(): Int => g.apply_twice(plus-three, 5)
+// run: integrated => 9.0
+fn integrated(): Float => g.integrate(square, 0.0, 3.0, 1000) |> rounded()
+fn rounded(x: Float): Float => math.floor(x + 0.5)
+// run: evens => 5
+fn evens(): Int => g.count_matching(is-even, 0, 10)

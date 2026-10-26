@@ -1,0 +1,34 @@
+use "math.h"
+use "math.h" as m
+use "SDL2/SDL.h" as SDL
+@pure
+use "cglm.h" as vec
+@pure(sqrt, sin)
+use "tgmath.h"
+
+extern fn sqrt(x: Float): Float
+extern fn gl_clear(mask: Int): None
+extern fn SDL_Init(flags: Int): Int
+@pure
+extern fn hypot(x: Float, y: Float): Float
+extern fn `fn`(x: Int): Int
+extern fn damage-for(level: Int): Int => level * 10
+extern fn on_tick(model: Model): Model => {
+  let next = model.count + 1
+  { ...model, count: next }
+}
+
+type Point = { pos: rl.Vector2, id: m.uint8_t, ok: SDL.Bool }
+
+fn update(msg: Message, model: Model): Model => {
+  let a = m.sqrt(4.0)
+  let b = rl.GetMousePosition()
+  let c = SDL.Init(0)
+  let d = event.type
+  let e = event.in
+  let f = color.red
+  let g = x.use.as.extern
+  let h = 4.0 |> m.sqrt()
+  let i = 4.0 |> SDL.Foo()
+  model
+}

@@ -1,0 +1,2 @@
+// error: only String and c.ptr can be `| None`
+extern fn f(x: Int | None): Int

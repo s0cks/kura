@@ -1,0 +1,2 @@
+// error: c.out takes a number or a Bool
+extern fn f(x: c.out<String>): c.int

@@ -1,0 +1,2 @@
+// error: a function C calls can't have c.out or callback parameters
+extern fn f(x: c.out<c.int>): c.int => 1

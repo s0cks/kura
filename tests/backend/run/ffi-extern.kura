@@ -1,0 +1,98 @@
+extern fn sqrt(x: Float): Float
+extern fn abs(x: c.int): c.int
+extern fn labs(x: c.long): c.long
+extern fn strlen(s: String): c.size_t
+extern fn atoi(s: String): c.int
+extern fn getenv(name: String): String | None
+extern fn fabsf(x: c.float): c.float
+extern fn toupper(ch: c.int): c.int
+extern fn strchr(s: String, ch: c.int): String | None
+extern fn strstr(haystack: String, needle: String): String
+extern fn strdup(s: String): c.ptr
+extern fn free(p: c.ptr): None
+extern fn fopen(path: String, mode: String): c.ptr | None
+extern fn fclose(f: c.ptr): c.int
+extern fn usleep(us: c.uint): c.int
+extern fn tolower(ch: c.int): c.int
+extern fn frexp(x: Float, exp: c.out<c.int>): Float
+extern fn modf(x: Float, whole: c.out<c.double>): Float
+extern fn printf(fmt: String, ...): c.int
+extern "getenv" fn getenv-checked(name: String): String
+
+// run: hyp 3.0 4.0 => 5.0
+fn hyp(a: Float, b: Float): Float => sqrt(a * a + b * b)
+// run: magnitude -7 => 7
+fn magnitude(x: Int): Int => abs(x)
+// run: big-labs => 9000000000
+fn big-labs(): Int => labs(-9000000000)
+// run: length hello => 5
+fn length(s: String): Int => strlen(s)
+// run: parse 12ab => 12
+fn parse(s: String): Int => atoi(s)
+// run: upper 97 => 65
+fn upper(ch: Int): Int => toupper(ch)
+// run: half -2.5 => 2.5
+fn half(x: Float): Float => fabsf(x)
+// run: env-or NOPE_KURA_NOT_SET => "unset"
+fn env-or(name: String): String => match getenv(name) {
+  Some(s) => s,
+  None => "unset",
+}
+// run: find-l => "llo"
+fn find-l(): String => match strchr("hello", 108) {
+  Some(rest) => rest,
+  None => "none",
+}
+// run: find-z => "none"
+fn find-z(): String => match strchr("hello", 122) {
+  Some(rest) => rest,
+  None => "none",
+}
+// run: copies => 1
+fn copies(): Int => {
+  let p = strdup("hello world")
+  let freed = free(p)
+  1
+}
+// run: opens-missing => "missing"
+fn opens-missing(): String => match fopen("/nonexistent/kura", "r") {
+  Some(f) => "opened",
+  None => "missing",
+}
+// run: opens-and-closes => 0
+fn opens-and-closes(): Int => match fopen("/dev/null", "r") {
+  Some(f) => fclose(f),
+  None => 1 - 2,
+}
+// run: found => "world"
+fn found(): String => strstr("hello world", "world")
+// run: in-closure 3 => 3
+fn in-closure(x: Int): Int => ((n) => abs(n))(x)
+// run: as-value => 4
+fn as-value(): Int => apply-twice(abs, -2)
+fn apply-twice(f: (Int) => Int, x: Int): Int => f(x) + f(x)
+// run: say => 6
+fn say(): Int => printf("%s-%ld\n", "abc", 5)
+// run: say-fixed => 3
+fn say-fixed(): Int => printf("ab\n")
+// run: env-home-set => true
+fn env-home-set(): Bool => strlen(getenv-checked("HOME")) > 0
+// run: mantissa => 0.75
+fn mantissa(): Float => frexp(6.0).result
+// run: exponent => 3
+fn exponent(): Int => frexp(6.0).exp
+// run: whole-part => 3.0
+fn whole-part(): Float => modf(3.25).whole
+// run: fraction => 0.25
+fn fraction(): Float => modf(3.25).result
+// run: sleeps => 0
+fn sleeps(): Int => usleep(0)
+
+// panic: narrow 3000000000 => doesn't fit
+fn narrow(x: Int): Int => abs(x)
+// panic: negative-uint => doesn't fit
+fn negative-uint(): Int => usleep(0 - 1)
+// panic: env-missing => returned NULL
+fn env-missing(): String => getenv-checked("NOPE_KURA_NOT_SET")
+// panic: null-result => returned NULL
+fn null-result(): String => strstr("hello", "nope")

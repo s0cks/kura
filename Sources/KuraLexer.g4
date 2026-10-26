@@ -19,6 +19,9 @@ MATCH : 'match';
 FOR   : 'for';
 IN    : 'in';
 FOLD  : 'fold';
+USE   : 'use';
+AS    : 'as';
+EXTERN: 'extern';
 TRUE  : 'true';
 FALSE : 'false';
 
@@ -51,16 +54,22 @@ COLOR_LIT
 // Identifiers
 // ---------------------------------------------------------------------------
 
-// kebab-case: lowercase letters and digits, single hyphens between parts.
-// Must start with a letter so it never collides with numbers.
-//   item-count, get-position, is-debug, b-c      (b-c is ONE identifier)
-IDENT       : [a-z] [a-z0-9]* ( '-' [a-z0-9]+ )*;
-
-// PascalCase: types and variants.
-UPPER_IDENT : [A-Z] [a-zA-Z0-9]*;
-
-// Pattern wildcard (not a valid identifier character otherwise).
+// Pattern wildcard. Listed before IDENT so that a lone `_` is the wildcard and
+// anything longer (`_exit`, `__x`) is an identifier.
 UNDERSCORE  : '_';
+
+// A name that would otherwise be a keyword: `type`, `in`, `red`. Only names
+// that come from C need this.
+RAW_IDENT   : '`' ~[`\r\n]+ '`';
+
+// Kura code is written in kebab-case (item-count, get-position, b-c), but C
+// names are accepted as they are: gl_clear, glClear, _exit.
+// Must start with a letter or `_` so it never collides with numbers.
+IDENT       : [a-z_] [a-zA-Z0-9_]* ( '-' [a-zA-Z0-9_]+ )*;
+
+// PascalCase: types and variants. C names that start with a capital (SDL_Init,
+// GL_TRUE) are also lexed as this.
+UPPER_IDENT : [A-Z] [a-zA-Z0-9_]*;
 
 // `@simd`, `@name` — a directive is a single token.
 DIRECTIVE   : '@' [a-z] [a-z0-9]* ( '-' [a-z0-9]+ )*;

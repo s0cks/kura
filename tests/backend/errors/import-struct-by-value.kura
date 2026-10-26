@@ -1,0 +1,3 @@
+// error: stdlib.div can't be called from Kura: its result is the struct
+use "stdlib.h"
+fn f(): Int => stdlib.div(7, 2)
