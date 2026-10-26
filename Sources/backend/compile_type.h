@@ -42,6 +42,7 @@ class CompileType {
     kFunction,
     kUnion,
     kHandle,
+    kVoid,
   };
 
   struct Field {
@@ -53,12 +54,12 @@ class CompileType {
  private:
   Kind kind_;
   std::string repr_{};
-  CompileType* element_ = nullptr;     // Seq
-  std::vector<Field> fields_{};        // Record, sorted by name
-  std::string name_{};                 // Variant
-  CompileType* payload_ = nullptr;     // Variant (null: no payload)
-  std::vector<CompileType*> params_{}; // Function
-  CompileType* result_ = nullptr;      // Function
+  CompileType* element_ = nullptr;       // Seq
+  std::vector<Field> fields_{};          // Record, sorted by name
+  std::string name_{};                   // Variant
+  CompileType* payload_ = nullptr;       // Variant (null: no payload)
+  std::vector<CompileType*> params_{};   // Function
+  CompileType* result_ = nullptr;        // Function
   std::vector<CompileType*> members_{};  // Union, sorted, flattened
 
   explicit CompileType(const Kind kind) :
@@ -78,9 +79,9 @@ class CompileType {
     return repr_;
   }
 
-#define DEFINE_KIND_CHECK(Name)            \
-  inline auto Is##Name() const -> bool {   \
-    return kind_ == Kind::k##Name;         \
+#define DEFINE_KIND_CHECK(Name)          \
+  inline auto Is##Name() const -> bool { \
+    return kind_ == Kind::k##Name;       \
   }
   DEFINE_KIND_CHECK(Any)
   DEFINE_KIND_CHECK(Never)

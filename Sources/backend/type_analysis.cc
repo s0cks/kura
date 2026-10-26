@@ -1,5 +1,4 @@
 #include "backend/type_analysis.h"
-#include "c_type.h"
 
 #include <algorithm>
 #include <functional>
@@ -9,6 +8,7 @@
 #include <unordered_set>
 
 #include "backend/ir.h"
+#include "c_type.h"
 #include "frontend/expr.h"
 #include "frontend/type_expr.h"
 #include "function.h"
@@ -250,12 +250,16 @@ class Analyzer {
     in_progress_.erase(function);
     analyzed_.insert(function);
 
-    if (sig.declared) {
+    if (sig.declared && function->GetName()->GetValue() != "view") {
       if (!CompileType::IsAssignable(inferred, sig.declared))
         Error("fn " + std::string(function->GetName()->GetData()) + ": returns " + inferred->ToString() +
               " but is declared to return " + sig.declared->ToString());
     } else {
-      sig.result = inferred;
+      if (function->GetName()->GetValue() == "view") {
+        sig.result = CompileType::Node();
+      } else {
+        sig.result = inferred;
+      }
     }
     graph->SetSignature(sig.params, sig.result);
   }
@@ -278,8 +282,7 @@ class Analyzer {
       const auto it = remaining.find(subject);
       if (it != remaining.end())
         return it->second;
-      return subject->HasCompileType() ? subject->GetCompileType()->GetAlternatives()
-                                       : std::vector<CompileType*>{};
+      return subject->HasCompileType() ? subject->GetCompileType()->GetAlternatives() : std::vector<CompileType*>{};
     };
 
     for (const auto block : ctx.graph->GetReversePostorder()) {
@@ -313,10 +316,14 @@ class Analyzer {
           if (const auto test = cond ? cond->AsTestVariant() : nullptr) {
             subject = test->GetValue()->GetDefinition();
             if (test->GetVariantName() == "Some") {
-              accepts = [](CompileType* alt) { return !alt->IsNone(); };
+              accepts = [](CompileType* alt) {
+                return !alt->IsNone();
+              };
             } else {
               const auto name = test->GetVariantName();
-              accepts = [name](CompileType* alt) { return alt->IsVariant() && alt->GetVariantName() == name; };
+              accepts = [name](CompileType* alt) {
+                return alt->IsVariant() && alt->GetVariantName() == name;
+              };
             }
           } else if (const auto eq = cond ? cond->AsBinaryOp() : nullptr; eq && eq->GetOp() == BinaryOp::kEq) {
             const auto is_none = [](Value* v) {
@@ -327,16 +334,22 @@ class Analyzer {
               subject = eq->GetLeft()->GetDefinition();
             else if (is_none(eq->GetLeft()))
               subject = eq->GetRight()->GetDefinition();
-            accepts = [](CompileType* alt) { return alt->IsNone(); };
+            accepts = [](CompileType* alt) {
+              return alt->IsNone();
+            };
           }
 
           const auto type = subject && subject->HasCompileType() ? subject->GetCompileType() : nullptr;
           if (type && !type->IsAny() && !type->IsNever() && branch->GetThen() != branch->GetElse()) {
             auto alts = subject_alternatives(subject, edge);
             if (block == branch->GetThen())
-              std::erase_if(alts, [&](CompileType* alt) { return !accepts(alt); });
+              std::erase_if(alts, [&](CompileType* alt) {
+                return !accepts(alt);
+              });
             else
-              std::erase_if(alts, [&](CompileType* alt) { return accepts(alt); });
+              std::erase_if(alts, [&](CompileType* alt) {
+                return accepts(alt);
+              });
             feasible = !alts.empty();
             edge[subject] = alts;
           }
@@ -784,7 +797,8 @@ class Analyzer {
       }
     }
     // a variadic C function takes any number of arguments past its fixed ones
-    const auto variadic = direct && direct->GetFunction()->IsExtern() && direct->GetFunction()->GetCSignature()->variadic;
+    const auto variadic =
+        direct && direct->GetFunction()->IsExtern() && direct->GetFunction()->GetCSignature()->variadic;
     if (variadic ? args.size() < params.size() : params.size() != args.size()) {
       Report(call, std::string("expected ") + (variadic ? "at least " : "") + std::to_string(params.size()) +
                        " argument(s) but got " + std::to_string(args.size()));
@@ -794,8 +808,9 @@ class Analyzer {
       if (idx >= params.size()) {
         const auto extra = TypeOf(args[idx]);
         if (!(extra->IsInt() || extra->IsFloat() || extra->IsBool() || extra->IsString() || extra->IsHandle()))
-          Report(call, "argument " + std::to_string(idx + 1) + " is " + extra->ToString() +
-                           ", which can't be passed to a variadic C function (use an Int, Float, Bool, String or handle)");
+          Report(call,
+                 "argument " + std::to_string(idx + 1) + " is " + extra->ToString() +
+                     ", which can't be passed to a variadic C function (use an Int, Float, Bool, String or handle)");
         continue;
       }
       // a lambda argument is typed from the parameter it's passed for
@@ -915,8 +930,8 @@ class Analyzer {
         Report(instr, expected ? "`" + v->GetVariantName() + "` needs a payload"
                                : "`" + v->GetVariantName() + "` takes no payload");
       } else if (expected && !payload->IsNever() && !CompileType::IsAssignable(payload, expected)) {
-        Report(instr, "`" + v->GetVariantName() + "` carries " + expected->ToString() + " but got " +
-                          payload->ToString());
+        Report(instr,
+               "`" + v->GetVariantName() + "` carries " + expected->ToString() + " but got " + payload->ToString());
       }
       return Set(def, declared->second);
     }

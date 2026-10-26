@@ -1,9 +1,17 @@
 #include "gir.h"
 
 namespace kura {
+// TODO(@s0cks): duplicate of ir.cc
+static inline auto Name(const Value* value) -> std::string {
+  if (!value || !value->GetDefinition())
+    return "<none>";
+  return "%" + std::to_string(value->GetDefinition()->GetId());
+}
+
 auto CheckRendererStatusInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "CheckRendererStatus(";
+  ss << Name(GetValue());
   ss << ")";
   return ss.str();
 }

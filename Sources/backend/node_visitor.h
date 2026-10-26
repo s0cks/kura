@@ -7,8 +7,6 @@
 namespace kura {
 class NodeVisitor : public ValueVisitor {
  private:
-  auto Eval(expr::Expr* e) -> Value*;
-
   void EmitRenderCall(Definition* defn);
 
   auto VisitButton(expr::NodeExpr* node) -> VisitResult;

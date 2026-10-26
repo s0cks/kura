@@ -95,7 +95,6 @@ void FlowGraphBuilder::AddParameters(const std::vector<LocalVariable*>& params,
 }
 
 auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
-  std::cout << "building view body" << std::endl;
   expr::ExprPrinter printer(std::cout, Indent{});
   if (!body->Accept(&printer))
     return false;
@@ -123,10 +122,7 @@ auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
 #endif  // KURA_DEBUG
   }
 
-  Value* value = for_body.GetValue();
-  if (!value)
-    value = Bind(ConstantInstr::New(None::Get()));
-  Terminate(ReturnInstr::New(value));
+  Terminate(ReturnInstr::New());
   return true;
 }
 

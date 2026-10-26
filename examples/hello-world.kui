@@ -16,4 +16,3 @@ fn view(message: String): Node =>
   #button(){
     #text(message)
   }
-  

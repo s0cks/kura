@@ -7,24 +7,6 @@
 #include "gir.h"
 
 namespace kura {
-auto NodeVisitor::Eval(expr::Expr* expr) -> Value* {
-  if (!expr) {
-    Fail("missing expression");
-    return nullptr;
-  }
-
-  NodeVisitor for_expr(GetOwner());
-  if (!expr->Accept(&for_expr))
-    return nullptr;
-
-  if (!for_expr.HasValue()) {
-    Fail(std::string("expression produced no value: ") + std::string(expr->GetName()));
-    return nullptr;
-  }
-
-  return for_expr.GetValue();
-}
-
 auto NodeVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
   const auto& children = expr->GetChildren();
   if (children.empty()) {
@@ -53,11 +35,14 @@ auto NodeVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
       return false;
   }
 
-  const auto value = Eval(last);
-  if (!value)
+  if (!last) {
+    Fail("missing expression");
     return false;
+  }
 
-  ReturnValue(value);
+  NodeVisitor for_expr(GetOwner());
+  if (!last->Accept(&for_expr))
+    return false;
   return true;
 }
 
@@ -83,7 +68,6 @@ auto NodeVisitor::VisitButton(expr::NodeExpr* node) -> VisitResult {
       return false;
   }
 
-  ReturnValue(NoneValue());
   return true;
 }
 
@@ -104,7 +88,6 @@ auto NodeVisitor::VisitText(expr::NodeExpr* node) -> VisitResult {
     value = Bind(ConstantInstr::New(String::New("")));
 
   EmitRenderCall(DrawTextInstr::New(value));
-  ReturnValue(NoneValue());
   return true;
 }
 

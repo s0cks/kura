@@ -451,6 +451,8 @@ auto main(int argc, char** argv) -> int {
   const auto exec_end = std::chrono::high_resolution_clock::now();
   const auto exec_dur = std::chrono::duration_cast<std::chrono::microseconds>((exec_end - exec_start));
 
-  std::cout << "=> " << rt::Format(result) << "  (" << exec_dur.count() << "us)" << std::endl;
+  if (result.tag != rt::kTagInvalid)
+    std::cout << "=> " << rt::Format(result) << "  (" << exec_dur.count() << "us)" << std::endl;
+
   return EXIT_SUCCESS;
 }

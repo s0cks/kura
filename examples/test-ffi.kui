@@ -5,3 +5,23 @@ fn sqrt(x: Float): Float => math.sqrt(x)
 
 fn print(x: String) => stdio.printf("%s\n", x)
 
+fn apply-print-pos(pos: Position) => stdio.printf("%lf, %lf\n", pos.x, pos.y)
+
+fn print-pos(x: Float, y: Float) => apply-print-pos({ x: x, y: y })
+
+type Position = {
+  x: Float,
+  y: Float,
+}
+
+type Rect = {
+  width: Float,
+  height: Float,
+  pos: Position,
+}
+
+fn apply-print-rect(rect: Rect) =>
+  stdio.printf("%lf, %lf, %lf, %lf\n", rect.pos.x, rect.pos.y, rect.width, rect.height)
+
+fn print-rect(x: Float, y: Float, width: Float, height: Float) =>
+  apply-print-rect({ width: width, height: height } + { pos: { x: x, y: y }})

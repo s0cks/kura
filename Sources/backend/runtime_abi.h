@@ -47,6 +47,7 @@ enum Tag : uint64_t {
   kTagRecord = 12,
   kTagFunction = 13,
   kTagHandle = 14,
+  kTagVoid = 15,
 };
 
 static constexpr const uint64_t kVariantBit = 1ULL << 63;

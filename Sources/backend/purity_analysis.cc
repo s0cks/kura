@@ -137,8 +137,10 @@ auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::s
       fail("init must produce the model: it returns " + init->GetReturnType()->ToString() +
            " but update's model parameter is " + model->ToString());
   }
+
   if (view && view->GetReturnType() && !CompileType::IsAssignable(view->GetReturnType(), CompileType::Node()))
     fail("view must produce a Node: it returns " + view->GetReturnType()->ToString());
+
   return ok;
 }
 }  // namespace kura

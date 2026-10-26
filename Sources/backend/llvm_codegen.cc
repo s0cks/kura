@@ -101,6 +101,8 @@ auto TagOf(CompileType* type) -> uint64_t {
       return rt::kTagFunction;
     case CompileType::kHandle:
       return rt::kTagHandle;
+    case CompileType::kVoid:
+      return rt::kTagVoid;
     default:
       return rt::kTagNone;
   }
@@ -217,20 +219,32 @@ class Generator {
   auto Convert(llvm::Value* value, CompileType* from, CompileType* to) -> llvm::Value* {
     if (from == to)
       return value;
+
+    if (value == nullptr || value->getType()->isVoidTy()) {
+      if (RepOf(to) == Rep::kTagged)
+        return Pack(b_.getInt64(TagOf(from)), b_.getInt64(0));
+
+      return llvm::PoisonValue::get(Lower(to));
+    }
+
     const auto rf = RepOf(from);
     const auto rt = RepOf(to);
     if (rt == Rep::kTagged) {
       if (rf == Rep::kTagged)
         return value;
+
       return Pack(b_.getInt64(TagOf(from)), ToBits(value, from));
     }
+
     if (rf == Rep::kTagged) {
       // checked: the value is only known to be a `to` at runtime
       CallRt("kura_rt_expect_tag", void_ty_, {TagOfValue(value), b_.getInt64(TagOf(to))});
       return FromBits(BitsOfValue(value), to);
     }
+
     if (rf == rt)
       return value;  // e.g. Seq<Int> to Seq<Number>: the elements are tagged either way
+
     Fail("internal error: can't convert " + from->ToString() + " to " + to->ToString());
     return llvm::PoisonValue::get(Lower(to));
   }
@@ -830,13 +844,19 @@ class Generator {
         return;
       }
       if (const auto ret = instr->AsReturn()) {
-        const auto value = As(ret->GetValue(), fn_->graph->GetReturnType());
-        fn_->ends[block] = b_.GetInsertBlock();
-        b_.CreateRet(value);
+        if (ret->HasValue()) {
+          const auto value = As(ret->GetValue(), fn_->graph->GetReturnType());
+          fn_->ends[block] = b_.GetInsertBlock();
+          b_.CreateRet(value);
+        } else {
+          fn_->ends[block] = b_.GetInsertBlock();
+          b_.CreateRetVoid();
+        }
         return;
       }
       EmitInstruction(instr);
     }
+
     Fail("internal error: B" + std::to_string(block->GetBlockId()) + " of " + fn_->graph->GetName() +
          " has no terminator");
   }
@@ -1320,6 +1340,19 @@ class Generator {
           continue;
         }
         b_.SetInsertPoint(end->getTerminator());
+
+        auto defInstr = in.value->GetDefinition();
+        if (defInstr && defInstr->AsReturn()) {
+          node->addIncoming(llvm::UndefValue::get(Lower(phi->GetCompileType())), end);
+          continue;
+        }
+
+        llvm::Value* llvmVal = state.values[defInstr];
+        if (llvmVal == nullptr || llvmVal->getType()->isVoidTy()) {
+          node->addIncoming(llvm::UndefValue::get(Lower(phi->GetCompileType())), end);
+          continue;
+        }
+
         node->addIncoming(Convert(state.values[in.value->GetDefinition()], Type(in.value), phi->GetCompileType()), end);
       }
     }
@@ -1353,12 +1386,20 @@ class Generator {
     const auto result = graph->GetReturnType();
     if (!result)
       return;  // never analyzed: nothing can call it
+
     std::vector<llvm::Type*> params{};
     for (const auto type : graph->GetParameterTypes())
       params.push_back(Lower(type));
+    llvm::FunctionType* retType = nullptr;
+    if (graph->GetName() == "view") {
+      retType = llvm::FunctionType::get(void_ty_, params, false);
+    } else {
+      retType = llvm::FunctionType::get(Lower(result), params, false);
+    }
+
     const auto name = graph->GetName();
-    natives_[graph] = llvm::Function::Create(llvm::FunctionType::get(Lower(result), params, false),
-                                             llvm::GlobalValue::InternalLinkage, "kura.fn." + name, module_.get());
+    natives_[graph] =
+        llvm::Function::Create(retType, llvm::GlobalValue::InternalLinkage, "kura.fn." + name, module_.get());
 
     if (graph == graphs_->GetInit())
       return;

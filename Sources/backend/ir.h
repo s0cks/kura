@@ -958,15 +958,20 @@ class PipeCallInstr : public Definition {
 class ReturnInstr : public TemplateDefinition<1> {
  public:
   explicit ReturnInstr(Value* value) {
-    SetValue(value);
+    if (value)
+      SetValue(value);
   }
   ~ReturnInstr() override = default;
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return HasValue() ? 1 : 0;
+  }
 
   HAS_NAMED_INPUT(Value, 0);
   DECLARE_INSTRUCTION_TYPE(Return);
 
  public:
-  static inline auto New(Value* value) -> ReturnInstr* {
+  static inline auto New(Value* value = nullptr) -> ReturnInstr* {
     return new ReturnInstr(value);
   }
 };
