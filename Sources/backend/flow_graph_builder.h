@@ -1,6 +1,7 @@
 #ifndef KURA_FLOW_GRAPH_BUILDER_H
 #define KURA_FLOW_GRAPH_BUILDER_H
 
+#include <ostream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -8,6 +9,7 @@
 #include "backend/flow_graph.h"
 #include "backend/ir.h"
 #include "common.h"
+#include "dom/node.h"
 #include "frontend/expr.h"
 
 namespace kura {
@@ -38,6 +40,7 @@ class FlowGraphBuilder {
   friend class EffectVisitor;
   friend class ValueVisitor;
   friend class NodeVisitor;
+  friend class DomLowering;
 
  public:
   // State shared by the graphs of one module.
@@ -46,6 +49,8 @@ class FlowGraphBuilder {
     std::unordered_map<std::string, Function*> functions{};
     uint64_t lambda_count = 0;
     std::vector<std::string> errors{};
+    // where to dump the virtual DOM of each view; null: don't
+    std::ostream* dump_dom = nullptr;
   };
 
  private:
@@ -110,6 +115,16 @@ class FlowGraphBuilder {
 
   auto Fail(const std::string& message) -> VisitResult;
 
+  // The constant `local` holds in this graph, or null if it isn't one.
+  auto FoldableLocal(LocalVariable* local) const -> Object*;
+
+  // Records that `value` has to have a type `def` accepts; the type analysis
+  // checks it.
+  void AddPropertyConstraint(Value* value, const dom::PropertyDef* def, const std::string& where);
+
+  // Writes the virtual DOM under `root` to `Context::dump_dom`, if it is set.
+  void DumpDom(dom::Node* root) const;
+
   // Lowers `body` and ends the graph with a Return of its value.
   auto BuildBody(expr::Expr* body) -> bool;
   auto BuildViewBody(expr::Expr* body) -> bool;
@@ -133,7 +148,9 @@ class FlowGraphBuilder {
   // Builds a graph for each function of `module`, the lambdas inside them, and
   // an initializer for the top-level bindings. Returns null (and fills `errors`)
   // if something can't be lowered.
-  static auto BuildModuleGraph(Module* module, std::vector<std::string>* errors = nullptr) -> ModuleGraph*;
+  // If `dump_dom` is set, the virtual DOM of each view is written to it.
+  static auto BuildModuleGraph(Module* module, std::vector<std::string>* errors = nullptr,
+                               std::ostream* dump_dom = nullptr) -> ModuleGraph*;
 
   // Builds a stand-alone graph for `expr`, which has no parameters and can't
   // refer to module functions.

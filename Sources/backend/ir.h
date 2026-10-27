@@ -5,7 +5,7 @@
 #include <string>
 
 #include "binary_op.h"
-#include "element.h"
+#include "dom/kind.h"
 #include "frontend/expr.h"
 #include "object.h"
 #include "property.h"
@@ -571,7 +571,7 @@ class NewListInstr : public New {
 class NewNodeInstr : public New {
  public:
   enum Kind {
-#define DEFINE_KIND(Name) k##Name,
+#define DEFINE_KIND(Name, Tag) k##Name,
     FOR_EACH_ELEMENT_NODE(DEFINE_KIND)
 #undef DEFINE_KIND
   };
@@ -587,7 +587,7 @@ class NewNodeInstr : public New {
     return kind_;
   }
 
-#define DEFINE_TYPE_CHECK(Name)          \
+#define DEFINE_TYPE_CHECK(Name, Tag)          \
   inline auto Is##Name() const -> bool { \
     return GetKind() == Kind::k##Name;   \
   }
@@ -601,7 +601,7 @@ class NewNodeInstr : public New {
     return new NewNodeInstr(kind);
   }
 
-#define DEFINE_NEW(Name)                            \
+#define DEFINE_NEW(Name, Tag)                            \
   static inline auto New##Name() -> NewNodeInstr* { \
     return New(Kind::k##Name);                      \
   }

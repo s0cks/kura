@@ -1,0 +1,9 @@
+// A `for` in a view renders its body once per element; a Fragment groups what
+// one pass produces without taking room in the layout.
+type Model = { items: Seq<String>, }
+
+fn view(model: Model): Node =>
+  for item in model.items => #fragment {
+    #text(item)
+    #text("!")
+  }

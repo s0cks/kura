@@ -1,9 +1,4 @@
 #!/bin/sh
-# Compiles exports.kura to an object file and a C header, links host.c against
-# them and the runtime library, and runs it. `kura_module_init` and each
-# exported function are called the way a game engine would.
-#
-#   tests/ffi/run.sh path/to/kurac path/to/dir/with/libkura-runtime.so [more -L/-rpath dirs...]
 set -u
 kurac="${1:?usage: run.sh path/to/kurac path/to/runtime-dir [rpath...]}"
 runtime="${2:?usage: run.sh path/to/kurac path/to/runtime-dir [rpath...]}"
@@ -18,8 +13,8 @@ for extra in "$@"; do
     rpaths="$rpaths -Wl,-rpath,$extra"
 done
 
-if ! "$kurac" "$dir/exports.kura" --emit-obj "$tmp/exports.o" --emit-header "$tmp/exports.h" >"$tmp/kurac.log" 2>&1; then
-    echo "FAIL  exports.kura (does not compile)"
+if ! "$kurac" "$dir/exports.kui" --emit-obj "$tmp/exports.o" --emit-header "$tmp/exports.h" >"$tmp/kurac.log" 2>&1; then
+    echo "FAIL  exports.kui (does not compile)"
     grep -E "^error|syntax" "$tmp/kurac.log" | head -5
     exit 1
 fi

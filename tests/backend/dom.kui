@@ -1,0 +1,18 @@
+// The virtual DOM of a view: properties are folded when they are constants,
+// evaluated when they aren't, and checked either way.
+type Model = { count: Int, label: String, }
+type Message = Tick | Reset
+
+fn rows(items: Seq<String>) => for item in items => #fragment { #text(item) #text("!") }
+
+fn view(model: Model): Node =>
+  #surface(fill: blue, radius: 2px + 2px, padding: 8px, direction: "column", gap: 4px) {
+    let title = "Count"
+    #text(title)
+    #text(model.label)
+    #progress(value: 0.5)
+    #button(on-click: Tick, width: 120px, opacity: 0.8) {
+      #text("tick")
+    }
+    #spacer(grow: 1)
+  }

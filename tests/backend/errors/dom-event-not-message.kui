@@ -1,0 +1,2 @@
+// error: #button 'on-click': expected a Message, got Int
+fn view(): Node => #button(on-click: 1)

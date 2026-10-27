@@ -968,29 +968,22 @@ auto ExprBuilder::visitForExpr(KuraParser::ForExprContext* ctx) -> std::any {
 // ╭────────────╮
 // │ UI element │
 // ╰────────────╯
+// The tags come from the same list as the kinds, so an element can't be added
+// to one and forgotten in the other.
 static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind> {
-  // clang-format off
-  static const std::unordered_map<std::string, NodeExpr::Kind> kKinds{
-#define DEFINE_ENTRY(Name, Text) {Text, NodeExpr::Kind::k##Name},
-      DEFINE_ENTRY(Document, "document")
-      DEFINE_ENTRY(Fragment, "fragment")
-      DEFINE_ENTRY(Block, "block")
-      DEFINE_ENTRY(Button, "button")
-      DEFINE_ENTRY(List, "list")
-      DEFINE_ENTRY(Text, "text")
-      DEFINE_ENTRY(Image, "image")
-      DEFINE_ENTRY(Viewport, "viewport")
-      DEFINE_ENTRY(Canvas, "canvas")
-      DEFINE_ENTRY(Input, "input")
-      DEFINE_ENTRY(Scroll, "scroll")
-      DEFINE_ENTRY(Surface, "surface")
-#undef DEFINE_ENTRY
-  };
-  // clang-format on
-  const auto pos = kKinds.find(rhs);
-  if (pos == std::end(kKinds))
+  const auto kind = dom::FindKind(rhs);
+  if (!kind || !dom::IsElement(*kind))
     return std::nullopt;
-  return {pos->second};
+
+  switch (*kind) {
+#define DEFINE_CASE(Name, Tag) \
+  case dom::Kind::k##Name:     \
+    return NodeExpr::Kind::k##Name;
+    FOR_EACH_ELEMENT_NODE(DEFINE_CASE)
+#undef DEFINE_CASE
+    default:
+      return std::nullopt;
+  }
 }
 
 auto UIExprBuilder::Build(KuraParser::UiExprContext* ctx) -> Expr* {

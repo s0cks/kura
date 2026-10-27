@@ -2,6 +2,7 @@ target_sources(kura-compiler
   PUBLIC c_compile.cc
          c_header.cc
          compile_type.cc
+         dom_lowering.cc
          effect_visitor.cc
          flow_graph.cc
          flow_graph_builder.cc

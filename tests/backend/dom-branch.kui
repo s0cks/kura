@@ -1,0 +1,9 @@
+// What the view shows can depend on the model: each arm is rendered.
+type Model = { count: Int, }
+
+fn view(model: Model): Node =>
+  if model.count > 0 {
+    #text("positive")
+  } else {
+    #block(padding: 4px) { #text("zero") }
+  }

@@ -1,105 +1,79 @@
 #include "node_visitor.h"
 
+#include "backend/dom_lowering.h"
 #include "backend/ir.h"
-#include "element.h"
+#include "dom/builder.h"
 #include "frontend/expr.h"
-#include "frontend/expr_printer.h"
-#include "gir.h"
 
 namespace kura {
+auto NodeVisitor::Render(expr::Expr* expr) -> VisitResult {
+  dom::Tree tree{};
+  dom::Builder builder(&tree, [this](LocalVariable* local) { return GetOwner()->FoldableLocal(local); });
+  builder.Build(expr);
+  if (!builder.Ok()) {
+    for (const auto& error : builder.GetErrors())
+      Fail(error);
+    return false;
+  }
+
+  GetOwner()->DumpDom(tree.GetRoot());
+  DomLowering lowering(this);
+  return lowering.Lower(tree.GetRoot());
+}
+
+auto NodeVisitor::VisitNode(expr::NodeExpr* expr) -> VisitResult {
+  return Render(expr);
+}
+
 auto NodeVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
-  const auto& children = expr->GetChildren();
-  if (children.empty()) {
+  if (expr->GetChildren().empty()) {
     if (WantsValue())
       ReturnValue(NoneValue());
     return true;
   }
+  return Render(expr);
+}
 
-  for (auto idx = 0; idx < children.size() - 1; idx++) {
-    expr::Expr* e = children[idx];
-    if (!e)
-      continue;
+// `for item in items => #text(item)`, where the nodes are rendered rather than
+// collected into a list: one render per element.
+auto NodeVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) -> VisitResult {
+  const auto iterable = Eval(expr->GetIterable());
+  if (!iterable)
+    return false;
 
-    NodeVisitor for_node(GetOwner());
-    if (!e->Accept(&for_node))
+  Loop loop{};
+  if (!BeginLoop(iterable, &loop))
+    return false;
+  GetOwner()->Define(expr->GetLocal(), loop.item->GetDefinition());
+
+  const auto render = [&]() -> bool {
+    NodeVisitor for_body(GetOwner());
+    return expr->GetBody()->Accept(&for_body);
+  };
+
+  if (expr->HasClause()) {
+    const auto condition = Eval(expr->GetClause());
+    if (!condition)
       return false;
-  }
-
-  const auto last = children.back();
-  if (!WantsValue()) {
-    if (!last)
+    const auto keep = GetOwner()->NewTarget("guard.keep");
+    const auto skip = GetOwner()->NewTarget("guard.skip");
+    const auto latch = GetOwner()->NewJoin("guard.latch");
+    GetOwner()->Terminate(BranchInstr::New(condition, keep, skip, latch));
+    GetOwner()->Enter(keep);
+    if (!render())
       return false;
-
-    NodeVisitor for_node(GetOwner());
-    if (!last->Accept(&for_node))
-      return false;
-  }
-
-  if (!last) {
-    Fail("missing expression");
+    GetOwner()->Terminate(GotoInstr::New(latch));
+    GetOwner()->Enter(skip);
+    GetOwner()->Terminate(GotoInstr::New(latch));
+    GetOwner()->Enter(latch);
+  } else if (!render()) {
     return false;
   }
+  EndLoop(&loop);
 
-  NodeVisitor for_expr(GetOwner());
-  if (!last->Accept(&for_expr))
-    return false;
+  if (WantsValue())
+    ReturnValue(NoneValue());
   return true;
-}
-
-void NodeVisitor::EmitRenderCall(Definition* defn) {
-#ifdef KURA_DEBUG
-  auto value = Bind(defn);
-  Emit(CheckRendererStatusInstr::New(value));
-#else
-  Emit(defn);
-#endif  // KURA_DEBUG
-}
-
-auto NodeVisitor::VisitButton(expr::NodeExpr* node) -> VisitResult {
-  EmitRenderCall(FillRectInstr::New());
-
-  const auto& children = node->GetChildren();
-  for (const auto& child : children) {
-    if (!child)
-      return false;
-
-    NodeVisitor for_node(GetOwner());
-    if (!child->Accept(&for_node))
-      return false;
-  }
-
-  return true;
-}
-
-auto NodeVisitor::VisitText(expr::NodeExpr* node) -> VisitResult {
-  Value* value = nullptr;
-
-  for (const auto& property : node->GetProperties()) {
-    if (property->GetProperty()->GetPropertyName()->GetValue() == "value") {
-      ValueVisitor for_value(GetOwner());
-      if (!property->GetValue()->Accept(&for_value))
-        return false;
-      value = for_value.GetValue();
-      break;
-    }
-  }
-
-  if (!value)
-    value = Bind(ConstantInstr::New(String::New("")));
-
-  EmitRenderCall(DrawTextInstr::New(value));
-  return true;
-}
-
-auto NodeVisitor::VisitNode(expr::NodeExpr* expr) -> VisitResult {
-  switch (expr->GetKind()) {
-    case expr::NodeExpr::kButton:
-      return VisitButton(expr);
-    case expr::NodeExpr::kText:
-      return VisitText(expr);
-    default:
-      return ValueVisitor::VisitNode(expr);
-  }
 }
 
 auto NodeVisitor::EvalArm(expr::Expr* expr, Value** value) -> bool {

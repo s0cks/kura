@@ -87,7 +87,7 @@ auto GotoInstr::ToString() const -> std::string {
 
 auto NewNodeInstr::ToString() const -> std::string {
   switch (GetKind()) {
-#define DEFINE_CASE(Name) \
+#define DEFINE_CASE(Name, Tag) \
   case Kind::k##Name:     \
     return "NewNode(" #Name ")";
     FOR_EACH_ELEMENT_NODE(DEFINE_CASE)

@@ -1,17 +1,6 @@
-# Unit tests for the renderer ABI and the headless renderer, written with GTest.
-#
-# These need only kura-renderer-headless (and GTest): no LLVM, no GPU. Run them
-# with ctest, or run kura-renderer-tests directly (it takes the usual
-# --gtest_filter and --gtest_list_tests).
 find_package(GTest REQUIRED)
 include(GoogleTest)
 
-# The tools the tests share: printers, a Drawer that draws through the ABI,
-# golden text files, and the renderer ABI conformance suite.
-#
-# Another renderer proves it follows the ABI by linking kura-renderer-conformance
-# into its own GTest executable and calling kura::test::RegisterConformanceSuite()
-# with a factory for itself (see conformance.h).
 add_library(kura-test-harness STATIC
   golden.cc)
 target_link_libraries(kura-test-harness
@@ -37,8 +26,6 @@ target_link_libraries(kura-renderer-tests
 gtest_discover_tests(kura-renderer-tests
   DISCOVERY_MODE PRE_TEST)
 
-# PNG / JPEG output and golden *image* tests: only when kura-renderer-image is
-# built (it needs libpng and libjpeg).
 if(TARGET kura-renderer-image)
   add_library(kura-test-harness-image STATIC
     golden_image.cc)

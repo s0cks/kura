@@ -26,7 +26,7 @@ flags_of() {
     sed -n 's|^// flags: ||p' "$1" | head -n 1 | sed "s|\$DIR|$dir/c|g; s|\$LIB|$libs|g"
 }
 
-for f in "$dir"/*.kura; do
+for f in "$dir"/*.kui; do
     if out="$("$kurac" "$f" 2>&1)"; then
         echo "ok    $(basename "$f")"
     else
@@ -36,8 +36,7 @@ for f in "$dir"/*.kura; do
     fi
 done
 
-for f in "$dir"/errors/*.kura; do
-<<<<<<< HEAD
+for f in "$dir"/errors/*.kui; do
     want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
     flags="$(flags_of "$f")"
     # shellcheck disable=SC2086
@@ -51,7 +50,6 @@ for f in "$dir"/errors/*.kura; do
         echo "$out" | grep -E "error" | sed 's/^/      /'
         status=1
     fi
-||||||| parent of 4025a45 (refactor: 🔨 code cleanup)
   want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
   if out="$("$kurac" "$f" 2>&1)"; then
     echo "FAIL  errors/$(basename "$f") (accepted)"

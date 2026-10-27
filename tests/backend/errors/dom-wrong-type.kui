@@ -1,0 +1,2 @@
+// error: #block 'width': expected Px, Pct, Fr or "auto", got Int
+fn view(): Node => #block(width: 10)

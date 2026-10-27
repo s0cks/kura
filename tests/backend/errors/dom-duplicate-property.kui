@@ -1,0 +1,2 @@
+// error: #block: 'gap' is set more than once
+fn view(): Node => #block(gap: 1px, gap: 2px)

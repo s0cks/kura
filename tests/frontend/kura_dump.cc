@@ -1,8 +1,3 @@
-// Parses .kura/.kui files and prints the resulting module: types, top-level
-// bindings and every function as an s-expression. Used to produce the golden
-// files next to this file.
-//
-//   kura_dump file.kui...
 #include <iostream>
 
 #include "frontend/expr_printer.h"

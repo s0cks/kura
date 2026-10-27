@@ -1,0 +1,2 @@
+// error: #text: 'source' doesn't apply to #text
+fn view(): Node => #text(source: "a.png")

@@ -1,0 +1,2 @@
+// error: #text can't have children
+fn view(): Node => #text("a") { #text("b") }

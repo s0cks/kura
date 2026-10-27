@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "backend/ir.h"
+#include "dom/property.h"
 
 namespace kura {
 class Function;
@@ -20,6 +21,16 @@ class CompileType;
 // Goto, Branch, or Return. `Finalize()` discovers the blocks reachable from the
 // entry and fills in the CFG edges, which every analysis (including the type
 // pass) iterates.
+// A value that has to be of a type a DOM property accepts. The lowering of a
+// view records one for each property it had to evaluate, because the type of
+// the value isn't known until the type analysis has run.
+struct PropertyConstraint {
+  Value* value = nullptr;
+  const dom::PropertyDef* def = nullptr;
+  // `#text 'value'`, for the message
+  std::string where{};
+};
+
 class FlowGraph {
  public:
   using BlockList = std::vector<EntryInstr*>;
@@ -31,6 +42,7 @@ class FlowGraph {
   std::vector<ParameterInstr*> parameters_{};
   std::vector<LocalVariable*> captures_{};
   std::vector<CompileType*> parameter_types_{};
+  std::vector<PropertyConstraint> property_constraints_{};
   CompileType* return_type_ = nullptr;
   std::unordered_set<EntryInstr*> dead_{};
   BlockList preorder_{};
@@ -52,6 +64,10 @@ class FlowGraph {
 
   inline void SetCaptures(std::vector<LocalVariable*> captures) {
     captures_ = std::move(captures);
+  }
+
+  inline void AddPropertyConstraint(PropertyConstraint constraint) {
+    property_constraints_.push_back(std::move(constraint));
   }
 
  public:
@@ -106,6 +122,11 @@ class FlowGraph {
 
   auto GetReturnType() const -> CompileType* {
     return return_type_;
+  }
+
+  // What the type analysis has to check about the properties of the view.
+  auto GetPropertyConstraints() const -> const std::vector<PropertyConstraint>& {
+    return property_constraints_;
   }
 
   void SetSignature(std::vector<CompileType*> parameters, CompileType* result) {

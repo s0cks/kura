@@ -4,7 +4,6 @@
   "dependencies": [
     "libuv",
     "jansson",
-    "yoga",
     "xxhash",
     "glm",
     "libpng",

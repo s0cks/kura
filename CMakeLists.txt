@@ -55,11 +55,11 @@ endif()
 message(STATUS "C compiler for imports and shims: ${KURA_CLANG_EXECUTABLE}")
 
 find_package(glm CONFIG REQUIRED)
-find_package(yoga CONFIG REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
 
 add_subdirectory(Sources/)
 
 if(KURA_BUILD_TESTS)
   add_subdirectory(tests/renderer)
+  add_subdirectory(tests/dom)
 endif()

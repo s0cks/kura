@@ -23,9 +23,6 @@ add_custom_command(
 )
 
 add_library(kura-compiler SHARED
-  element.cc
-  element_compiler.cc
-  element_printer.cc
   function.cc
   unary_op.cc
   binary_op.cc
@@ -38,7 +35,7 @@ add_library(kura-compiler SHARED
   type.cc
   view.cc
   ${GEN_SOURCES}
-)
+) 
 
 target_compile_definitions(kura-compiler
   PUBLIC ${LLVM_DEFINITIONS}
@@ -48,21 +45,23 @@ target_compile_definitions(kura-compiler
 target_include_directories(kura-compiler
   PUBLIC ${LLVM_INCLUDE_DIRS}
          ${CLANG_INCLUDE_DIRS}
+         ${CMAKE_CURRENT_SOURCE_DIR}
+         ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(kura-compiler
   PUBLIC LLVM
          clang-cpp
          PkgConfig::XXHASH
-         yogacore
          antlr::antlr4
          glm::glm
 )
 
-add_subdirectory(compiler)
+add_subdirectory(dom)
 add_subdirectory(renderer)
 add_subdirectory(frontend)
 add_subdirectory(backend)
 add_subdirectory(runtime)
+add_subdirectory(compiler)
 
 if(KURA_BUILD_DEBUGGER)
   add_subdirectory(debugger)

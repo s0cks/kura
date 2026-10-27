@@ -1,0 +1,2 @@
+// error: #block 'padding': can't be negative, got -3
+fn view(): Node => #block(padding: 2px - 5px)

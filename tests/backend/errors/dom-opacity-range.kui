@@ -1,0 +1,2 @@
+// error: #block 'opacity': must be between 0 and 1
+fn view(): Node => #block(opacity: 2)

@@ -444,6 +444,15 @@ class Analyzer {
         for (Instruction* instr = block; instr != nullptr; instr = instr->GetNext())
           Transfer(instr, params);
       }
+      // the values the view gave to the properties of its nodes have to be of
+      // a type the property takes; one in a block that can't run has no type
+      for (const auto& constraint : graph->GetPropertyConstraints()) {
+        const auto defn = constraint.value ? constraint.value->GetDefinition() : nullptr;
+        if (!defn || !defn->HasCompileType())
+          continue;
+        if (const auto problem = dom::CheckType(*constraint.def, TypeOf(constraint.value)))
+          Report(nullptr, constraint.where + ": " + *problem);
+      }
       // closures nothing called or passed on still get checked
       for (const auto block : graph->GetReversePostorder()) {
         if (ctx.dead.contains(block))

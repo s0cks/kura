@@ -1,0 +1,2 @@
+// error: #button: unknown property 'widht' (did you mean 'width'?)
+fn view(): Node => #button(widht: 10px)

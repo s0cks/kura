@@ -1,0 +1,3 @@
+// error: #block 'width': expected Px, Pct, Fr or "auto", got Int
+type Model = { count: Int, }
+fn view(model: Model): Node => #block(width: model.count)

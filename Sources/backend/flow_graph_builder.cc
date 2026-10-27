@@ -10,7 +10,7 @@
 #include "backend/value_visitor.h"
 #include "common.h"
 #include "frontend/expr.h"
-#include "frontend/expr_printer.h"
+#include "dom/printer.h"
 #include "function.h"
 #include "gir.h"
 #include "local_scope.h"
@@ -94,12 +94,28 @@ void FlowGraphBuilder::AddParameters(const std::vector<LocalVariable*>& params,
   graph_->SetCaptures(captures);
 }
 
-auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
-  expr::ExprPrinter printer(std::cout, Indent{});
-  if (!body->Accept(&printer))
-    return false;
-  std::cout << std::endl;
+auto FlowGraphBuilder::FoldableLocal(LocalVariable* local) const -> Object* {
+  const auto defn = Lookup(local);
+  const auto constant = defn ? defn->AsConstant() : nullptr;
+  return constant ? constant->GetValue() : nullptr;
+}
 
+void FlowGraphBuilder::AddPropertyConstraint(Value* value, const dom::PropertyDef* def, const std::string& where) {
+  PropertyConstraint constraint{};
+  constraint.value = value;
+  constraint.def = def;
+  constraint.where = where;
+  graph_->AddPropertyConstraint(std::move(constraint));
+}
+
+void FlowGraphBuilder::DumpDom(dom::Node* root) const {
+  if (!ctx_->dump_dom)
+    return;
+  *ctx_->dump_dom << "dom of " << name_ << ":" << std::endl;
+  dom::Printer::Print(*ctx_->dump_dom, root, Indent{1});
+}
+
+auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
   {
     const auto defn = BeginFrameInstr::New(1024, 1024);
 #ifdef KURA_DEBUG
@@ -228,12 +244,7 @@ class FreeLocals : public expr::ExprVisitor {
         return false;
     }
 
-    if (expr->IsText())
-      std::cout << "building text node" << std::endl;
-
     for (const auto child : expr->GetChildren()) {
-      if (expr->IsText())
-        std::cout << "child: " << child->GetName() << std::endl;
       if (!Walk(child))
         return false;
     }
@@ -368,9 +379,11 @@ auto FlowGraphBuilder::BuildLambda(Context* ctx, expr::LambdaExpr* lambda, const
   return ctx->errors.empty() ? graph : nullptr;
 }
 
-auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>* errors) -> ModuleGraph* {
+auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>* errors, std::ostream* dump_dom)
+    -> ModuleGraph* {
   Context ctx{};
   ctx.graph = new ModuleGraph();
+  ctx.dump_dom = dump_dom;
   for (const auto func : module->functions)
     ctx.functions[std::string(func->GetName()->GetData())] = func;
 

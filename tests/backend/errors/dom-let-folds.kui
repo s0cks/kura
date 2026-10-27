@@ -1,0 +1,5 @@
+// error: #block 'padding': can't be negative, got -2
+fn view(): Node => {
+  let gap = 2px
+  #block(padding: 0px - gap)
+}

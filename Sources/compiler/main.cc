@@ -15,7 +15,6 @@
 #include <llvm/Support/TargetSelect.h>
 #include <print>
 #include <stdlib.h>
-#include <yoga/Yoga.h>
 
 #include "backend/c_compile.h"
 #include "backend/c_header.h"
@@ -32,7 +31,6 @@
 #include "backend/type_analysis.h"
 #include "c_import.h"
 #include "common.h"
-#include "element_compiler.h"
 #include "frontend/expr_printer.h"
 #include "frontend/parser.h"
 #include "kura.h"
@@ -43,6 +41,7 @@ using namespace kura;
 class ModulePrinter {
  private:
   std::ostream& stream_;
+  std::ostream* dump_dom_;
   Indent indent_{};
 
   inline auto stream() const -> std::ostream& {
@@ -58,8 +57,9 @@ class ModulePrinter {
   }
 
  public:
-  explicit ModulePrinter(std::ostream& stream, const Indent indent = 0) :
+  explicit ModulePrinter(std::ostream& stream, std::ostream* dump_dom = nullptr, const Indent indent = 0) :
     stream_(stream),
+    dump_dom_(dump_dom),
     indent_(std::move(indent)) {}
   ~ModulePrinter() = default;
 
@@ -69,7 +69,7 @@ class ModulePrinter {
 
     out() << "Module: " << rhs->ToString() << std::endl;
     std::vector<std::string> errors{};
-    const auto graph = FlowGraphBuilder::BuildModuleGraph(rhs, &errors);
+    const auto graph = FlowGraphBuilder::BuildModuleGraph(rhs, &errors, dump_dom_);
     if (!graph) {
       for (const auto& error : errors)
         std::cerr << "error: " << error << std::endl;
@@ -100,6 +100,7 @@ struct Options {
   std::string emit_object{};
   std::string emit_header{};
   bool optimize = true;
+  bool dump_dom = false;
   bool run = false;
   std::string function{};
   std::vector<std::string> args{};
@@ -147,6 +148,8 @@ auto ParseOptions(int argc, char** argv, Options* options) -> bool {
       options->c_sources.push_back(arg);
     } else if (arg == "--no-opt") {
       options->optimize = false;
+    } else if (arg == "--dump-dom") {
+      options->dump_dom = true;
     } else if (arg == "--run") {
       if (idx + 1 >= argc) {
         std::cerr << "--run needs a function name" << std::endl;
@@ -299,7 +302,7 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
 auto main(int argc, char** argv) -> int {
   if (argc < 2) {
     std::cerr << "usage: kurac <file> [<c-source>.c...] [--emit-llvm] [--emit-obj <file.o>] [--emit-header <file.h>] "
-                 "[--no-opt] [-I<dir>] [-D<name>] [-L<dir>] [-l<lib>] [--run <function> [args...]]"
+                 "[--no-opt] [--dump-dom] [-I<dir>] [-D<name>] [-L<dir>] [-l<lib>] [--run <function> [args...]]"
               << std::endl;
     return EXIT_FAILURE;
   }
@@ -343,12 +346,13 @@ auto main(int argc, char** argv) -> int {
   }
 
   if (!compile) {
-    ModulePrinter printer(std::cout);
+    ModulePrinter printer(std::cout, options.dump_dom ? &std::cout : nullptr);
     return printer(m) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   std::vector<std::string> errors{};
-  const auto graphs = FlowGraphBuilder::BuildModuleGraph(m, &errors);
+  // stdout is for the program when it runs, so the dump goes to stderr
+  const auto graphs = FlowGraphBuilder::BuildModuleGraph(m, &errors, options.dump_dom ? &std::cerr : nullptr);
   if (!options.emit_header.empty()) {
     std::string guard = "KURA_";
     for (const char c : std::filesystem::path(options.emit_header).stem().string())

@@ -1,0 +1,2 @@
+// error: "diagonal" isn't one of "row", "column", "row-reverse", "column-reverse"
+fn view(): Node => #block(direction: "diagonal")

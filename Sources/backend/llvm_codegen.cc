@@ -746,7 +746,7 @@ class Generator {
     if (const auto n = instr->AsNewNode()) {
       std::string kind = "node";
       switch (n->GetKind()) {
-#define DEFINE_CASE(Name)           \
+#define DEFINE_CASE(Name, Tag)           \
   case NewNodeInstr::Kind::k##Name: \
     kind = ToLower(#Name);          \
     break;

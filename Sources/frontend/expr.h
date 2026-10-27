@@ -8,7 +8,7 @@
 
 #include "binary_op.h"
 #include "common.h"
-#include "element.h"
+#include "dom/kind.h"
 #include "frontend/type_expr.h"
 #include "object.h"
 #include "property.h"
@@ -952,14 +952,14 @@ class NodeExpr : public DynamicTemplateExpr {
 
  public:
   enum Kind {
-#define DEFINE_KIND(Name) k##Name,
+#define DEFINE_KIND(Name, Tag) k##Name,
     FOR_EACH_ELEMENT_NODE(DEFINE_KIND)
 #undef DEFINE_KIND
   };
 
   static inline auto ToString(const Kind& rhs) -> std::string_view {
     switch (rhs) {
-#define DEFINE_CHECK(Name) \
+#define DEFINE_CHECK(Name, Tag) \
   case Kind::k##Name:      \
     return #Name;
       FOR_EACH_ELEMENT_NODE(DEFINE_CHECK)
@@ -998,7 +998,7 @@ class NodeExpr : public DynamicTemplateExpr {
     directives_ = std::move(rhs);
   }
 
-#define DEFINE_TYPE_CHECK(Name)          \
+#define DEFINE_TYPE_CHECK(Name, Tag)          \
   inline auto Is##Name() const -> bool { \
     return GetKind() == Kind::k##Name;   \
   }
@@ -1012,7 +1012,7 @@ class NodeExpr : public DynamicTemplateExpr {
     return new NodeExpr(kind, std::move(properties));
   }
 
-#define DEFINE_NEW(Name)                                                      \
+#define DEFINE_NEW(Name, Tag)                                                      \
   static inline auto New##Name(const PropertyList properties = {}) -> Expr* { \
     return New(Kind::k##Name, std::move(properties));                         \
   }
