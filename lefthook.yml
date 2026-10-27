@@ -1,0 +1,78 @@
+---
+prepare-commit-msg:
+  skip:
+    - rebase
+    - merge
+  commands:
+    koji:
+      interactive: true
+      run: koji --hook --yes
+commit-msg:
+  commands:
+    conventional-commits:
+      run: cog verify --file {1}
+post-checkout:
+  commands:
+    vale-sync:
+      run: vale sync
+pre-commit:
+  parallel: true
+  commands:
+    clang-format:
+      glob: "*.{h,c,hpp,cpp,cc}"
+      run: clang-format -i {staged_files}
+      stage_fixed: true
+    # clang-tidy:
+    #   glob: "*.{h,c,hpp,cpp,cc}"
+    #   run: clang-tidy -p build {staged_files}
+    iwyu:
+      glob: "*.{h,c}"
+      root: "libtaskfile-parser"
+      run: |
+        include-what-you-use \
+          -Xiwyu --no_fwd_decls \
+          -Xiwyu --max_line_length=120 \
+          -std=c23 \
+          -Iinclude \
+          -Isrc \
+          {staged_files}
+    go-fmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    go-vet:
+      glob: "*.go"
+      run: go vet ./...
+    go-lint:
+      glob: "*.go"
+      run: golangci-lint run --fix ./...
+      stage_fixed: true
+    yaml-format:
+      glob: "*.{yaml,yml}"
+      run: yamlfmt {staged_files}
+      stage_fixed: true
+    yaml-lint:
+      glob: "*.{yaml,yml}"
+      run: yamllint {staged_files}
+    rumdl-format:
+      glob: "*.md"
+      run: rumdl fmt {staged_files}
+      stage_fixed: true
+    rumdl-lint:
+      glob: "*.md"
+      run: rumdl check --fix {staged_files}
+      stage_fixed: true
+    hadolint-format:
+      glob: "**/Dockerfile*"
+      run: hadolint {staged_files}
+      stage_fixed: true
+    vale:
+      glob: "*.md"
+      run: vale {staged_files}
+    gitleaks:
+      glob: "*"
+      run: gitleaks protect --staged --verbose
+    eslint:
+      glob: "*.{ts,js}"
+      root: "vscode"
+      run: pnpm lint

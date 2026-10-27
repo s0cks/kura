@@ -1,0 +1,12 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "extra-files": ["VERSION"],
+      "exclude-paths": [],
+      "initial-version": "0.0.0",
+      "bump-minor-pre-major": true,
+      "bump-patch-pre-major": true
+    }
+  }
+}
