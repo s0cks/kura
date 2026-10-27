@@ -1,0 +1,164 @@
+---
+title: Primitives
+---
+
+Kura supports the following types:
+
+- None --- null
+- Bools --- `true`, `false`
+- Numbers --- Int, Float
+- Strings
+- [Records](#records) --- Key/Value pairs (POD)
+- [Sequences](#sequences) --- Abstract sequences (`Seq`)
+- [Functions](#functions)
+- [Algebraic Types](#algebraic-types) --- Sum & Union types, and variants
+- [Measurements](#measurements) --- Layout-aware layout scalars (`px`, `pct`, `fr`)
+
+## Records
+
+Records map names to values.
+Unlike standard JavaScript objects, Kura records are strictly **Plain Old Data (POD)** and cannot capture or store functions.
+
+```kura
+let pos = {
+  x: 10,
+  y: 10,
+}
+```
+
+Attempting to bind a function inside a record literal triggers a compilation error:
+
+```kura
+// will produce a compilation error:
+let bad-record = {
+  x: 10,
+  add: (x: Int, y: Int): Int =>
+    x + y,
+}
+```
+
+You **should** always treat records as plain-old-data (PODs).
+
+### Typed Records
+
+Explicit record shapes are declared using the `type` keyword:
+
+```kura
+// declare a record type
+type Position = {
+  x: Int,
+  y: Int,
+}
+
+fn get-pos(): Position =>
+  {
+    x: 10,
+    y: 20,
+  }
+```
+
+Optional fields can be explicitly wrapped in the `Optional<T>` monad,
+or declared using standard postfix syntactic sugar (`?`):
+
+```kura
+type Position = {
+  x: Int,
+  y: Int,
+  z?: Int, // Sugar for Optional<Int>
+}
+
+fn get-pos-2d(): Position =>
+  {
+    x: 10,
+    y: 10,
+  }
+
+fn get-pos-3d(): Position =>
+  {
+    x: 10,
+    y: 10,
+    z: 10,
+  }
+```
+
+## Sequences
+
+Sequences - denoted by the `Seq` type - represent an abstract series of elements. 
+
+```kura
+let data = [
+  1px,
+  1px,
+  1px,
+]
+```
+
+The underlying memory representation of a `Seq` is non-deterministic.
+The Kura compiler analyzes usage patterns to infer and optimize layout choices,
+dynamically selecting between contiguous vectors or linked allocations.
+
+* **Do not** assume elements occupy a contiguous block of memory.
+* You can hint to the compiler, by attaching the `@vec` or `@list` directives directly to the sequence. **Note** that these serve as hints, and are not strict behavioral guarantees.
+
+## Functions
+
+Functions are first-class citizens in Kura.
+They can be assigned to identifiers, passed as parameters, and returned from other evaluation blocks.
+
+```kura
+fn apply(op: (Int, Int) => Int, lhs: Int, rhs: Int): Int =>
+  op(lhs, rhs)
+
+fn add-one(x: Int): Int =>
+  apply((a, b) => a + b, x, 1)
+```
+
+## Algebraic Types
+
+Kura supports robust algebraic data types (ADTs).
+
+```kura
+// type union
+type Message = 
+    Click
+  | Tick
+  | Move(Position)
+```
+
+## Measurements
+
+To natively support modern layout paradigms, Kura treats physical and relational layout units as distinct primitives in the type system.
+The compiler provides built-in safety rules and scale conversions during math operations.
+
+- [Pixels](#pixels) (`px`) — Fixed resolution units
+- [Percents](#percents) (`pct`) — Proportional parent bounding units
+- [Fractional Units](#fractional-units) (`fr`) — Flexible grid space allocations
+
+### Pixels
+
+A `Pixel` (`px`) defines an absolute unit of screen space.
+
+You can initialize and compute operations directly across pixel bounds:
+
+```kura
+let num-pixels = 10px
+let total-pixels = (num-pixels * num-pixels) + num-pixels // 110px
+```
+
+### Percents
+
+A `Percent` (`pct`) quantifies a fractional constraint relative to the parent context container.
+
+```kura
+let box-size = 25pct
+let total-size = box-size * 2 // Evaluates to 50pct
+```
+
+### Fractional Units
+
+Fractional units (`fr`) specify the distribution of remaining unallocated space within a flex container.
+
+```kura
+let small-track = 0.5fr
+let dynamic-track = small-track + 0.25fr // Evaluates to 0.75fr
+```

@@ -1,0 +1,139 @@
+---
+title: Control Flow
+---
+
+Kura is a functional-first language. 
+
+Control flow is treated as a series of expressions that evaluate to a value, rather than statements that mutate state. 
+
+## If
+
+If statements in Kura behave like your standard `if` in other languages:
+
+```kura
+fn get-text(count: Int): String =>
+  if count > 10 {
+    "Too much"
+  } else {
+    "Keep going"
+  }
+
+// you can also do if/else-if:
+fn get-text(count: Int): String =>
+  if count > 10 {
+    "Too much"
+  } else if coun > 5 {
+    "Almost there"
+  } else {
+    "Keep going"
+  }
+```
+
+## Pattern Matching
+
+Pattern matching via the `match` keyword is Kura's primary mechanism for conditional branching and data destructuring.
+
+A `match` block must be exhaustive; the compiler will reject code if a potential runtime value is not explicitly handled.
+
+### Structural Destructuring
+
+Matches can inspect regular primitives, structural records, and algebraic variants.
+
+When matching a variant with a payload, the internal properties are extracted and bound to local immutable identifiers.
+
+```kura
+type Position = { x: Int, y: Int }
+type Message = Click(Position) | Tick
+
+fn update(message: Message, count: Int): Int =>
+  match message {
+    Click(position) => count + 1,
+    Tick            => count,
+    _               => 0, // Catch-all wildcard
+  }
+```
+
+### Deeply Nested Matching
+
+Branch arms can access deeply nested data configurations, such as navigating monadic containers like `Optional<T>`.
+
+This allows complex extraction logic to be written cleanly without cascading nested conditional checks.
+
+```kura
+type Optional<T> = Some(T) | None
+
+fn nested(m: Optional<Message>): Int =>
+  match m {
+    Some(Click(p)) => 1, // Matches if container has a value AND that value is a Click
+    Some(other)    => 2, // Matches any other wrapped Message variant
+    None           => 3, // Matches the absence of a value
+  }
+```
+
+You can use `_` for a catch-all wildcard that will match any pattern shape, but not bind the value to a usable identifier:
+
+```kura
+fn nested(m: Optional<Message>): Int =>
+  match m {
+    Some(Click(p))    => 2, // Matches any other wrapped Message variant
+    None              => 3, // Matches the absence of a value
+    _                 => 0 // Matches anything else
+  }
+```
+
+## The Pipe Operator (`|>`)
+
+To prevent deeply nested function applications, Kura provides the forward pipeline operator (`|>`).
+
+The pipeline operator feeds the evaluated result of its left-hand expression as the **first parameter** of the function invocation on its right-hand side.
+
+```kura
+fn piped(p: Position): Message => 
+  p |> Click() 
+  
+// The expression above compiles exactly down to:
+// Click(p)
+```
+
+Pipelines are particularly useful for sequencing long series of data modifications or layout scaling transformations without managing temporary variable states.
+
+```kura
+let processed = raw_coords
+  |> scale_dimensions()
+  |> center_bounds()
+  |> Click()
+```
+
+## Collection Expressions
+
+Kura eliminates traditional imperative loops (`while`, `for(i=0;...)`) in favor of unified collection expressions.
+
+Loops operate on sequences (`Seq<T>`) and feature inline condition filtering and folding primitives.
+
+### Comprehensions with Guards
+
+Loops use an item extractor followed by an optional `if` condition guard.
+
+Elements that evaluate to `false` in the guard block are omitted from processing.
+
+```kura
+fn sum(items: Seq<Number>): Number =>
+  for item in items if item > 0 fold total = 0 => total + item
+```
+
+### Fold Reductions
+
+To aggregate state across a sequence, attach a `fold` block to the loop expression:
+
+```kura
+fn sum(items: Seq<Number>): Number =>
+  for item in items if item > 0 fold total = 0 => total + item
+
+```
+
+The `fold` keyword instantiates a temporary accumulator identifier (`total` in the example above) bound to a starting seed value (`0`).
+
+For every item that passes the `if` constraint, the reducer expression evaluates.
+The return value becomes the new value of the accumulator for the subsequent element.
+
+Once the sequence stream completes, the loop expression terminates and returns the final value of the accumulator directly.
