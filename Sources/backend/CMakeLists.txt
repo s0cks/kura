@@ -1,4 +1,4 @@
-target_sources(kura-runtime
+target_sources(kura-compiler
   PUBLIC c_compile.cc
          c_header.cc
          compile_type.cc

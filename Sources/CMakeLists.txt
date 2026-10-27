@@ -4,50 +4,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 include(Antlr4)
 
-set(LLVM_LINK_LLVM_DYLIB ON) 
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-
-llvm_map_components_to_libnames(llvm_libs 
-  x86 
-  asmparser 
-  support
-  core
-  analysis
-  native
-  orcjit
-  passes
-)
-
-# Clang reads the C headers a program `use`s. Its resource directory holds the
-# compiler's own headers (stddef.h, stdint.h): override it at run time with
-# KURA_CLANG_RESOURCE_DIR.
-find_package(Clang REQUIRED CONFIG)
-message(STATUS "Found Clang ${CLANG_PACKAGE_VERSION}")
-if(NOT KURA_CLANG_RESOURCE_DIR)
-  foreach(candidate
-      "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}"
-      "${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
-    if(IS_DIRECTORY "${candidate}/include")
-      set(KURA_CLANG_RESOURCE_DIR "${candidate}")
-      break()
-    endif()
-  endforeach()
-endif()
-message(STATUS "Clang resource dir: ${KURA_CLANG_RESOURCE_DIR}")
-if(NOT KURA_CLANG_EXECUTABLE)
-  find_program(KURA_CLANG_EXECUTABLE clang HINTS "${LLVM_TOOLS_BINARY_DIR}" NO_DEFAULT_PATH)
-  if(NOT KURA_CLANG_EXECUTABLE)
-    find_program(KURA_CLANG_EXECUTABLE clang)
-  endif()
-endif()
-message(STATUS "C compiler for imports and shims: ${KURA_CLANG_EXECUTABLE}")
-
-find_package(glm CONFIG REQUIRED)
-find_package(yoga CONFIG REQUIRED)
-pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
-
 set(GRAMMAR_NAME "Kura")
 list(APPEND GRAMMAR_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}Parser.g4"
@@ -66,13 +22,11 @@ add_custom_command(
   VERBATIM
 )
 
-add_library(kura-runtime SHARED
-  compiler.cc
+add_library(kura-compiler SHARED
   element.cc
   element_compiler.cc
   element_printer.cc
   function.cc
-  layout.cc
   unary_op.cc
   binary_op.cc
   c_import.cc
@@ -86,16 +40,16 @@ add_library(kura-runtime SHARED
   ${GEN_SOURCES}
 )
 
-target_compile_definitions(kura-runtime
+target_compile_definitions(kura-compiler
   PUBLIC ${LLVM_DEFINITIONS}
          KURA_CLANG_EXECUTABLE="${KURA_CLANG_EXECUTABLE}"
   PRIVATE KURA_CLANG_RESOURCE_DIR="${KURA_CLANG_RESOURCE_DIR}"
 )
-target_include_directories(kura-runtime
+target_include_directories(kura-compiler
   PUBLIC ${LLVM_INCLUDE_DIRS}
          ${CLANG_INCLUDE_DIRS}
 )
-target_link_libraries(kura-runtime
+target_link_libraries(kura-compiler
   PUBLIC LLVM
          clang-cpp
          PkgConfig::XXHASH
@@ -104,12 +58,12 @@ target_link_libraries(kura-runtime
          glm::glm
 )
 
-option(KURA_BUILD_DEBUGGER "Build kura-debugger (needs GTK4, EGL and epoxy)" ON)
+add_subdirectory(compiler)
+add_subdirectory(renderer)
+add_subdirectory(frontend)
+add_subdirectory(backend)
+add_subdirectory(runtime)
 
-add_subdirectory(compiler/)
 if(KURA_BUILD_DEBUGGER)
-  add_subdirectory(debugger/)
+  add_subdirectory(debugger)
 endif()
-add_subdirectory(renderer/)
-add_subdirectory(frontend/)
-add_subdirectory(backend/)

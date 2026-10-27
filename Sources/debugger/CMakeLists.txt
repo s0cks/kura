@@ -5,10 +5,11 @@ pkg_check_modules(EGL   REQUIRED IMPORTED_TARGET egl)
 
 add_library(kura-debug INTERFACE)
 target_link_libraries(kura-debug
-  INTERFACE kura-runtime
+  INTERFACE kura-compiler
             PkgConfig::GTK4
             PkgConfig::EPOXY
             PkgConfig::EGL
+            glm::glm
 )
 
 add_executable(kura-debugger
