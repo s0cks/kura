@@ -1,9 +1,17 @@
 {
   "packages": {
+    "docker/build": {
+      "release-type": "simple",
+      "initial-version": "1.0.0"
+    },
+    "docker/kura": {
+      "release-type": "simple",
+      "initial-version": "1.0.0"
+    },
     ".": {
       "release-type": "simple",
       "extra-files": ["VERSION"],
-      "exclude-paths": [],
+      "exclude-paths": ["docker/build", "docker/kura"],
       "initial-version": "0.0.0",
       "bump-minor-pre-major": true,
       "bump-patch-pre-major": true

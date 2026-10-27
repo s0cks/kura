@@ -1,6 +1,2 @@
-fn init(): Seq<Number> => [ 1, 2, 3, ]
-
-fn init2(x: Number): Seq<Number> => [ x, 4, 5, ]
-
-fn doubled(numbers: Seq<Number>): Seq<Number> =>
-  for n in numbers if n > 10 => n * 2
+fn add-three(x: Int): Seq<Int> =>
+  for n in [ x, x + 1, x + 2, x + 3, 11 ] if n < 10 => n + 3
