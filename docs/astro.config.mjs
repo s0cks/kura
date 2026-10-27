@@ -6,6 +6,8 @@ import react from "@astrojs/react";
 
 // https://astro.build/config
 export default defineConfig({
+  site: "https://s0cks.github.io",
+  base: "/kura",
   integrations: [
     starlight({
       title: "My Docs",
