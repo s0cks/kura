@@ -1,6 +1,6 @@
-fn init(): State => { value: 1 }
-
 type  Message = Click
+
+fn init(): State => { value: 1 }
 
 fn update(msg: Message, state: State): State =>
   match msg {

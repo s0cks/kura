@@ -453,6 +453,8 @@ auto main(int argc, char** argv) -> int {
 
   if (result.tag != rt::kTagInvalid)
     std::cout << "=> " << rt::Format(result) << "  (" << exec_dur.count() << "us)" << std::endl;
+  else
+    std::cout << "finished in " << exec_dur.count() << "us" << std::endl;
 
   return EXIT_SUCCESS;
 }
