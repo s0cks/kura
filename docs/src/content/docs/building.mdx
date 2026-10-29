@@ -1,3 +1,49 @@
 ---
 title: Building
 ---
+
+## Building the Compiler & Runtime
+
+To build kura from source, you will need the following:
+
+- [CMake](https://cmake.org)
+- [llvm](https://llvm.org)
+- [GTest](https://github.com/google/googletest) --- Optional, required for building and running the tests
+
+### Using CMake
+
+1. First, in the root of the directory, setup cmake:
+
+```sh
+cmake --preset=clang-debug .
+```
+
+2. Then build:
+
+```sh
+cmake --build build --target all
+```
+
+## Building the Debugger
+
+Kura comes with a "debugger" - a standalone executable that runs a simple
+rendering loop to allow you to explore your UI before you integrate it.
+
+To build the kura debugger, you will need the following:
+
+- [libpng](https://www.libpng.org/pub/png/libpng.html)
+- [libjpeg-turbo](https://libjpeg-turbo.org/)
+
+### Using CMake
+
+1. First, you need to enable it using CMake:
+
+```sh
+cmake --preset=<your preset> . -DKURA_BUILD_DEBUGGER=ON
+```
+
+2. Then build it:
+
+```sh
+cmake --build . --target debugger
+```
