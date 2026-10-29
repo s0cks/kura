@@ -139,6 +139,7 @@ typedef struct {
 typedef struct {
   float x, y, r, g, b, a;
 } Vertex;
+
 typedef struct {
   float x, y, u, v, r, g, b, a;
 } TextVertex;
@@ -969,28 +970,35 @@ void render_push(void) {
     R.stop++;
   }
 }
+
 void render_pop(void) {
   if (R.stop > 0)
     R.stop--;
 }
+
 void render_identity(void) {
   CS.xform = mat2_id();
 }
+
 void render_translate(float x, float y) {
   mat2_translate(&CS.xform, x, y);
 }
+
 void render_rotate(float a) {
   mat2_rotate(&CS.xform, a);
 }
+
 void render_scale(float sx, float sy) {
   mat2_scale(&CS.xform, sx, sy);
 }
+
 void render_set_color(float r, float g, float b, float a) {
   CS.color[0] = r;
   CS.color[1] = g;
   CS.color[2] = b;
   CS.color[3] = a;
 }
+
 void render_set_line_width(float w) {
   CS.lw = w;
 }

@@ -14,7 +14,7 @@ fn init() => { message: "Hello World" }
 
 fn view(count: Int): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }
-  #button{
+  #button(fill: red){
     #text(text)
   }
 }

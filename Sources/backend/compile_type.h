@@ -5,21 +5,6 @@
 #include <vector>
 
 namespace kura {
-// The static type of a value in the flow graph.
-//
-// These are immutable, structural and interned: two types are the same iff they
-// are the same pointer, so they compare with `==`. (kura::Type is the runtime
-// registry of named types; it can't express records, variants or functions.)
-//
-//   Any      unknown: operations on it are checked at runtime. A lambda
-//            parameter with no context to infer it from is Any.
-//   Never    no value (an unreachable result); the identity of Join.
-//   Number   an Int or a Float whose kind isn't known statically. It's what a
-//            `Number` annotation means.
-//   Variant  one constructor of a sum type: `Click(Position)`, `Tick`.
-//   Union    `Node | None`, `Click(Position) | Tick`.
-//   Handle   an opaque pointer that came from C (`FILE*`, `Texture*`). It can be
-//            held and handed back to C, and compared, but not looked into.
 class CompileType {
  public:
   enum Kind {
@@ -42,7 +27,6 @@ class CompileType {
     kFunction,
     kUnion,
     kHandle,
-    kVoid,
   };
 
   struct Field {

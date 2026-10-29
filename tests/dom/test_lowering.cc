@@ -1,9 +1,8 @@
 // The view of a module, from the DOM to instructions: builds a module by hand
 // (no parser), lowers it, and looks at what came out.
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <functional>
+#include <gtest/gtest.h>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -174,7 +173,7 @@ TEST(DomLowering, NoNodeObjectsAreBuilt) {
 }
 
 TEST(DomLowering, ConstantPropertiesEmitNothing) {
-  Program program(Element(NodeExpr::kBlock, {Prop("gap", Lit(Px::New(2))), Prop("fill", Lit(Color::New("red")))}));
+  Program program(Element(NodeExpr::kBlock, {Prop("gap", Lit(Px::New(2))), Prop("fill", Lit(Color::Red()))}));
   ASSERT_TRUE(program.Compile());
   for (const auto instr : program.Instructions())
     EXPECT_FALSE(instr->IsConstant());
@@ -196,8 +195,7 @@ TEST(DomLowering, FoldsLetsIntoTheText) {
 
 TEST(DomLowering, DynamicValuesAreEvaluated) {
   Program dynamic{};
-  dynamic.view->SetBody(SeqExpr::New(
-      Element(NodeExpr::kText, {Prop("value", LoadLocalExpr::New(dynamic.model))})));
+  dynamic.view->SetBody(SeqExpr::New(Element(NodeExpr::kText, {Prop("value", LoadLocalExpr::New(dynamic.model))})));
   ASSERT_TRUE(dynamic.Compile()) << (dynamic.errors.empty() ? "" : dynamic.errors[0]);
   EXPECT_EQ(dynamic.Draws(), std::vector<std::string>{"DrawText"});
 }

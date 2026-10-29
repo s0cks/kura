@@ -171,7 +171,6 @@ void RenderContext::ClipReset() {
   Flush();
   glDisable(GL_SCISSOR_TEST);
 }
-
 }  // namespace kura
 
 #endif  // KURA_RENDER_TARGET_OPENGL

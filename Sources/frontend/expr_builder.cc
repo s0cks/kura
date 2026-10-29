@@ -52,9 +52,9 @@ auto TypeExprOf(const CType& c) -> TypeExpr* {
 
 auto IsKeyword(const std::string& name) -> bool {
   static const std::unordered_set<std::string> kKeywords{
-      "let",    "fn",    "type",    "if",     "else",    "match",   "for",     "in",   "fold",
-      "use",    "as",    "extern",  "true",   "false",   "None",    "black",   "white", "red",
-      "green",  "blue",  "yellow",  "cyan",   "magenta", "gray",    "orange",  "purple", "transparent"};
+      "let",   "fn",   "type",   "if",   "else",    "match", "for",    "in",     "fold",
+      "use",   "as",   "extern", "true", "false",   "None",  "black",  "white",  "red",
+      "green", "blue", "yellow", "cyan", "magenta", "gray",  "orange", "purple", "transparent"};
   return kKeywords.contains(name);
 }
 
@@ -297,7 +297,8 @@ auto ExprBuilder::BuildUseDecl(KuraParser::UseDeclContext* ctx,
     Error(ctx, "cannot derive a name from '" + header + "'; write: use \"" + header + "\" as <name>");
   }
   if (alias == "c")
-    Error(ctx, "'c' is the name of the built-in C types (c.int, c.float, ...); write: use \"" + header + "\" as <name>");
+    Error(ctx,
+          "'c' is the name of the built-in C types (c.int, c.float, ...); write: use \"" + header + "\" as <name>");
   if (!use_aliases_.insert(alias).second)
     Error(ctx, "'" + alias + "' already names another use; write: use \"" + header + "\" as <name>");
   std::string problem{};
@@ -743,8 +744,6 @@ auto ExprBuilder::visitNoneLit(KuraParser::NoneLitContext* ctx) -> std::any {
   return Literal(None::Get());
 }
 
-// Px / Pct / Fr / Color are distinct types in v1 and are never implicitly
-// converted to Number, so each gets its own object type.
 auto ExprBuilder::BuildUnit(KuraParser::UnitLiteralContext* ctx, const bool negate) -> Object* {
   const auto sign = negate ? -1.0 : 1.0;
   const auto text = ctx->getText();
@@ -756,7 +755,8 @@ auto ExprBuilder::BuildUnit(KuraParser::UnitLiteralContext* ctx, const bool nega
     return Fr::New(sign * std::stod(text.substr(0, text.size() - 2)));
   if (negate)
     Error(ctx, "a color cannot be negated");
-  return Color::New(text);
+
+  return Color::Parse(text);
 }
 
 auto ExprBuilder::visitUnitLit(KuraParser::UnitLitContext* ctx) -> std::any {

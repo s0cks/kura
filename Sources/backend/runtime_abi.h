@@ -141,18 +141,16 @@ void* kura_rt_seq_new(uint64_t capacity);
 KuraValue kura_rt_seq_get(void* seq, int64_t index);
 void* kura_rt_seq_concat(void* a, void* b);
 
-// Seqs and nodes (children)
 int64_t kura_rt_len(void* object);
 void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bits);
 
 void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
-void kura_rt_fill_rect();
+void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color);
 void kura_rt_draw_rect();
 void kura_rt_draw_text(void* text);
 
-// Records and nodes (properties)
 void* kura_rt_record_new();
 void kura_rt_record_set(void* object, uint64_t hash, const char* name, uint64_t tag, uint64_t bits);
 KuraValue kura_rt_record_get(void* object, uint64_t hash);
@@ -167,8 +165,6 @@ void* kura_rt_closure_new(void* function, uint64_t arity, uint64_t captures);
 void kura_rt_closure_capture(void* closure, uint64_t index, uint64_t tag, uint64_t bits);
 KuraValue kura_rt_closure_get_capture(void* closure, uint64_t index);
 void* kura_rt_closure_fn(void* closure, uint64_t arguments);
-
-// A variant's payload is a boxed value.
 void* kura_rt_box(uint64_t tag, uint64_t bits);
 KuraValue kura_rt_unbox(void* box);
 
@@ -178,9 +174,6 @@ uint64_t kura_rt_eq(uint64_t a_tag, uint64_t a_bits, uint64_t b_tag, uint64_t b_
 int64_t kura_rt_sdiv(int64_t a, int64_t b);
 int64_t kura_rt_srem(int64_t a, int64_t b);
 
-// C interop. A String is handed to C as its NUL-terminated bytes, which stay
-// valid for the life of the program. A null pointer from C is a panic unless
-// the result is declared nullable (`_opt`).
 const char* kura_rt_string_cstr(void* string);
 void* kura_rt_string_from_cstr(const char* data, const char* what);
 void* kura_rt_string_from_cstr_opt(const char* data);

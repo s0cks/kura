@@ -167,6 +167,10 @@ class Instruction {
     return false;
   }
 
+  virtual auto IsGraphicsInstr() const -> bool {
+    return false;
+  }
+
   virtual auto ToString() const -> std::string = 0;
   virtual auto GetInstructionName() const -> std::string_view = 0;
   virtual auto Accept(InstructionVisitor* vis) -> bool = 0;
@@ -379,7 +383,6 @@ class Definition : public Instruction {
  public:
   ~Definition() override = default;
 
-  // The static type of the value, set by the type analysis (null before it).
   auto GetCompileType() const -> CompileType* {
     return compile_type_;
   }
@@ -587,7 +590,7 @@ class NewNodeInstr : public New {
     return kind_;
   }
 
-#define DEFINE_TYPE_CHECK(Name, Tag)          \
+#define DEFINE_TYPE_CHECK(Name, Tag)     \
   inline auto Is##Name() const -> bool { \
     return GetKind() == Kind::k##Name;   \
   }
@@ -601,7 +604,7 @@ class NewNodeInstr : public New {
     return new NewNodeInstr(kind);
   }
 
-#define DEFINE_NEW(Name, Tag)                            \
+#define DEFINE_NEW(Name, Tag)                       \
   static inline auto New##Name() -> NewNodeInstr* { \
     return New(Kind::k##Name);                      \
   }

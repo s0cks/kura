@@ -1,7 +1,7 @@
-set(GTK4_VERSION 4.22.4)
 pkg_check_modules(GTK4  REQUIRED IMPORTED_TARGET gtk4)
 pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
 pkg_check_modules(EGL   REQUIRED IMPORTED_TARGET egl)
+pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
 
 add_library(kura-debug INTERFACE)
 target_link_libraries(kura-debug
@@ -9,7 +9,7 @@ target_link_libraries(kura-debug
             PkgConfig::GTK4
             PkgConfig::EPOXY
             PkgConfig::EGL
-            glm::glm
+            PkgConfig::GTK4
 )
 
 add_executable(kura-debugger

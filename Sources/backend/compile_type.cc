@@ -97,13 +97,14 @@ auto CompileType::Intern(CompileType* proto) -> CompileType* {
   return proto;
 }
 
-#define DEFINE_SIMPLE(Name)                      \
-  auto CompileType::Name() -> CompileType* {     \
-    static CompileType* type = nullptr;          \
-    if (!type)                                   \
-      type = Intern(new CompileType(k##Name));   \
-    return type;                                 \
+#define DEFINE_SIMPLE(Name)                    \
+  auto CompileType::Name() -> CompileType* {   \
+    static CompileType* type = nullptr;        \
+    if (!type)                                 \
+      type = Intern(new CompileType(k##Name)); \
+    return type;                               \
   }
+
 DEFINE_SIMPLE(Any)
 DEFINE_SIMPLE(Never)
 DEFINE_SIMPLE(None)
@@ -132,7 +133,9 @@ auto CompileType::Handle(const std::string& name) -> CompileType* {
 }
 
 auto CompileType::Record(std::vector<Field> fields) -> CompileType* {
-  std::sort(fields.begin(), fields.end(), [](const Field& a, const Field& b) { return a.name < b.name; });
+  std::sort(fields.begin(), fields.end(), [](const Field& a, const Field& b) {
+    return a.name < b.name;
+  });
   const auto type = new CompileType(kRecord);
   type->fields_ = std::move(fields);
   return Intern(type);
@@ -167,17 +170,25 @@ auto CompileType::Union(std::vector<CompileType*> members) -> CompileType* {
       flat.push_back(member);
     }
   }
-  std::sort(flat.begin(), flat.end(), [](CompileType* a, CompileType* b) { return a->ToString() < b->ToString(); });
+  std::sort(flat.begin(), flat.end(), [](CompileType* a, CompileType* b) {
+    return a->ToString() < b->ToString();
+  });
   flat.erase(std::unique(flat.begin(), flat.end()), flat.end());
 
   // Int | Float is Number, and Number already includes both
   const auto has = [&](const Kind kind) {
-    return std::any_of(flat.begin(), flat.end(), [&](CompileType* t) { return t->kind_ == kind; });
+    return std::any_of(flat.begin(), flat.end(), [&](CompileType* t) {
+      return t->kind_ == kind;
+    });
   };
   if (has(kNumber) || (has(kInt) && has(kFloat))) {
-    std::erase_if(flat, [](CompileType* t) { return t->kind_ == kInt || t->kind_ == kFloat || t->kind_ == kNumber; });
+    std::erase_if(flat, [](CompileType* t) {
+      return t->kind_ == kInt || t->kind_ == kFloat || t->kind_ == kNumber;
+    });
     flat.push_back(Number());
-    std::sort(flat.begin(), flat.end(), [](CompileType* a, CompileType* b) { return a->ToString() < b->ToString(); });
+    std::sort(flat.begin(), flat.end(), [](CompileType* a, CompileType* b) {
+      return a->ToString() < b->ToString();
+    });
   }
 
   if (flat.empty())
@@ -232,12 +243,14 @@ auto CompileType::IsAssignable(CompileType* from, CompileType* to) -> bool {
   if (from == to || from->IsAny() || to->IsAny() || from->IsNever())
     return true;
   if (from->IsUnion()) {
-    return std::all_of(from->members_.begin(), from->members_.end(),
-                       [&](CompileType* member) { return IsAssignable(member, to); });
+    return std::all_of(from->members_.begin(), from->members_.end(), [&](CompileType* member) {
+      return IsAssignable(member, to);
+    });
   }
   if (to->IsUnion()) {
-    return std::any_of(to->members_.begin(), to->members_.end(),
-                       [&](CompileType* member) { return IsAssignable(from, member); });
+    return std::any_of(to->members_.begin(), to->members_.end(), [&](CompileType* member) {
+      return IsAssignable(from, member);
+    });
   }
   switch (to->kind_) {
     case kNumber:

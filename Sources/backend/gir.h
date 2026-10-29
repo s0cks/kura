@@ -29,6 +29,21 @@ class GraphicsInstr : public Definition {
  public:
   GraphicsInstr() = default;
   ~GraphicsInstr() override = default;
+
+  auto IsGraphicsInstr() const -> bool override {
+    return true;
+  }
+};
+
+template <const uint64_t NumberOfInputs>
+class TemplateGraphicsInstr : public TemplateDefinition<NumberOfInputs> {
+ public:
+  TemplateGraphicsInstr() = default;
+  ~TemplateGraphicsInstr() override = default;
+
+  auto IsGraphicsInstr() const -> bool override {
+    return true;
+  }
 };
 
 class BeginFrameInstr : public GraphicsInstr {
@@ -73,17 +88,69 @@ class EndFrameInstr : public GraphicsInstr {
   }
 };
 
-class FillRectInstr : public GraphicsInstr {
- private:
+class FillRectInstr : public TemplateGraphicsInstr<5> {
  public:
-  explicit FillRectInstr() = default;
+  static const auto kXPos = 0;
+  static const auto kYPos = 1;
+  static const auto kWidthPos = 2;
+  static const auto kHeightPos = 3;
+  static const auto kColorPos = 4;
+
+ public:
+  FillRectInstr(Value* x, Value* y, Value* w, Value* h, Value* c) {
+    SetX(x);
+    SetY(y);
+    SetWidth(w);
+    SetHeight(h);
+    SetColor(c);
+  }
   ~FillRectInstr() override = default;
+
+  inline auto GetX() const -> Value* {
+    return GetInputAt(kXPos);
+  }
+
+  inline void SetX(Value* rhs) {
+    return SetInputAt(kXPos, rhs);
+  }
+
+  inline auto GetY() const -> Value* {
+    return GetInputAt(kYPos);
+  }
+
+  inline void SetY(Value* rhs) {
+    return SetInputAt(kYPos, rhs);
+  }
+
+  inline auto GetWidth() const -> Value* {
+    return GetInputAt(kWidthPos);
+  }
+
+  inline void SetWidth(Value* rhs) {
+    return SetInputAt(kWidthPos, rhs);
+  }
+
+  inline auto GetHeight() const -> Value* {
+    return GetInputAt(kHeightPos);
+  }
+
+  inline void SetHeight(Value* rhs) {
+    return SetInputAt(kHeightPos, rhs);
+  }
+
+  inline auto GetColor() const -> Value* {
+    return GetInputAt(kColorPos);
+  }
+
+  inline void SetColor(Value* rhs) {
+    return SetInputAt(kColorPos, rhs);
+  }
 
   DECLARE_INSTRUCTION_TYPE(FillRect);
 
  public:
-  static inline auto New() -> FillRectInstr* {
-    return new FillRectInstr();
+  static inline auto New(Value* x, Value* y, Value* w, Value* h, Value* color) -> FillRectInstr* {
+    return new FillRectInstr(x, y, w, h, color);
   }
 };
 

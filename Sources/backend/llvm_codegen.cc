@@ -48,6 +48,7 @@ enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged };
 auto RepOf(CompileType* type) -> Rep {
   switch (type->GetKind()) {
     case CompileType::kInt:
+    case CompileType::kColor:
     case CompileType::kHandle:
       return Rep::kInt;
     case CompileType::kFloat:
@@ -61,7 +62,6 @@ auto RepOf(CompileType* type) -> Rep {
     case CompileType::kNever:
       return Rep::kNone;
     case CompileType::kString:
-    case CompileType::kColor:
     case CompileType::kNode:
     case CompileType::kSeq:
     case CompileType::kRecord:
@@ -76,6 +76,7 @@ auto RepOf(CompileType* type) -> Rep {
 auto TagOf(CompileType* type) -> uint64_t {
   switch (type->GetKind()) {
     case CompileType::kInt:
+    case CompileType::kColor:
       return rt::kTagInt;
     case CompileType::kFloat:
       return rt::kTagFloat;
@@ -83,8 +84,6 @@ auto TagOf(CompileType* type) -> uint64_t {
       return rt::kTagBool;
     case CompileType::kString:
       return rt::kTagString;
-    case CompileType::kColor:
-      return rt::kTagColor;
     case CompileType::kPx:
       return rt::kTagPx;
     case CompileType::kPct:
@@ -101,8 +100,6 @@ auto TagOf(CompileType* type) -> uint64_t {
       return rt::kTagFunction;
     case CompileType::kHandle:
       return rt::kTagHandle;
-    case CompileType::kVoid:
-      return rt::kTagVoid;
     default:
       return rt::kTagNone;
   }
@@ -541,7 +538,12 @@ class Generator {
   }
 
   void EmitFillRect(FillRectInstr* draw) {
-    CallRt("kura_rt_fill_rect", void_ty_, {});
+    llvm::Value* x = Val(draw->GetX());
+    llvm::Value* y = Val(draw->GetY());
+    llvm::Value* w = Val(draw->GetWidth());
+    llvm::Value* h = Val(draw->GetHeight());
+    llvm::Value* c = Val(draw->GetColor());
+    CallRt("kura_rt_fill_rect", void_ty_, {x, y, w, h, c});
   }
 
   void EmitDrawText(DrawTextInstr* draw) {
@@ -614,6 +616,8 @@ class Generator {
     switch (value->GetType()) {
       case kIntType:
         return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
+      case kColorType:
+        return Define(instr, b_.getInt64(static_cast<Color*>(value)->ToRGBA()), CompileType::Int());
       case kFloatType:
         return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()), CompileType::Float());
       case kPxType:
@@ -628,8 +632,6 @@ class Generator {
         return Define(instr, b_.getInt8(0), CompileType::None());
       case kStringType:
         return Define(instr, StringLiteral(static_cast<String*>(value)->GetValue()), CompileType::String());
-      case kColorType:
-        return Define(instr, StringLiteral(static_cast<Color*>(value)->GetValue()), CompileType::Color());
       default:
         Fail("internal error: can't generate a constant of " + value->ToString());
     }
@@ -746,7 +748,7 @@ class Generator {
     if (const auto n = instr->AsNewNode()) {
       std::string kind = "node";
       switch (n->GetKind()) {
-#define DEFINE_CASE(Name, Tag)           \
+#define DEFINE_CASE(Name, Tag)      \
   case NewNodeInstr::Kind::k##Name: \
     kind = ToLower(#Name);          \
     break;

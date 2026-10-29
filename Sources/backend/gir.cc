@@ -5,6 +5,7 @@ namespace kura {
 static inline auto Name(const Value* value) -> std::string {
   if (!value || !value->GetDefinition())
     return "<none>";
+
   return "%" + std::to_string(value->GetDefinition()->GetId());
 }
 
@@ -35,6 +36,11 @@ auto EndFrameInstr::ToString() const -> std::string {
 auto FillRectInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "FillRect(";
+  ss << "x=" << Name(GetX()) << ", ";
+  ss << "y=" << Name(GetY()) << ", ";
+  ss << "width=" << Name(GetWidth()) << ", ";
+  ss << "height=" << Name(GetHeight()) << ", ";
+  ss << "color=" << Name(GetColor());
   ss << ")";
   return ss.str();
 }

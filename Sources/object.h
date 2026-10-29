@@ -104,8 +104,6 @@ class Bool : public TemplateValueObject<kBoolType, bool> {
   static auto True() -> Bool*;
 };
 
-// The abstract numeric type: what a `Number` annotation means is "an Int or a
-// Float". The frontend never creates one, a literal is an Int or a Float.
 class Number : public TemplateValueObject<kNumberType, double> {
  public:
   explicit Number(const double value) :
@@ -120,7 +118,6 @@ class Number : public TemplateValueObject<kNumberType, double> {
   }
 };
 
-// A 64-bit signed integer: `10`.
 class Int : public TemplateValueObject<kIntType, int64_t> {
  public:
   explicit Int(const int64_t value) :
@@ -135,7 +132,6 @@ class Int : public TemplateValueObject<kIntType, int64_t> {
   }
 };
 
-// A 64-bit IEEE float: `10.0`.
 class Float : public TemplateValueObject<kFloatType, double> {
  public:
   explicit Float(const double value) :
@@ -217,40 +213,112 @@ class Seq : public TemplateObject<kSeqType> {
   }
 };
 
-// Unit literals are numeric but have their own types: they are never implicitly
-// converted to Number (or to each other).
-#define DEFINE_UNIT_OBJECT(Name)                                    \
-  class Name : public TemplateValueObject<k##Name##Type, double> {  \
-   public:                                                          \
-    explicit Name(const double value) :                             \
-      TemplateValueObject(value) {}                                 \
-    ~Name() override = default;                                     \
-                                                                    \
-    DECLARE_TYPE(Name);                                             \
-                                                                    \
-   public:                                                          \
-    static inline auto New(const double value) -> Name* {           \
-      return new Name(value);                                       \
-    }                                                               \
+#define DEFINE_UNIT_OBJECT(Name)                                   \
+  class Name : public TemplateValueObject<k##Name##Type, double> { \
+   public:                                                         \
+    explicit Name(const double value) :                            \
+      TemplateValueObject(value) {}                                \
+    ~Name() override = default;                                    \
+                                                                   \
+    DECLARE_TYPE(Name);                                            \
+                                                                   \
+   public:                                                         \
+    static inline auto New(const double value) -> Name* {          \
+      return new Name(value);                                      \
+    }                                                              \
   };
 DEFINE_UNIT_OBJECT(Px);
 DEFINE_UNIT_OBJECT(Pct);
 DEFINE_UNIT_OBJECT(Fr);
 #undef DEFINE_UNIT_OBJECT
 
-// A named color literal (`blue`). The palette is resolved by later passes.
-class Color : public TemplateValueObject<kColorType, std::string> {
+class Color : public TemplateObject<kColorType> {
+ private:
+  uint8_t red_;
+  uint8_t blue_;
+  uint8_t green_;
+  uint8_t alpha_;
+
  public:
-  explicit Color(const std::string name) :
-    TemplateValueObject(std::move(name)) {}
+  explicit Color(const uint8_t red, const uint8_t blue, const uint8_t green, const uint8_t alpha) :
+    red_(red),
+    blue_(blue),
+    green_(green),
+    alpha_(alpha) {}
   ~Color() override = default;
+
+  auto GetRed() const -> uint8_t {
+    return red_;
+  }
+
+  void SetRed(const uint8_t rhs) {
+    red_ = rhs;
+  }
+
+  auto GetBlue() const -> uint8_t {
+    return blue_;
+  }
+
+  void SetBlue(const uint8_t rhs) {
+    blue_ = rhs;
+  }
+
+  auto GetGreen() const -> uint8_t {
+    return green_;
+  }
+
+  void SetGreen(const uint8_t rhs) {
+    green_ = rhs;
+  }
+
+  auto GetAlpha() const -> uint8_t {
+    return alpha_;
+  }
+
+  void SetAlpha(const uint8_t rhs) {
+    alpha_ = rhs;
+  }
+
+  constexpr auto ToRGBA() const -> uint32_t {
+    return (static_cast<uint32_t>(red_) << 24) | (static_cast<uint32_t>(green_) << 16) |
+           (static_cast<uint32_t>(blue_) << 8) | static_cast<uint32_t>(alpha_);
+  }
+
+  constexpr auto ToARGB() const -> uint32_t {
+    return (static_cast<uint32_t>(alpha_) << 24) | (static_cast<uint32_t>(red_) << 16) |
+           (static_cast<uint32_t>(green_) << 8) | static_cast<uint32_t>(blue_);
+  }
 
   DECLARE_TYPE(Color);
 
+ private:
+#define FOR_EACH_BUILTIN_COLOR(V) \
+  V(Red)                          \
+  V(Blue)                         \
+  V(Green)                        \
+  V(White)                        \
+  V(Black)
+
+#define DECLARE_BUILTIN_COLOR(Name) static Color* k##Name;
+
+  FOR_EACH_BUILTIN_COLOR(DECLARE_BUILTIN_COLOR)
+#undef DECLARE_BUILTIN_COLOR
+
  public:
-  static inline auto New(const std::string name) -> Color* {
-    return new Color(std::move(name));
+  static auto Parse(const std::string rhs) -> Color*;
+
+  static inline auto New(const uint8_t red, const uint8_t blue, const uint8_t green, const uint8_t alpha = 255)
+      -> Color* {
+    return new Color(red, blue, green, alpha);
   }
+
+#define DEFINE_COLOR_GETTER(Name)       \
+  static inline auto Name() -> Color* { \
+    return k##Name;                     \
+  }
+
+  FOR_EACH_BUILTIN_COLOR(DEFINE_COLOR_GETTER)
+#undef DEFINE_COLOR_GETTER
 };
 }  // namespace kura
 

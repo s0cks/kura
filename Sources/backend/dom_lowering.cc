@@ -47,8 +47,29 @@ auto DomLowering::VisitButton(dom::Node* node) -> bool {
   if (!ResolveProperties(node, &resolved))
     return false;
 
-  EmitRenderCall(FillRectInstr::New());
+  Value* x = host_->Bind(ConstantInstr::New(Int::New(1)));
+  Value* y = host_->Bind(ConstantInstr::New(Int::New(2)));
+  Value* w = host_->Bind(ConstantInstr::New(Int::New(3)));
+  Value* h = host_->Bind(ConstantInstr::New(Int::New(4)));
+  Value* color = ResolvePropertyByName(node, "fill", resolved);
+  if (!color)
+    color = host_->Bind(ConstantInstr::New(Int::New(0)));
+
+  EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
   return VisitChildren(node);
+}
+
+auto DomLowering::ResolvePropertyByName(dom::Node* node, const std::string name, Resolved& resolved) -> Value* {
+  Value* value = nullptr;
+  if (const auto property = node->FindProperty(name)) {
+    if (property->IsConstant()) {
+      value = host_->Bind(ConstantInstr::New(property->constant));
+    } else {
+      value = resolved[property->def];
+    }
+  }
+
+  return value;
 }
 
 auto DomLowering::VisitText(dom::Node* node) -> bool {

@@ -10,6 +10,7 @@
 
 #include "binary_op.h"
 #include "common.h"
+#include "object.h"
 #include "unary_op.h"
 
 namespace kura::rt {
@@ -20,13 +21,6 @@ struct Obj {
   ObjKind kind;
   explicit Obj(const ObjKind k) :
     kind(k) {}
-};
-
-struct StringObj : Obj {
-  std::string value;
-  explicit StringObj(std::string v) :
-    Obj(ObjKind::kString),
-    value(std::move(v)) {}
 };
 
 struct SeqObj : Obj {
@@ -143,8 +137,8 @@ inline auto FromDouble(const double value) -> uint64_t {
   return bits;
 }
 
-inline auto Str(const uint64_t bits) -> StringObj* {
-  return reinterpret_cast<StringObj*>(bits);
+inline auto Str(const uint64_t bits) -> String* {
+  return reinterpret_cast<String*>(bits);
 }
 
 inline auto IsUnit(const uint64_t tag) -> bool {
@@ -225,7 +219,7 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
       return AsDouble(a.bits) == AsDouble(b.bits);
     case kTagString:
     case kTagColor:
-      return Str(a.bits)->value == Str(b.bits)->value;
+      return Str(a.bits)->GetValue() == Str(b.bits)->GetValue();
     case kTagSeq:
       return SeqEqual(reinterpret_cast<SeqObj*>(a.bits), reinterpret_cast<SeqObj*>(b.bits));
     case kTagRecord:
@@ -278,9 +272,9 @@ auto Format(const KuraValue& value) -> std::string {
     case kTagFr:
       return Number(AsDouble(value.bits)) + "fr";
     case kTagString:
-      return Quote(Str(value.bits)->value);
+      return Quote(Str(value.bits)->GetValue());
     case kTagColor:
-      return Str(value.bits)->value;
+      return Str(value.bits)->GetValue();
     case kTagSeq: {
       const auto seq = reinterpret_cast<SeqObj*>(value.bits);
       std::stringstream ss{};
@@ -328,7 +322,7 @@ auto Format(const KuraValue& value) -> std::string {
 }
 
 auto MakeString(const std::string& value) -> KuraValue {
-  return {kTagString, reinterpret_cast<uint64_t>(new StringObj(value))};
+  return {kTagString, reinterpret_cast<uint64_t>(String::New(value))};
 }
 }  // namespace kura::rt
 
@@ -347,17 +341,17 @@ void kura_rt_panic(const char* message) {
 }
 
 const char* kura_rt_string_cstr(void* string) {
-  return string ? static_cast<StringObj*>(string)->value.c_str() : nullptr;
+  return string ? static_cast<kura::String*>(string)->GetValue().c_str() : nullptr;
 }
 
 void* kura_rt_string_from_cstr_opt(const char* data) {
-  return data ? new StringObj(data) : nullptr;
+  return data ? kura::String::New(data) : nullptr;
 }
 
 void* kura_rt_string_from_cstr(const char* data, const char* what) {
   if (!data)
     Panic(std::string(what) + " returned NULL, but its result is not declared `| None`");
-  return new StringObj(data);
+  return kura::String::New(std::string(data));
 }
 
 void kura_rt_ffi_overflow(const int64_t value, const char* what) {
@@ -378,15 +372,15 @@ void kura_rt_register_variant(const uint64_t hash, const char* name) {
 }
 
 void* kura_rt_string_new(const char* data, const uint64_t length) {
-  return new StringObj(std::string(data, length));
+  return kura::String::New(std::string(data, length));
 }
 
 void* kura_rt_string_concat(void* a, void* b) {
-  return new StringObj(static_cast<StringObj*>(a)->value + static_cast<StringObj*>(b)->value);
+  return kura::String::New(static_cast<kura::String*>(a)->GetValue() + static_cast<kura::String*>(b)->GetValue());
 }
 
 int64_t kura_rt_string_cmp(void* a, void* b) {
-  const auto c = static_cast<StringObj*>(a)->value.compare(static_cast<StringObj*>(b)->value);
+  const auto c = static_cast<kura::String*>(a)->GetValue().compare(static_cast<kura::String*>(b)->GetValue());
   return c < 0 ? -1 : (c > 0 ? 1 : 0);
 }
 
@@ -420,8 +414,16 @@ void kura_rt_end_frame() {
   NOT_IMPLEMENTED;
 }
 
-void kura_rt_fill_rect() {
-  NOT_IMPLEMENTED;
+void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color) {
+  const uint8_t red = (color >> 24) & 0xFF;
+  const uint8_t green = (color >> 16) & 0xFF;
+  const uint8_t blue = (color >> 8) & 0xFF;
+  const uint8_t alpha = (color) & 0xFF;
+  std::cout << "rendering filled rect " << xbits << ", " << ybits << ", " << wbits << ", " << hbits << ", "
+            << "r=" << ((uint32_t)red) << ", "
+            << "g=" << ((uint32_t)green) << ", "
+            << "b=" << ((uint32_t)blue) << ", "
+            << "a=" << ((uint32_t)alpha) << std::endl;
 }
 
 void kura_rt_draw_rect() {
@@ -429,7 +431,7 @@ void kura_rt_draw_rect() {
 }
 
 void kura_rt_draw_text(void* a) {
-  std::cout << "rendering text: " << static_cast<StringObj*>(a)->value << std::endl;
+  std::cout << "rendering text: " << static_cast<kura::String*>(a)->GetValue() << std::endl;
 }
 
 void kura_rt_check_renderer() {

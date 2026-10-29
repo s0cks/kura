@@ -81,7 +81,7 @@ TEST(DomCheckConstant, Types) {
   EXPECT_TRUE(CheckConstant(*width, None::Get()));
 
   const auto fill = FindProperty(Kind::kBlock, "fill");
-  EXPECT_FALSE(CheckConstant(*fill, Color::New("blue")));
+  EXPECT_FALSE(CheckConstant(*fill, Color::New(0, 0, 0, 0)));
   EXPECT_TRUE(CheckConstant(*fill, Int::New(0)));
 }
 
