@@ -56,11 +56,13 @@ target_link_libraries(kura-compiler
          glm::glm
 )
 
+add_subdirectory(heap)
 add_subdirectory(dom)
-add_subdirectory(renderer)
-add_subdirectory(frontend)
 add_subdirectory(backend)
 add_subdirectory(runtime)
+
+add_subdirectory(renderer)
+
 add_subdirectory(compiler)
 
 if(KURA_BUILD_DEBUGGER)

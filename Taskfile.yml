@@ -1,3 +1,4 @@
+---
 version: '3'
 vars:
   BUILD_DIR: build
@@ -31,3 +32,44 @@ tasks:
       - task: cmake
         vars:
           TARGET: kura-renderer-tests
+
+  ouch:
+    internal: true
+    cmds:
+      - |
+        ouch compress \
+          .git/ \
+          .github/ \
+          .styles/ \
+          Sources/ \
+          assets/ \
+          cmake/ \
+          examples/ \
+          misc/ \
+          tests/ \
+          .clang-format \
+          .clang-tidy \
+          .clangd \
+          .editorconfig \
+          .gitattributes \
+          .gitignore \
+          .release-please-manifest.json \
+          .rumdl.toml \
+          .vale.ini \
+          .valeignore \
+          .yamlfmt \
+          .yamllint \
+          CMakeLists.txt \
+          CMakePresets.json \
+          LICENSE \
+          README.md \
+          Taskfile.yml \
+          lefthook.yml \
+          release-please-config.json \
+          vcpkg.json \
+          kura-sources.{{.OUCH_COMPRESSION}}
+  zip:
+    cmds:
+      - task: ouch
+        vars:
+          OUCH_COMPRESSION: zip
