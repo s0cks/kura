@@ -1,3 +1,127 @@
 ---
 title: Directives
+description: Compile-time hints that influence compiler decisions.
 ---
+
+Directives are compile-time annotations that let you **influence the compiler's decisions**.
+They are written with `@` and attach to the item that follows.
+
+```kura
+@meta(tags: [ Player ])
+fn view(count: Int): Node => ...
+
+@vec
+let pos = [ 10, 10, 10 ]
+```
+
+## What directives are for
+
+Directives are hints. In general they:
+
+- are evaluated entirely at compile time
+- **do not** change program semantics or evaluation results
+- **do not** create runtime-visible guarantees
+- **do** give the compiler extra metadata, or nudge its optimization choices
+
+The compiler may ignore a hint. Directive behavior can vary between compiler versions, and
+the *absence* of a directive never changes what a program means. The one exception is
+[`@pure` on a C function](#pure).
+
+The goal is to push as much analysis as possible through the compiler. Directives should
+not be used like Java annotations.
+
+## Where they go
+
+Directives attach to:
+
+- bindings
+- functions
+- UI elements
+
+An item can have several directives, in any order:
+
+```kura
+@vec
+@meta(tags: [ Player ])
+let pos = [ 10, 10, 10 ]
+```
+
+Some directives are mutually exclusive, and combining them is a compile-time error.
+
+There are no user-defined directives.
+
+## Available directives
+
+| Directive | Category      | Purpose                                                          |
+| --------- | ------------- | ---------------------------------------------------------------- |
+| `@meta`   | Metadata      | Attach metadata to bindings, functions and UI elements           |
+| `@vec`    | Optimization  | Treat a `Seq` as a contiguous, fixed-width, SIMD/GPU-friendly vector |
+| `@list`   | Optimization  | Treat a `Seq` as a flexible, non-contiguous list                 |
+| `@pure`   | Purity        | Assert that a function has no side effects                       |
+
+### `@meta`
+
+```kura
+fn view(): Node =>
+  @meta(tags: [ Button, User ])
+  #button {
+    // inherits Button and User from its parent
+    #text("Hello World")
+
+    // this node's tags are Player, Button and User
+    @meta(tags: [ Player ])
+    #input
+  }
+```
+
+Metadata is inherited through lexical scope and can be extended in nested scopes. The compiler
+injects it into generated IR, which makes performance traces (for example in
+[Tracy](https://github.com/wolfpld/tracy)) easier to read.
+
+### `@vec` and `@list`
+
+```kura
+@vec
+let pos = [ 10, 10, 10 ]
+
+@list
+let items = [ 1, 2, 3 ]
+```
+
+The compiler decides how to lay out a `Seq`, and it doesn't guarantee a layout. These two
+directives bias that choice. Don't rely on either for correctness: a `@vec` sequence isn't
+guaranteed to be contiguous.
+
+`@vec` and `@list` can't be applied to the same value.
+
+### `@pure`
+
+`@pure` says a function has no side effects.
+
+On a function **written in Kura**, `@pure` is a checked contract. The compiler works out purity
+itself, and it's an error if a `@pure` function reaches an impure C function.
+
+```kura
+@pure
+fn distance(a: Point, b: Point): Float => ...
+```
+
+On a **C function**, the compiler has no body to inspect, so `@pure` is *trusted*. This is
+the one directive that can change whether a program is accepted: `view` may only reach pure
+functions, and C functions are impure unless their header marks them `const` or `pure`, or
+the program says so.
+
+```kura
+@pure
+extern fn hypot(x: Float, y: Float): Float
+
+@pure(sqrt, floor)
+use "math.h"
+
+@pure
+use "cglm.h" as vec
+```
+
+`@pure(names)` before a `use` marks those functions from the header. A bare `@pure` marks
+all of them. If the C function actually has effects, the program's behavior is undefined,
+the same as when any other promise to the compiler is broken.

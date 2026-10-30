@@ -25,12 +25,13 @@ class Walker {
     return graph->GetFunction() ? std::string(graph->GetFunction()->GetName()->GetData()) : "a lambda";
   }
 
-  // The path from `graph` to an impure C function, if there is one.
   auto Search(FlowGraph* graph) -> std::optional<Path> {
     if (const auto it = memo_.find(graph); it != memo_.end())
       return it->second;
+
     if (!active_.insert(graph).second)
-      return std::nullopt;  // recursion is rejected elsewhere
+      return std::nullopt;
+
     std::optional<Path> found{};
     for (const auto block : graph->GetReversePostorder()) {
       for (auto instr = block->GetNext(); instr && !found; instr = instr->GetNext()) {
@@ -52,9 +53,11 @@ class Walker {
           }
         }
       }
+
       if (found)
         break;
     }
+
     active_.erase(graph);
     memo_[graph] = found;
     return found;
@@ -73,6 +76,7 @@ auto Chain(const Path& path) -> std::string {
   std::string text{};
   for (size_t idx = 0; idx < path.size(); idx++)
     text += (idx ? " -> " : "") + path[idx];
+
   return text;
 }
 
@@ -81,6 +85,7 @@ auto HasDirective(Function* function, const std::string& name) -> bool {
     if (directive->name == name)
       return true;
   }
+
   return false;
 }
 }  // namespace
@@ -100,12 +105,14 @@ auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::s
     const auto graph = graphs->GetGraphFor(function);
     if (!graph || function->IsExtern())
       continue;
+
     const std::string name(function->GetName()->GetData());
     if (HasDirective(function, "pure")) {
       if (const auto path = walker.Impurity(graph))
         fail("@pure function '" + name + "' is not pure: " + Chain(*path) +
              " (a C function is pure when its header says `const` or `pure`, or it is declared `@pure`)");
     }
+
     if (name == "view")
       view = graph;
     else if (name == "update")
@@ -120,6 +127,7 @@ auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::s
            ". view must be a pure function of the model; call C from init or update, or declare the C function"
            " `@pure` if it has no effects");
   }
+
   if (const auto top = graphs->GetInit()) {
     if (const auto path = walker.Impurity(top))
       fail("a top-level binding is not pure: " + Chain(*path) +
@@ -133,6 +141,7 @@ auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::s
     if (!CompileType::IsAssignable(update->GetReturnType(), model))
       fail("update must produce the model: it returns " + update->GetReturnType()->ToString() +
            " but its model parameter is " + model->ToString());
+
     if (init && init->GetReturnType() && !CompileType::IsAssignable(init->GetReturnType(), model))
       fail("init must produce the model: it returns " + init->GetReturnType()->ToString() +
            " but update's model parameter is " + model->ToString());

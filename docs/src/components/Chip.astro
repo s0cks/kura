@@ -1,0 +1,44 @@
+---
+interface Props {
+  kind?: 'not-started' | 'wip' | 'done';
+  message?: string;
+}
+
+const defaultKind = "not-started";
+
+const { message = undefined, kind = defaultKind } = Astro.props
+
+function getMessageFromStatus(): string {
+  switch (kind) {
+    case "not-started":
+      return "Not Started"
+    case "wip":
+      return "Work in Progress";
+    case "done":
+      return "Done";
+    default:
+      return "";
+  }
+}
+---
+<span class={`chip ${kind}`}>
+  {message ?? getMessageFromStatus()}
+</span>
+
+<style lang="css">
+  span.chip {
+    display: inline-block;
+    border: 0.5px solid #282726;
+    border-radius: 32px;
+    padding: 0.125em 0.5em;
+    color: #CECDC3;
+  }
+
+  .chip.not-started {
+    background-color: #D14D41;
+  }
+
+  .chip.wip {
+    background-color: #CE5D97;
+  }
+</style>

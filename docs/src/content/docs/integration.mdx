@@ -1,3 +1,64 @@
 ---
 title: Integration
+description: Embedding compiled Kura UIs in a host application.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Kura is a natural extension of your existing project. There is no project manifest: Kura
+sources compile to an object file or library that you link into your build, and your host
+calls into it.
+
+## The shape of an integration
+
+1. Compile your `.kui` files with `kurac` (or the planned `kura build`).
+2. Link the output and the Kura runtime into your application.
+3. Set up the runtime once.
+4. In your main loop, send Messages, update, and render.
+
+<Aside type="caution" title="Design, not yet implemented">
+The runtime isn't implemented yet (see [Project Status](/kura/status/)). This page describes
+the intended host API so you can see where Kura is heading. Names may change.
+</Aside>
+
+## The host loop
+
+The host drives all UIs through one update call and one render call, instead of dispatching to
+each UI itself. This mirrors how a browser engine embeds in a graphics loop:
+
+```c
+Counter* counter = NewCounter();
+
+while (running) {
+  KuraSend(counter, NewInputEvent());   // queue a Message (click, tick, ...)
+  KuraUpdate(counter, delta_time);      // drain the queue, run update
+  KuraRender(counter);                  // render every open UI
+}
+```
+
+- **Send** queues a Message from the host: a click, a tick, or anything your game defines.
+- **Update** drains the queue through each UI's `update`.
+- **Render** draws every open UI.
+
+Coalescing these calls makes it simple to combine several Kura UIs in one viewport. The
+runtime may manage the UI components for you.
+
+## One file, one UI
+
+A game can have many Kura UIs. Ideally each `.kui` file is one UI or one element of a UI (a
+health bar, a map, an inventory bar). The compiler generates the C header your host includes.
+
+## State owned by the host
+
+If you don't write an `init`, the host can build the state itself and pass it to `view`. This is
+useful when the state already lives in your engine, such as an inventory built in C++.
+
+## Renderers
+
+Kura doesn't draw pixels itself. It emits calls against a small, stable renderer ABI that a
+platform renderer implements. See [Renderer ABI](/kura/developers/renderer-abi/).
+
+## Calling C, and being called from C
+
+See [C Interop](/kura/reference/c-interop/) for headers, `extern fn`, and exporting Kura
+functions to your host.

@@ -1,0 +1,101 @@
+---
+title: Memory Management
+description: How the Kura heap is organized around the MVU loop.
+---
+
+Kura programs run inside a host and are re-run every frame, so memory management is designed
+around the MVU loop instead of a general-purpose collector. Every allocation has a lifetime the
+compiler can name, and the runtime provides a space for each one.
+
+The implementation lives in `Sources/heap/` and depends only on the standard library, so a
+host can link it without the compiler.
+
+## Lifetimes and spaces
+
+| Space   | Lifetime                                                    | How it's managed                                           |
+| ------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| stack   | A function call                                             | Escape analysis; never reaches the heap                    |
+| frame   | The frame being drawn (`view`'s temporaries)                | Chunked bump arena, reset once per frame                   |
+| tick    | The update that made it (a Message, `update`'s temporaries) | Chunked bump arena, reset once per update                  |
+| model   | Reachable from the current Model                            | Semispace, bump-allocated, moved when the collector flips  |
+| tenured | Large objects, and objects that outlive enough flips        | Free list, never moved, reclaimed by the sweeper           |
+| static  | The program                                                 | Constants in the compiled module; not part of the heap     |
+
+A *permanent* region holds raw, never-freed memory for the runtime's own tables and for C
+strings handed to code that keeps them. It holds no objects.
+
+### How the compiler chooses
+
+Escape analysis picks the space by the furthest place a value can reach:
+
+1. Doesn't leave the function and has a known size: **stack**.
+2. Leaves the function but is only used in `view`: **frame**.
+3. Leaves the function but is only used in one `update` (including the Message): **tick**.
+4. Is stored into, or reachable from, the value `init` or `update` returns: **model**. Objects at
+   or above `large_object_threshold` (4 KiB by default) go straight to **tenured**.
+5. Is a constant: **static**.
+
+Because `view` is pure and a Node never outlives it, almost everything `view` allocates is stack
+or frame.
+
+**The invariant:** nothing in the model or tenured space may point into the frame or tick
+space. `Heap::Verify()` checks this, so a bug in escape analysis shows up as a failed check in a
+debug build rather than a dangling pointer in a later frame.
+
+## Collection
+
+Collection is not implemented yet, but the heap is shaped so it never needs stack
+maps. A collection can only start at a safe point between ticks, when the frame and tick spaces
+are empty and no compiled code is running. The roots are then exactly the Model value the host
+holds and the tenured objects in `Heap::remembered()`.
+
+If the model space fills up mid-update, the allocation overflows into tenured space instead,
+and `Heap::NeedsCollection()` turns true so the next safe point collects.
+
+### No write barrier
+
+Objects are immutable once built. They can only change while being filled in, right after
+allocation. A tenured object can therefore only point at a younger object if both were
+allocated since the last collection. `Heap::AllocateObject` records pointerful tenured
+allocations in `remembered()`, standing in for a remembered set.
+
+## Object layout
+
+Every object is a block of memory that can be copied byte for byte:
+
+```text
++--------+------------------ payload ------------------+
+| header | fixed fields | elements (inline, if any)     |
++--------+--------------+-------------------------------+
+```
+
+There are no `std::string` or `std::vector` members and no vtables. The 8-byte header holds
+the object's kind, space, total size, mark, forwarding and remembered bits, and a 4-bit age.
+
+| Kind    | Fixed fields                | Elements                            |
+| ------- | --------------------------- | ----------------------------------- |
+| String  | `length`                    | the bytes, then a NUL               |
+| Seq     | `length`, `capacity`        | `capacity` Values                   |
+| Record  | `count`, `capacity`         | `capacity` (hash, name, Value) fields |
+| Closure | `function`, `arity`, `count` | `count` captured Values            |
+| Box     |                             | one Value (a variant's payload)     |
+
+## Allocation API
+
+```cpp
+heap::Heap heap;
+auto* s = heap::NewString(heap, Space::kFrame, "Hello");
+auto* m = heap.AllocateModel(ObjKind::kSeq, SeqObj::PayloadSize(8));
+heap.ResetFrame();   // after the frame is drawn
+heap.ResetTick();    // after update returns
+```
+
+Memory comes from a `PageProvider`. The default maps anonymous pages, and a host can supply its
+own so Kura's memory comes out of the host's budget. Running out of a fixed space is
+deterministic and reported through an out-of-memory handler.
+
+## Testing
+
+`tests/heap` covers every space, the allocation policy, overflow, the out-of-memory paths and
+`Verify`. Tests run under AddressSanitizer and UBSan, and `KURA_DEBUG` builds poison freed
+memory with `0xDD` so stale pointers fail loudly.

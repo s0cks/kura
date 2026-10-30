@@ -1,0 +1,109 @@
+---
+title: Types
+description: Type annotations, inference, numeric types, generics and algebraic types.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Inference
+
+Kura infers types where it can. You only need annotations to constrain a value or document
+an API:
+
+```kura
+let x = 10                // inferred: Int
+let y: Float = 10         // 10.0
+let z: Seq<Int> = [ 1, 2 ]
+```
+
+If the compiler can't determine a type, or an annotation doesn't match the value, it reports
+an error.
+
+## Numeric types
+
+Kura has width-specific numeric types so the compiler can choose efficient machine
+representations.
+
+| Type                                   | Meaning                                    |
+| -------------------------------------- | ------------------------------------------ |
+| `Int8`, `Int16`, `Int32`, `Int64`      | Signed integers                            |
+| `UInt8`, `UInt16`, `UInt32`, `UInt64`  | Unsigned integers                          |
+| `Float32`, `Float64`                   | Floating point                             |
+| `Int`                                  | Alias for `Int64`                          |
+| `Float`                                | Alias for `Float32`                        |
+
+<Aside type="note">
+There is no abstract `Number` type. Annotate with the concrete type you mean.
+</Aside>
+
+An unsuffixed integer literal (`10`) is an `Int`; a literal with a decimal point (`10.0`)
+is a `Float`.
+
+### Range checking
+
+A literal that doesn't fit its annotated type is a compile error:
+
+```kura
+let a: UInt8 = 300   // error: 300 doesn't fit in UInt8
+let b: Int = 300     // fine
+let c = 10           // fine: fits an Int
+```
+
+### Implicit conversion
+
+Kura converts numeric values to the type the context asks for, so you don't write casts for
+ordinary arithmetic:
+
+```kura
+let x: Float = 10                  // becomes 10.0
+
+fn add(x: Int, y: Int): Float => x + y
+add(10, 10)                        // 20.0, no explicit cast
+```
+
+When a value crosses the C boundary, Kura converts it to the C type automatically (an
+`Int32` becomes a C `int32_t`). A value that doesn't fit the C type is a panic. See
+[C Interop](/kura/reference/c-interop/).
+
+## Measurements
+
+`Px`, `Pct` and `Fr` are distinct types, not numbers. Arithmetic is checked against the
+unit, and you cast explicitly to get the underlying number. See
+[Measurements](/kura/reference/primitives/#measurements).
+
+## Type declarations
+
+`type` declares record shapes, aliases and algebraic types:
+
+```kura
+type Position = { x: Int, y: Int, z?: Int }
+type Message  = Click(Position) | Tick | Set(Int)
+type Op       = (Int, Int) => Int
+type Content  = Node | None
+```
+
+The `?` suffix on a field is sugar for `Optional<T>`.
+
+### Generic types
+
+```kura
+type Optional<T> = Some(T) | None
+type Result<T, E> = Ok(T) | Error(E)
+```
+
+`Content = Node | None` is equivalent to `Optional<Node>`. `Some(T)` is mostly useful in
+patterns:
+
+```kura
+match m {
+  Some(Click(p)) => 1,
+  Some(other)    => 2,
+  None           => 3,
+}
+```
+
+## Records are statically shaped
+
+Records are typed, and their shape is known at compile time. That is what lets the compiler
+lay them out in memory, pass them across the C boundary and keep them POD. See
+[Primitives](/kura/reference/primitives/#records).

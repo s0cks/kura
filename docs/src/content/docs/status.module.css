@@ -1,0 +1,74 @@
+.statusTable > thead > tr > th:first-child {
+  text-align: right;
+}
+
+.statusTable > thead > tr > th:nth-child(2) {
+  text-align: center;
+}
+
+.statusTable > thead > tr > th:last-child {
+  text-align: left;
+}
+
+.statusTable > tbody > tr > td:first-child {
+  text-align: right;
+}
+
+.statusTable > tbody > tr > td:nth-child(2) {
+  text-align: center;
+}
+
+.statusTable > tbody > tr > td:last-child {
+  text-align: left;
+}
+
+.statusTable > tbody > tr > td.renderer {
+  text-align: right;
+  vertical-align: middle;
+}
+
+td.backend {
+  text-align: center;
+}
+
+/* <thead> */
+/*   <tr> */
+/*     <th>Feature</th> */
+/*     <th>Status</th> */
+/*     <th>Description</th> */
+/*   </tr> */
+/* </thead> */
+/* <tbody> */
+/*   <tr> */
+/*     <td>Compiler</td> */
+/*     <td><Chip kind="wip" /></td> */
+/*     <td></td> */
+/*   </tr> */
+/*   <tr> */
+/*     <td rowspan="2">Renderer</td> */
+/*     <td>Vulkan: <Chip kind="not-started" /> </td> */
+/*     <td></td> */
+/*   </tr> */
+/*   <tr> */
+/*     <td> */
+/*       OpenGL: <Chip kind="not-started" /> */
+/*     </td> */
+/*     <td></td> */
+/*   </tr> */
+/**/
+/*   <tr> */
+/*     <td>Runtime</td> */
+/*     <td><Chip kind="not-started" /></td> */
+/*     <td></td> */
+/*   </tr> */
+/*   <tr> */
+/*     <td>LSP</td> */
+/*     <td><Chip kind="not-started" /></td> */
+/*     <td></td> */
+/*   </tr> */
+/*   <tr> */
+/*     <td>Debugger</td> */
+/*     <td><Chip kind="not-started" /></td> */
+/*     <td></td> */
+/*   </tr> */
+/* </tbody> */

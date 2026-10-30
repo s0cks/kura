@@ -5,32 +5,12 @@
 #include <string>
 #include <string_view>
 
-// The interface between compiled kura code and the runtime library.
-//
-// Compiled code keeps a value unboxed (an i64, a double, an i1) while its static
-// type is a single concrete scalar. Where the type is `Number`, `Any`, a union
-// or a variant, the value is a KuraValue: a tag saying what it is, and 64 bits
-// of payload. The heap objects (strings, seqs, records, UI nodes, closures) are
-// runtime-managed and hold their elements as KuraValues, so converting a
-// `Seq<Int>` to a `Seq<Number>`, or a record to a wider record type, never
-// changes representation.
-//
-// Functions that take or return a KuraValue take its two words as separate
-// arguments and return it in the pair of return registers, which is how a C
-// struct of two u64 is passed on x86-64, so generated code can call them as plain
-// functions.
-//
-// The runtime never frees anything: a program's heap is reclaimed when the host
-// exits.
-
 namespace kura::rt {
 struct KuraValue {
   uint64_t tag;
   uint64_t bits;
 };
 
-// What a tagged value is. A variant's tag is the hash of its name with the top
-// bit set, so it never collides with these.
 enum Tag : uint64_t {
   kTagInvalid = 0,
   kTagNone = 1,
@@ -52,8 +32,7 @@ enum Tag : uint64_t {
 
 static constexpr const uint64_t kVariantBit = 1ULL << 63;
 
-// FNV-1a. Property names and variant names are identified by their hash, so the
-// compiled code doesn't depend on any registry in the compiling process.
+// FNV-1a
 static inline constexpr auto HashName(const std::string_view name) -> uint64_t {
   uint64_t hash = 14695981039346656037ULL;
   for (const char c : name) {
@@ -71,16 +50,11 @@ static inline constexpr auto IsVariantTag(const uint64_t tag) -> bool {
   return (tag & kVariantBit) != 0;
 }
 
-// Renders a value the way `kurac --run` prints it.
 auto Format(const KuraValue& value) -> std::string;
 
-// Makes a value from a string for the host: used by the tests.
 auto MakeString(const std::string& value) -> KuraValue;
 }  // namespace kura::rt
 
-// The functions compiled code calls. Each is listed once: the table below
-// declares them, and the JIT uses it to bind them by name.
-//
 // clang-format off
 #define KURA_RUNTIME_FUNCTIONS(V) \
   V(kura_rt_panic)                \

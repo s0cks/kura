@@ -3,12 +3,55 @@ title: Project Status
 description: The status of the project
 ---
 
-Kura is still a work in progress.
+import Chip from "../../components/Chip.astro";
+import styles from "./status.module.css";
 
-| Feature | Status |
-|---|---|
-|Compiler| Mostly working for logic, compiling UI elements is still heavily work in progress|
-|Renderer|OpenGL --- Not started<br/>Vulkan --- Not started|
-|Runtime|Not started|
-|LSP|Not started|
-|Debugger|Not started|
+Kura is still a work in progress. Below is a table showing the progress:
+
+<table className={styles.statusTable}>
+  <thead>
+    <tr>
+      <th>Feature</th>
+      <th>Status</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Compiler</td>
+      <td><Chip kind="wip" /></td>
+      <td>
+        Most of the control-flow logic is compiling. <br/>
+        Working on getting the elements to compile down
+      </td>
+    </tr>
+
+    <tr>
+      <td className={styles.renderer} rowspan="2">Renderer</td>
+      <td className={styles.backend}>Vulkan: <Chip kind="not-started" /> </td>
+      <td></td>
+    </tr>
+    <tr>
+      <td className={styles.backend}>
+        OpenGL: <Chip kind="not-started" />
+      </td>
+      <td></td>
+    </tr>
+
+    <tr>
+      <td>Runtime</td>
+      <td><Chip kind="not-started" /></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LSP</td>
+      <td><Chip kind="not-started" /></td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>Debugger</td>
+      <td><Chip kind="not-started" /></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>

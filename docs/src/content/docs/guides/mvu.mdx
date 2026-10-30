@@ -1,0 +1,78 @@
+---
+title: The MVU Model
+description: How init, update and view fit together, and the rules the compiler enforces.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every Kura UI follows the Model-View-Update (MVU) architecture, the same shape as Elm.
+
+| Function | Signature (shape)                   | Purpose                                      |
+| -------- | ----------------------------------- | -------------------------------------------- |
+| `init`   | `fn init(): Model`                  | Produce the starting state                   |
+| `update` | `fn update(msg: Message, model: Model): Model` | Produce the next state from a Message |
+| `view`   | `fn view(model: Model): Node`       | Describe the UI for a given state            |
+
+## Model and Message are plain data
+
+`Model` and `Message` are PODs: [records](/kura/reference/primitives/#records), or
+[variants](/kura/reference/primitives/#algebraic-types) of records. They can't hold
+functions. Their shapes are fixed by the types in your function definitions.
+
+```kura
+type Position = { x: Int, y: Int }
+type Message = Click(Position) | Tick
+type Model = { clicks: Int }
+```
+
+## Which functions are required?
+
+- Only `view` is required. A static UI needs no state and no reactivity.
+- `init` and `update` are not allowed without a `view`.
+- `init` may exist without `update`.
+- If there's no `init`, the host can build the state itself (for example, an inventory
+  constructed in C++) and pass it to `view`.
+
+## `view` is pure
+
+`view` can only reach pure functions. It can't call impure C functions, and it can't
+change state. `init` and `update` may call C, as long as they end by producing the model.
+See [Effects](/kura/reference/c-interop/#effects).
+
+`view` must return a `Node` in the source. After compilation, though, `view` returns
+nothing: the render instructions are emitted in place. The UI tree is a compile-time
+concept and doesn't exist at run time.
+
+## Messages come from the host
+
+Your application builds Messages and sends them through the runtime API. That is how clicks,
+ticks, and anything else reach `update`. There are no global built-in messages and no
+subscriptions.
+
+The fixed exception is the set of built-in **event payloads** that elements can carry
+(`on-click`, `on-input`, `on-scroll`). They are predefined so the runtime and the host
+agree on how user input gets back into your UI as Messages.
+
+Viewport changes are also delivered to `update` as a Message, so your UI can react to a
+resize without a "get viewport size" API.
+
+<Aside type="note">
+Even when you don't define `update`, the compiler generates a stub that handles runtime
+messages such as viewport changes. Source-level control over this (for UIs that should
+never close, for example) is planned.
+</Aside>
+
+## Reactivity
+
+You never write change-tracking code. The compiler works out which parts of the UI depend
+on which parts of the Model, and emits the invalidation and layout work at the end of
+`update`. When `update` changes something that affects geometry, the UI reflows; otherwise
+the work is skipped.
+
+Layout state lives in a compiler-generated hidden state that is only reachable from the
+runtime and generated code. It is not part of your Model.
+
+<Aside type="caution" title="Per-instance identity">
+Nodes are identified by position for now. There's no key syntax for `for` loops and no
+per-instance state in v1.
+</Aside>

@@ -612,7 +612,6 @@ class NewNodeInstr : public New {
 #undef DEFINE_NEW
 };
 
-// `{ ...value }`: copies every property of `value` into `instance`.
 class SpreadInstr : public TemplateInstruction<2> {
  public:
   SpreadInstr(Value* instance, Value* value) {
@@ -631,7 +630,6 @@ class SpreadInstr : public TemplateInstruction<2> {
   }
 };
 
-// `instance[index]`
 class LoadIndexInstr : public TemplateDefinition<2> {
  public:
   LoadIndexInstr(Value* instance, Value* index) {
@@ -650,9 +648,6 @@ class LoadIndexInstr : public TemplateDefinition<2> {
   }
 };
 
-// `instance[index] = value`. Storing at `index == length` grows a Seq. For a
-// UI node the value is appended to the node's children instead (index is
-// ignored); a Seq child is flattened and a None child is skipped.
 class StoreIndexInstr : public TemplateInstruction<3> {
  public:
   StoreIndexInstr(Value* instance, Value* index, Value* value) {
@@ -673,7 +668,6 @@ class StoreIndexInstr : public TemplateInstruction<3> {
   }
 };
 
-// Number of elements in a Seq (or children in a node).
 class LoadLengthInstr : public TemplateDefinition<1> {
  public:
   explicit LoadLengthInstr(Value* instance) {
@@ -690,7 +684,6 @@ class LoadLengthInstr : public TemplateDefinition<1> {
   }
 };
 
-// `Click(payload)` / `Tick`. The payload is optional.
 class NewVariantInstr : public Definition {
  private:
   std::string name_;
@@ -731,10 +724,6 @@ class NewVariantInstr : public Definition {
   }
 };
 
-// Is `value` the variant `name`? Produces a Bool.
-//
-// `Some` is special: it matches any value but None (a bare value is its own
-// payload), as well as an explicitly constructed `Some(x)`.
 class TestVariantInstr : public TemplateDefinition<1> {
  private:
   std::string name_;
@@ -759,8 +748,6 @@ class TestVariantInstr : public TemplateDefinition<1> {
   }
 };
 
-// The payload of the variant `name` of `value`, after a TestVariantInstr for the
-// same name passed (None if it has none).
 class LoadVariantPayloadInstr : public TemplateDefinition<1> {
  private:
   std::string name_;
@@ -785,8 +772,6 @@ class LoadVariantPayloadInstr : public TemplateDefinition<1> {
   }
 };
 
-// A closure over `target` (the lowered lambda) that captures the given values,
-// in the order of `FlowGraph::GetCaptures()`.
 class NewClosureInstr : public Definition {
  private:
   FlowGraph* target_;
@@ -924,7 +909,6 @@ class CallInstr : public Definition {
 
   HAS_VALUE_LIST(Arg, args_);
 
-  // input 0 is the target, the arguments follow
   auto GetNumberOfInputs() const -> uint64_t override {
     return 1 + args_.size();
   }
@@ -999,8 +983,6 @@ class PhiInstr : public Definition {
   IncomingList incoming_{};
 
  public:
-  // `entry` is the block the value flows in from: the block that ends in the
-  // jump to the join, which is not always the block the arm started in.
   inline void AddIncoming(EntryInstr* entry, Value* value) {
     incoming_.push_back({entry, value});
   }
@@ -1148,9 +1130,6 @@ class LoadLocalInstr : public Definition {
   }
 };
 
-// The `index`th argument of a function. It names the value `local` has when the
-// function is entered. A lambda also receives each value it captured as a
-// parameter (`IsCapture()`), after its declared parameters.
 class ParameterInstr : public Definition {
  private:
   LocalVariable* local_;
@@ -1185,7 +1164,6 @@ class ParameterInstr : public Definition {
   }
 };
 
-// A reference to a module function as a first-class value.
 class LoadFunctionInstr : public Definition {
  private:
   Function* function_;

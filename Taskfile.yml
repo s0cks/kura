@@ -44,8 +44,9 @@ tasks:
           Sources/ \
           assets/ \
           cmake/ \
+          docs/ \
+          wiki/ \
           examples/ \
-          misc/ \
           tests/ \
           .clang-format \
           .clang-tidy \

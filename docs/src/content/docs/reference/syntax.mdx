@@ -1,0 +1,127 @@
+---
+title: Syntax
+description: Lexical conventions, bindings, functions and expressions.
+---
+
+## Comments
+
+```kura
+// line comments start with two slashes
+```
+
+## Identifiers
+
+Identifiers and record properties use **kebab-case**:
+
+```kura
+fn get-text(item-count: Int): String => ...
+```
+
+Type names (`Message`, `Seq`, `Optional`) are capitalized. `None` is always spelled with a
+capital N.
+
+Names that come from C are used exactly as C spells them (`gl_clear`, `SDL_Init`). Kebab-case is
+only a Kura style convention.
+
+## Bindings
+
+`let` binds a name to a value:
+
+```kura
+let width = 10px
+let accent: Color = blue
+```
+
+Values are **immutable**. You can rebind a name, but you can't mutate a value:
+
+```kura
+let x = { name: "Person 1" }
+x = { name: "Person 2" }   // valid: a new value for x
+x.name = "Person 2"        // not valid: values can't be mutated
+```
+
+## Functions
+
+A function is introduced by `fn`. Parentheses are always required, even with no parameters:
+
+```kura
+fn add(x: Int, y: Int): Int => x + y
+
+fn answer(): Int => 42
+```
+
+The body is a single expression after `=>`. Use a block to sequence `let` bindings. The last
+expression is the block's value:
+
+```kura
+fn total(): Int => {
+  let base = 10
+  let padding = 4
+  base + padding * 2
+}
+```
+
+Functions are first-class. See [Primitives](/kura/reference/primitives/#functions).
+
+### Lambdas
+
+```kura
+fn add-one(x: Int): Int =>
+  apply((a, b) => a + b, x, 1)
+```
+
+## Braces: record or block?
+
+`{}` is a **record** when it appears as a value, and a **block** everywhere else
+(function bodies, `if` branches, element children).
+
+```kura
+fn pos(): Position => { x: 1, y: 2 }   // record
+fn sum(): Int => { let a = 1  a + 2 }  // block
+```
+
+## Records
+
+Records are covered in [Primitives](/kura/reference/primitives/#records). A few
+composition forms:
+
+```kura
+let p2 = { ...p1, y: 20 }            // spread: later fields win
+let p3 = p1 + { z: 30 }              // combine two records
+```
+
+Spread (`...`) is written inside a record literal. `+` between records produces a new record
+with the fields of both.
+
+## Sequences
+
+```kura
+let items = [ 1, 2, 3 ]
+let all = items + [ 4, 5 ]    // a new Seq: [ 1, 2, 3, 4, 5 ]
+```
+
+## Operators
+
+| Operator                              | Meaning               |
+| ------------------------------------- | --------------------- |
+| `+` `-` `*` `/`                       | Arithmetic            |
+| `==` `!=` `<` `<=` `>` `>=`           | Comparison            |
+| `&&` `\|\|` `!`                       | Boolean logic         |
+| `\|>`                                 | [Pipe](/kura/reference/control-flow/) |
+
+## Literals
+
+| Literal           | Type                 |
+| ----------------- | -------------------- |
+| `10`              | `Int`                |
+| `10.5`            | `Float`              |
+| `true`, `false`   | `Bool`               |
+| `"text"`          | `String`             |
+| `10px`            | `Px`                 |
+| `50%`             | `Pct`                |
+| `1fr`             | `Fr`                 |
+| `blue`, `red`, … | `Color`              |
+| `None`            | `None`               |
+
+The named colors are `black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`,
+`gray`, `orange`, `purple` and `transparent`.

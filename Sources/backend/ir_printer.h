@@ -8,14 +8,6 @@
 #include "common.h"
 
 namespace kura {
-// Prints a flow graph one block at a time, in reverse postorder:
-//
-//   fn main(0):
-//     B0 entry.0:
-//       %3 = Parameter(0, x)
-//       %5 = Constant(Number(1))
-//       %6 = BinaryOp(Add, %3, %5)
-//       Return(%6)
 class IRPrinter {
  private:
   std::ostream& stream_;

@@ -1,0 +1,109 @@
+@layer base, starlight, theme, components, utilities;
+
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --color-flexoki-black: #100f0f;
+  --color-flexoki-base950: #1c1b1a;
+  --color-flexoki-base900: #282726;
+  --color-flexoki-base850: #343331;
+  --color-flexoki-base800: #403e3c;
+  --color-flexoki-base700: #575653;
+  --color-flexoki-base600: #6f6e69;
+  --color-flexoki-base500: #878580;
+  --color-flexoki-base300: #b7b5ac;
+  --color-flexoki-base200: #cecdc3;
+  --color-flexoki-base150: #dad8ce;
+  --color-flexoki-base100: #e6e4d9;
+  --color-flexoki-base50: #f2f0e5;
+  --color-flexoki-paper: #fffcf0;
+}
+
+:root,
+[data-theme="dark"] {
+  /* red */
+  --color-flexoki-re: #d14d41;
+  --color-flexoki-re2: #af3029;
+  /* orange */
+  --color-flexoki-or: #da702c;
+  --color-flexoki-or2: #bc5215;
+  /* yellow */
+  --color-flexoki-ye: #d0a215;
+  --color-flexoki-ye2: #ad8301;
+  /* green */
+  --color-flexoki-gr: #879a39;
+  --color-flexoki-gr2: #66800b;
+  /* cyan */
+  --color-flexoki-cy: #3aa99f;
+  --color-flexoki-cy2: #24837b;
+  /* blue */
+  --color-flexoki-bl: #4385be;
+  --color-flexoki-bl2: #205ea6;
+  /* purple */
+  --color-flexoki-pu: #8b7ec8;
+  --color-flexoki-pu2: #5e409d;
+  /* magenta */
+  --color-flexoki-ma: #ce5d97;
+  --color-flexoki-ma2: #a02f6f;
+
+  --color-flexoki-bg: var(--color-flexoki-black);
+  --color-flexoki-bg2: var(--color-flexoki-base950);
+  --color-flexoki-ui: var(--color-flexoki-base900);
+  --color-flexoki-ui2: var(--color-flexoki-base850);
+  --color-flexoki-ui3: var(--color-flexoki-base800);
+  --color-flexoki-tx: var(--color-flexoki-base200);
+  --color-flexoki-tx2: var(--color-flexoki-base500);
+  --color-flexoki-tx3: var(--color-flexoki-base700);
+
+  --sl-color-accent: var(--color-flexoki-pu);
+  --sl-color-accent-high: var(--color-flexoki-pu);
+  --sl-color-accent-low: var(--color-flexoki-pu2);
+
+  --sl-color-bg: var(--color-flexoki-black);
+  --sl-color-bg-nav: var(--color-flexoki-ui);
+  --sl-color-bg-sidebar: var(--color-flexoki-black);
+  --sl-color-bg-inline-code: var(--color-flexoki-ui);
+
+  --sl-color-blue-high: var(--color-flexoki-bl);
+  --sl-color-blue: var(--color-flexoki-bl);
+  --sl-color-blue-low: var(--color-flexoki-bl2);
+
+  --sl-color-white: var(--color-flexoki-paper);
+
+  --sl-color-orange-high: var(--color-flexoki-or);
+  --sl-color-orange: var(--color-flexoki-or);
+  --sl-color-orange-low: var(--color-flexoki-or2);
+
+  --sl-color-text: var(--color-flexoki-tx);
+  --sl-color-text-muted: var(--color-flexoki-tx2);
+  --sl-color-hairline: var(--color-flexoki-ui);
+}
+
+[data-theme="light"] {
+  --sl-color-accent: #205ea6;
+  --sl-color-accent-high: #5e409d;
+  --sl-color-accent-low: #e6e4d9;
+
+  --sl-color-bg: #fffcf0;
+  --sl-color-bg-nav: #f2f0e5;
+  --sl-color-bg-sidebar: #fffcf0;
+  --sl-color-bg-inline-code: #e6e4d9;
+
+  --sl-color-text: #100f0f;
+  --sl-color-text-muted: #6f6e69;
+  --sl-color-hairline: #e6e4d9;
+}
+
+.starlight-aside {
+  [data-theme="dark"] &,
+  [data-theme="light"] &,
+  &:not([data-theme]) {
+    --sl-color-asides-text-accent: var(--color-flexoki-paper);
+
+    a {
+      --sl-color-asides-text-accent: var(--color-flexoki-cy);
+    }
+  }
+}

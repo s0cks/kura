@@ -12,26 +12,28 @@ namespace kura {
   auto Name##Instr::Accept(InstructionVisitor* vis) -> bool { \
     return vis->Visit##Name(this);                            \
   }
+
 FOR_EACH_INSTRUCTION(DEFINE_ACCEPT)
 #undef DEFINE_ACCEPT
 
-// Printed IR names definitions `%id` and blocks `B<id>`; instructions refer to
-// their inputs by name only, so a dump stays one line per instruction.
 static inline auto Name(const Value* value) -> std::string {
   if (!value || !value->GetDefinition())
     return "<none>";
+
   return "%" + std::to_string(value->GetDefinition()->GetId());
 }
 
 static inline auto Name(const EntryInstr* block) -> std::string {
   if (!block)
     return "<none>";
+
   return "B" + std::to_string(block->GetBlockId());
 }
 
 static inline auto Name(const LocalVariable* local) -> std::string {
   if (!local || !local->GetName())
     return "<local>";
+
   return std::string(local->GetName()->GetData());
 }
 
@@ -50,6 +52,7 @@ auto ReturnInstr::ToString() const -> std::string {
   ss << "Return(";
   if (HasValue())
     ss << Name(GetValue());
+
   ss << ")";
   return ss.str();
 }
@@ -77,6 +80,7 @@ auto BranchInstr::ToString() const -> std::string {
   ss << "Branch(" << Name(GetCondition()) << ", then=" << Name(GetThen());
   if (HasElse())
     ss << ", else=" << Name(GetElse());
+
   ss << ", join=" << Name(GetJoin()) << ")";
   return ss.str();
 }
@@ -90,6 +94,7 @@ auto NewNodeInstr::ToString() const -> std::string {
 #define DEFINE_CASE(Name, Tag) \
   case Kind::k##Name:     \
     return "NewNode(" #Name ")";
+
     FOR_EACH_ELEMENT_NODE(DEFINE_CASE)
 #undef DEFINE_CASE
     default:
@@ -114,6 +119,7 @@ auto CallInstr::ToString() const -> std::string {
   ss << "Call(" << Name(GetTarget());
   for (const auto& arg : GetArgs())
     ss << ", " << Name(arg);
+
   ss << ")";
   return ss.str();
 }
@@ -126,6 +132,7 @@ auto EntryInstr::GetLastInstruction() -> Instruction* {
   Instruction* last = this;
   while (last->HasNext())
     last = last->GetNext();
+
   return last;
 }
 
@@ -161,6 +168,7 @@ auto NewListInstr::ToString() const -> std::string {
     if (idx < values.size() - 1)
       ss << ", ";
   }
+
   ss << ")";
   return ss.str();
 }
@@ -210,6 +218,7 @@ auto NewVariantInstr::ToString() const -> std::string {
   ss << "NewVariant(" << GetVariantName();
   if (HasPayload())
     ss << ", " << Name(GetPayload());
+
   ss << ")";
   return ss.str();
 }
@@ -227,6 +236,7 @@ auto NewClosureInstr::ToString() const -> std::string {
   ss << "NewClosure(" << (GetTarget() ? GetTarget()->GetName() : std::string("<none>"));
   for (const auto& capture : GetCaptures())
     ss << ", " << Name(capture);
+
   ss << ")";
   return ss.str();
 }
@@ -243,6 +253,7 @@ auto PhiInstr::ToString() const -> std::string {
     if (idx < GetNumberOfIncoming() - 1)
       ss << ", ";
   }
+
   ss << ")";
   return ss.str();
 }
@@ -256,6 +267,7 @@ auto LabelInstr::ToString() const -> std::string {
   ss << "Label(";
   if (HasLabel())
     ss << GetLabel()->GetData();
+
   ss << ")";
   return ss.str();
 }

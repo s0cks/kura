@@ -8,7 +8,9 @@
 namespace kura {
 auto NodeVisitor::Render(expr::Expr* expr) -> VisitResult {
   dom::Tree tree{};
-  dom::Builder builder(&tree, [this](LocalVariable* local) { return GetOwner()->FoldableLocal(local); });
+  dom::Builder builder(&tree, [this](LocalVariable* local) {
+    return GetOwner()->FoldableLocal(local);
+  });
   builder.Build(expr);
   if (!builder.Ok()) {
     for (const auto& error : builder.GetErrors())
@@ -29,13 +31,12 @@ auto NodeVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
   if (expr->GetChildren().empty()) {
     if (WantsValue())
       ReturnValue(NoneValue());
+
     return true;
   }
   return Render(expr);
 }
 
-// `for item in items => #text(item)`, where the nodes are rendered rather than
-// collected into a list: one render per element.
 auto NodeVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) -> VisitResult {
   const auto iterable = Eval(expr->GetIterable());
   if (!iterable)
@@ -93,6 +94,7 @@ auto NodeVisitor::EvalArm(expr::Expr* expr, Value** value) -> bool {
   *value = for_value.GetValue();
   if (!for_value.HasValue())
     (*value) = NoneValue();
+
   return true;
 }
 }  // namespace kura

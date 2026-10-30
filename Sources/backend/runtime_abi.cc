@@ -40,13 +40,13 @@ struct RecordObj : Obj {
     Obj(ObjKind::kRecord) {}
 
   void Set(const uint64_t hash, const char* name, const KuraValue value) {
-    // later writes win but keep the field's first position
     for (auto& field : fields) {
       if (field.hash == hash) {
         field.value = value;
         return;
       }
     }
+
     fields.push_back({hash, name, value});
   }
 
@@ -55,6 +55,7 @@ struct RecordObj : Obj {
       if (field.hash == hash)
         return &field;
     }
+
     return nullptr;
   }
 };
@@ -117,10 +118,12 @@ auto TagName(const uint64_t tag) -> std::string {
     default:
       break;
   }
+
   if (IsVariantTag(tag)) {
     const auto it = VariantNames().find(tag);
     return it != VariantNames().end() ? it->second : "variant";
   }
+
   return "unknown";
 }
 
@@ -172,6 +175,7 @@ auto Quote(const std::string& value) -> std::string {
         out += c;
     }
   }
+
   return out + "\"";
 }
 
@@ -180,21 +184,25 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool;
 auto SeqEqual(const SeqObj* a, const SeqObj* b) -> bool {
   if (a->items.size() != b->items.size())
     return false;
+
   for (size_t idx = 0; idx < a->items.size(); idx++) {
     if (!Equal(a->items[idx], b->items[idx]))
       return false;
   }
+
   return true;
 }
 
 auto RecordEqual(const RecordObj* a, const RecordObj* b) -> bool {
   if (a->fields.size() != b->fields.size())
     return false;
+
   for (const auto& field : a->fields) {
     const auto other = b->Find(field.hash);
     if (!other || !Equal(field.value, other->value))
       return false;
   }
+
   return true;
 }
 
@@ -204,8 +212,10 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
     const auto y = b.tag == kTagInt ? static_cast<double>(static_cast<int64_t>(b.bits)) : AsDouble(b.bits);
     return x == y;
   }
+
   if (a.tag != b.tag)
     return false;
+
   switch (a.tag) {
     case kTagNone:
       return true;
@@ -235,11 +245,14 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
     default:
       break;
   }
+
   if (IsVariantTag(a.tag)) {
     if (a.bits == 0 || b.bits == 0)
       return a.bits == b.bits;
+
     return Equal(*reinterpret_cast<KuraValue*>(a.bits), *reinterpret_cast<KuraValue*>(b.bits));
   }
+
   return false;
 }
 
@@ -247,6 +260,7 @@ auto Properties(const RecordObj& props) -> std::string {
   std::stringstream ss{};
   for (size_t idx = 0; idx < props.fields.size(); idx++)
     ss << (idx ? ", " : "") << props.fields[idx].name << ": " << Format(props.fields[idx].value);
+
   return ss.str();
 }
 }  // namespace
@@ -263,6 +277,7 @@ auto Format(const KuraValue& value) -> std::string {
       auto text = Number(AsDouble(value.bits));
       if (text.find_first_of(".einf") == std::string::npos)
         text += ".0";
+
       return text;
     }
     case kTagPx:
@@ -294,12 +309,15 @@ auto Format(const KuraValue& value) -> std::string {
       ss << "#" << node->kind_name;
       if (!node->props.fields.empty())
         ss << "(" << Properties(node->props) << ")";
+
       if (!node->children.items.empty()) {
         ss << " {";
         for (const auto& child : node->children.items)
           ss << " " << Format(child);
+
         ss << " }";
       }
+
       return ss.str();
     }
     case kTagFunction:
@@ -312,12 +330,15 @@ auto Format(const KuraValue& value) -> std::string {
     default:
       break;
   }
+
   if (IsVariantTag(value.tag)) {
     auto text = TagName(value.tag);
     if (value.bits)
       text += "(" + Format(*reinterpret_cast<KuraValue*>(value.bits)) + ")";
+
     return text;
   }
+
   return "<unknown>";
 }
 
@@ -394,6 +415,7 @@ KuraValue kura_rt_seq_get(void* seq, const int64_t index) {
   const auto s = static_cast<SeqObj*>(seq);
   if (index < 0 || static_cast<size_t>(index) >= s->items.size())
     Panic("index " + std::to_string(index) + " is out of range for a Seq of " + std::to_string(s->items.size()));
+
   return s->items[index];
 }
 
@@ -442,8 +464,10 @@ int64_t kura_rt_len(void* object) {
   const auto obj = static_cast<Obj*>(object);
   if (obj->kind == ObjKind::kSeq)
     return static_cast<int64_t>(static_cast<SeqObj*>(object)->items.size());
+
   if (obj->kind == ObjKind::kNode)
     return static_cast<int64_t>(static_cast<NodeObj*>(object)->children.items.size());
+
   Panic("can't take the length of this value");
   return 0;
 }
@@ -460,10 +484,11 @@ void kura_rt_store_index(void* object, const int64_t index, const uint64_t tag, 
     } else {
       Panic("index " + std::to_string(index) + " is out of range for a Seq of " + std::to_string(seq->items.size()));
     }
+
     return;
   }
+
   if (obj->kind == ObjKind::kNode) {
-    // a child is appended; a Seq of children is flattened and None is skipped
     const auto children = &static_cast<NodeObj*>(object)->children;
     if (tag == kTagNone)
       return;
@@ -472,11 +497,14 @@ void kura_rt_store_index(void* object, const int64_t index, const uint64_t tag, 
         if (item.tag != kTagNone)
           children->items.push_back(item);
       }
+
       return;
     }
+
     children->items.push_back(value);
     return;
   }
+
   Panic("can't store into this value");
 }
 
@@ -488,8 +516,10 @@ static auto Props(void* object) -> RecordObj* {
   const auto obj = static_cast<Obj*>(object);
   if (obj->kind == ObjKind::kRecord)
     return static_cast<RecordObj*>(object);
+
   if (obj->kind == ObjKind::kNode)
     return &static_cast<NodeObj*>(object)->props;
+
   Panic("this value has no properties");
   return nullptr;
 }
@@ -519,14 +549,17 @@ void* kura_rt_record_merge(void* a, void* b) {
 KuraValue kura_rt_get_dyn(const uint64_t tag, const uint64_t bits, const uint64_t hash) {
   if (tag == kTagNone)
     Panic("can't read a property of None; use `?.`");
+
   if (tag != kTagRecord && tag != kTagNode)
     Panic("can't read a property of a " + TagName(tag));
+
   return kura_rt_record_get(reinterpret_cast<void*>(bits), hash);
 }
 
 KuraValue kura_rt_get_safe(const uint64_t tag, const uint64_t bits, const uint64_t hash) {
   if (tag == kTagNone)
     return {kTagNone, 0};
+
   return kura_rt_get_dyn(tag, bits, hash);
 }
 
@@ -550,6 +583,7 @@ void* kura_rt_closure_fn(void* closure, const uint64_t arguments) {
   const auto c = static_cast<ClosureObj*>(closure);
   if (c->arity != arguments)
     Panic("expected " + std::to_string(c->arity) + " argument(s) but got " + std::to_string(arguments));
+
   return c->function;
 }
 
@@ -560,22 +594,27 @@ void* kura_rt_box(const uint64_t tag, const uint64_t bits) {
 KuraValue kura_rt_unbox(void* box) {
   if (!box)
     return {kTagNone, 0};
+
   return *static_cast<KuraValue*>(box);
 }
 
 int64_t kura_rt_sdiv(const int64_t a, const int64_t b) {
   if (b == 0)
     Panic("division by zero");
+
   if (b == -1)
     return static_cast<int64_t>(0 - static_cast<uint64_t>(a));
+
   return a / b;
 }
 
 int64_t kura_rt_srem(const int64_t a, const int64_t b) {
   if (b == 0)
     Panic("division by zero");
+
   if (b == -1)
     return 0;
+
   return a % b;
 }
 
@@ -654,19 +693,23 @@ static auto Arith(const kura::BinaryOp op, const KuraValue& a, const KuraValue& 
       case BinaryOp::kModulus:
         return make(a.tag, std::fmod(x, y));
       case BinaryOp::kDivide:
-        return make(kTagFloat, x / y);  // a ratio
+        return make(kTagFloat, x / y);
       default:
         return bad();
     }
   }
+
   if (IsUnit(a.tag) && IsScalar(b.tag)) {
     if (op == BinaryOp::kMultiply)
       return make(a.tag, AsDouble(a.bits) * number(b));
+
     if (op == BinaryOp::kDivide)
       return make(a.tag, AsDouble(a.bits) / number(b));
   }
+
   if (IsScalar(a.tag) && IsUnit(b.tag) && op == BinaryOp::kMultiply)
     return make(b.tag, number(a) * AsDouble(b.bits));
+
   return bad();
 }
 
@@ -682,6 +725,7 @@ static auto Order(const kura::BinaryOp op, const KuraValue& a, const KuraValue& 
     const auto y = AsDouble(b.bits);
     if (std::isnan(x) || std::isnan(y))
       return Bool(false);
+
     cmp = x < y ? -1 : (x > y ? 1 : 0);
   } else if (a.tag == kTagString && b.tag == kTagString) {
     cmp = static_cast<int>(kura_rt_string_cmp(reinterpret_cast<void*>(a.bits), reinterpret_cast<void*>(b.bits)));
@@ -690,6 +734,7 @@ static auto Order(const kura::BinaryOp op, const KuraValue& a, const KuraValue& 
   } else {
     Panic(std::string("can't order ") + TagName(a.tag) + " and " + TagName(b.tag));
   }
+
   switch (op) {
     case BinaryOp::kLessThan:
       return Bool(cmp < 0);
@@ -722,6 +767,7 @@ KuraValue kura_rt_binop(const uint64_t op_code, const uint64_t a_tag, const uint
     case BinaryOp::kBinaryOr:
       if (a.tag != kTagBool || b.tag != kTagBool)
         Panic("`&&` and `||` need Bool operands");
+
       return Bool(op == BinaryOp::kBinaryAnd ? (a.bits && b.bits) : (a.bits || b.bits));
     case BinaryOp::kAdd:
       if (a.tag == kTagString && b.tag == kTagString)
@@ -730,9 +776,11 @@ KuraValue kura_rt_binop(const uint64_t op_code, const uint64_t a_tag, const uint
       if (a.tag == kTagSeq && b.tag == kTagSeq)
         return {kTagSeq, reinterpret_cast<uint64_t>(
                              kura_rt_seq_concat(reinterpret_cast<void*>(a.bits), reinterpret_cast<void*>(b.bits)))};
+
       if (a.tag == kTagRecord && b.tag == kTagRecord)
         return {kTagRecord, reinterpret_cast<uint64_t>(kura_rt_record_merge(reinterpret_cast<void*>(a.bits),
                                                                             reinterpret_cast<void*>(b.bits)))};
+
       return Arith(op, a, b);
     default:
       return Arith(op, a, b);
@@ -745,16 +793,20 @@ KuraValue kura_rt_unop(const uint64_t op_code, const uint64_t tag, const uint64_
     case UnaryOp::kBang:
       if (tag != kTagBool)
         Panic("`!` needs a Bool, not " + TagName(tag));
+
       return Bool(bits == 0);
     case UnaryOp::kPlus:
       if (!IsScalar(tag) && !IsUnit(tag))
         Panic("can't apply `+` to " + TagName(tag));
+
       return {tag, bits};
     default:
       if (tag == kTagInt)
         return {kTagInt, 0 - bits};
+
       if (tag == kTagFloat || IsUnit(tag))
         return {tag, FromDouble(-AsDouble(bits))};
+
       Panic("can't negate " + TagName(tag));
       return {};
   }

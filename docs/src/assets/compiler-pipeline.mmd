@@ -1,0 +1,48 @@
+---
+config:
+  layout: dagre
+---
+graph LR
+    subgraph Frontend [Frontend Phase]
+      Parser[Lexer & Parser]
+      ParseTree[Parse Tree]
+      AST[Expr AST]
+    end
+
+    subgraph Backend [Middle-End & Analysis Phase]
+      SSAGraph[Flow Graph<br/>SSA, per function]
+      Analysis[Analysis Passes]
+      TypedGraph[Typed Flow Graph]
+    end
+
+    subgraph Lowering [Lowering & Codegen Phase]
+      GIR[GIR<br/>Graphics IR]
+      LLVM[LLVM IR]
+    end
+
+    subgraph Targets [Output Targets]
+      JIT[JIT Execution<br/>--run]
+      ObjFile[Object File<br/>--emit-obj]
+      CHeader[C Header<br/>--emit-header]
+    end
+
+    Parser --> ParseTree --> AST
+    AST --> SSAGraph
+
+    SSAGraph --> Analysis
+    Analysis --> TypedGraph
+
+    TypedGraph -->| default |LLVM
+    TypedGraph -->|view| GIR
+    GIR --> LLVM
+
+    %% Output Emissions
+    LLVM --> JIT
+    LLVM --> ObjFile
+    LLVM --> CHeader
+
+    %% Styling
+    style TypedGraph fill:#2e303f,stroke:#7c8f9f,stroke-width:1px;
+    style JIT fill:#1d2b24,stroke:#3b694c;
+    style ObjFile fill:#1d2b24,stroke:#3b694c;
+    style CHeader fill:#1d2b24,stroke:#3b694c;

@@ -9,8 +9,8 @@
 #include "backend/ir.h"
 #include "backend/value_visitor.h"
 #include "common.h"
-#include "frontend/expr.h"
 #include "dom/printer.h"
+#include "frontend/expr.h"
 #include "function.h"
 #include "gir.h"
 #include "local_scope.h"
@@ -30,7 +30,7 @@ FlowGraphBuilder::FlowGraphBuilder(Context* ctx, const std::string& name, Functi
 }
 
 void FlowGraphBuilder::Emit(Instruction* instr) {
-  if (!tail_)  // unreachable
+  if (!tail_)
     return;
 
   Instruction::Link(tail_, instr);
@@ -179,14 +179,11 @@ auto FlowGraphBuilder::Finish() -> FlowGraph* {
 }
 
 namespace {
-// Finds the locals a lambda closes over: those it reads but that are neither
-// bound inside it (parameters, `let`s, patterns, loop variables) nor module
-// level (functions and top-level bindings are reachable from anywhere).
 class FreeLocals : public expr::ExprVisitor {
  public:
   std::unordered_set<LocalVariable*> uses{};
   std::unordered_set<LocalVariable*> defs{};
-  std::vector<LocalVariable*> order{};  // first use, for a stable capture order
+  std::vector<LocalVariable*> order{};
 
   inline void Use(LocalVariable* local) {
     if (uses.insert(local).second)
@@ -245,6 +242,9 @@ class FreeLocals : public expr::ExprVisitor {
     }
 
     for (const auto child : expr->GetChildren()) {
+      if (expr->IsText())
+        std::cout << "child: " << child->GetName() << std::endl;
+
       if (!Walk(child))
         return false;
     }
@@ -323,8 +323,6 @@ class FreeLocals : public expr::ExprVisitor {
     return Walk(expr->GetPayload());
   }
 
-  // A nested lambda's own free locals are free in this one too, unless this
-  // lambda binds them.
   auto VisitLambda(expr::LambdaExpr* expr) -> VisitResult override {
     FreeLocals inner{};
     for (const auto param : expr->GetParams())
@@ -407,6 +405,7 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
       ctx.graph->Add(FlowGraph::New(std::string(func->GetName()->GetData()), func, nullptr));
       continue;
     }
+
     if (!func->HasBody())
       continue;
 
@@ -449,7 +448,6 @@ auto FlowGraphBuilder::BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph* {
   return ctx.errors.empty() ? graph : nullptr;
 }
 
-// Used by the lambda lowering in the visitors.
 auto CollectCaptures(expr::LambdaExpr* lambda) -> std::vector<LocalVariable*> {
   FreeLocals free{};
   for (const auto param : lambda->GetParams())

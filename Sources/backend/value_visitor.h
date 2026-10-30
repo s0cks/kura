@@ -4,8 +4,6 @@
 #include "backend/effect_visitor.h"
 
 namespace kura {
-// Lowers an expression whose result is used; `GetValue()` is the definition
-// holding it afterwards.
 class ValueVisitor : public EffectVisitor {
  private:
   Value* value_ = nullptr;

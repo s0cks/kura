@@ -1,0 +1,142 @@
+---
+title: C Interop
+description: Calling C from Kura, and calling Kura from C.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A Kura program can call C and be called from C. The compiler reads C headers with clang, so
+there are no bindings to write.
+
+```kura
+use "math.h"
+use "raylib.h" as rl
+
+type Model = { count: Int }
+
+fn init(): Model => { count: 0 }
+
+fn update(msg: Int, model: Model): Model => {
+  let shown = rl.SetWindowTitle("count")
+  { count: model.count + msg }
+}
+
+fn view(model: Model): Node => #text("count")
+
+extern fn damage_for(level: c.int): c.int => level * 10
+```
+
+## Using C
+
+`use "math.h"` names the header's declarations under `math`. `use "SDL2/SDL.h" as sdl`
+chooses the name. The `.h` extension is what says the file is C.
+
+Everything the header (and what it includes) declares is reachable as `name.member`:
+
+- functions
+- constants (`math.M_PI`, enumerators, simple `#define`s)
+- types (`rl.Color`)
+
+Names are used exactly as C spells them (`SDL_Init`, `gl_clear`). Only what a program names is
+inspected, so a function Kura can't express is an error when you *call* it, not when you
+import the header.
+
+### Type mapping
+
+| C                                     | Kura                                                         |
+| ------------------------------------- | ------------------------------------------------------------ |
+| `double`, `float`                     | `Float`                                                      |
+| `char`, `int`, `long`, `size_t`, …    | `Int`; an argument that doesn't fit the C type is a panic    |
+| `_Bool`                               | `Bool`                                                       |
+| `const char *`, `char *` (results)    | `String` (a result is copied), or `String \| None`           |
+| `FILE *`, `struct tm *`, `void *`     | a handle: `Handle<FILE>`, or `Handle<FILE> \| None`          |
+| a struct passed by value              | a record with the same fields                                |
+| `T (*f)(…)`                           | a callback: pass the name of a function                      |
+| `void`                                | `None`                                                       |
+
+A pointer that can be `NULL` is `T | None` in Kura, so the program has to check. Handles are
+only held and handed back to C, and can live in the model.
+
+Functions with a struct in their signature, and `static inline` functions, are reached through
+a small C wrapper that clang compiles (set `KURA_CC` to use another compiler), so the calling
+convention is clang's.
+
+**Not supported** (reported when used): a `char *` that C writes into, a pointer to anything
+but a struct, a function pointer with a struct in its signature, unions, bitfields, arrays and
+packed structs.
+
+## Declaring C functions by hand
+
+```kura
+extern fn sqrt(x: Float): Float
+extern fn abs(x: c.int): c.int
+extern fn getenv(name: String): String | None
+extern "getenv" fn getenv-checked(name: String): String
+extern fn printf(fmt: String, ...): c.int
+extern fn frexp(x: Float, exp: c.out<c.int>): Float
+extern fn qsort_like(f: c.callback<(c.int) => c.int>): c.int
+```
+
+`extern fn` declares a C function without a header. `extern "symbol" fn name` gives the C
+symbol when it differs from the Kura name.
+
+`c.int`, `c.uint`, `c.long`, `c.ulong`, `c.size_t`, `c.float`, `c.double`, `c.uchar` and the
+other `c.*` types are the C types. `c.ptr` is `void *`.
+
+- **Variadic**: `printf("%ld %s\n", 42, "x")`. Extra arguments are passed as what they are: an
+  `Int` is a `long`, a `Float` a `double`, a `String` a `const char *`.
+- **`c.out<T>`**: C writes through the pointer. The parameter isn't passed. Instead the call
+  returns a record with the C result as `result` and each out parameter by its name:
+  `frexp(6.0).exp`.
+- **Callbacks** are the name of a function written in Kura, not a closure.
+
+## Effects
+
+Calling C is an effect unless the C function is pure: its header says `const` or `pure`, or it
+is marked [`@pure`](/kura/reference/directives/#pure).
+
+- `view` must be pure. It can only reach pure C functions, through any depth of calls,
+  lambdas and function values.
+- `init` and `update` may call C, and must produce the model.
+- Top-level bindings run when the module loads and may only call pure functions.
+
+## Being called from C
+
+An `extern fn` **with a body** is a function C can call, using C's types:
+
+```kura
+extern fn add(a: c.int, b: c.int): c.int => a + b
+extern fn greet(name: String): String => "hello, " + name
+```
+
+`kurac` writes the object file and the header:
+
+```sh
+kurac game.kui --emit-obj game.o --emit-header game.h
+cc host.c game.o -lkura-runtime
+```
+
+```c
+#include "game.h"
+
+kura_module_init();
+int32_t n = add(2, 3);
+```
+
+An argument that doesn't fit its C type panics, as does a `NULL` given where a `String` is
+declared. Exported functions take and return numbers, Bools, strings and handles.
+
+## Linking
+
+| Flag                     | Purpose                                              |
+| ------------------------ | ---------------------------------------------------- |
+| `-I<dir>`, `-D<name>`    | For the headers a program `use`s                     |
+| `-l<lib>`, `-L<dir>`     | Libraries the program calls (for `--run`)            |
+| `file.c`                 | Compiled into the module so LLVM can inline into it  |
+| `--emit-obj <file.o>`    | A native object file                                 |
+| `--emit-header <file.h>` | The C header for `extern fn`s that have bodies       |
+
+<Aside>
+`kurac` needs clang to import headers (`libclang-cpp`) and to compile C. `KURA_CC` and
+`KURA_CLANG_RESOURCE_DIR` override the paths found at build time.
+</Aside>

@@ -1,3 +1,85 @@
 ---
 title: Introduction
+description: What Kura is, what it is not, and how it fits into a real-time application.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Kura is a purely functional language for describing user interfaces, with explicit,
+compiler-driven reactivity. It compiles UI descriptions into native code that a host
+application (a game engine, a custom renderer) calls every frame.
+
+<Aside type="caution" title="Work in progress">
+Kura is pre-release. See [Project Status](/kura/status/) for what works today.
+</Aside>
+
+## Goals
+
+Kura aims to be:
+
+- **practical** for real-time engines
+- **lightweight** enough for native engines
+- **expressive** like Typst
+- **composable** like Haskell
+- **safe** like Elm
+
+## What Kura is
+
+A language for UI composition. You describe *what* the UI looks like for a given piece of
+state, and the compiler works out *how* to lay it out, when it needs to change, and which
+render calls to emit.
+
+## What Kura is not
+
+- A general-purpose systems language
+- A scripting language for game logic
+- An ECS framework
+- A browser runtime
+
+Kura sits next to your game logic. Your engine owns the window, the GPU and the game state;
+Kura owns the UI.
+
+## How it works
+
+```kura
+type State = { count: Int }
+type Message = Click
+
+fn init(): State => { count: 0 }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Click => { count: state.count + 1 },
+  }
+
+fn view(state: State): Content =>
+  #button(on-click: Click) {
+    #text("Clicked")
+    #text(state.count)
+  }
+```
+
+1. You write one or more `.kui` files, each describing a single UI or UI element (a HUD health
+   bar, a minimap, an inventory bar).
+2. `kurac` compiles them to an object file or library, plus a C header.
+3. Your host links the result, creates the UI, sends it [Messages](/kura/guides/mvu/) (clicks,
+   ticks, anything your game wants), and asks it to update and render each frame.
+
+Because the compiler does most of the work, the runtime stays small. `view` doesn't build a
+tree of objects at run time: it compiles down to a linear sequence of render calls.
+
+## Influences
+
+| Influence | Contribution                                     |
+| --------: | :----------------------------------------------- |
+|       Elm | Predictable UI state model                       |
+|   Haskell | Functional composition and purity                |
+|     Typst | Expressive declarative syntax                    |
+|     React | Declarative UI structure and diffing concepts    |
+|     ImGui | Immediate, low-overhead UI interaction patterns  |
+
+## Next steps
+
+- [Getting Started](/kura/getting-started/): compile your first UI
+- [The MVU Model](/kura/guides/mvu/): how state, messages and views fit together
+- [Language Reference](/kura/reference/primitives/)

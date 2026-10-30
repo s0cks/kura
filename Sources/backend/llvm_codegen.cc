@@ -42,7 +42,6 @@ auto EntryPointName(const std::string& function) -> std::string {
 }
 
 namespace {
-// How a value of a type is held in compiled code.
 enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged };
 
 auto RepOf(CompileType* type) -> Rep {
@@ -72,7 +71,6 @@ auto RepOf(CompileType* type) -> Rep {
   }
 }
 
-// The tag of a value of a concrete (not tagged) type.
 auto TagOf(CompileType* type) -> uint64_t {
   switch (type->GetKind()) {
     case CompileType::kInt:
@@ -112,8 +110,6 @@ class Generator {
     llvm::Function* native;
     std::unordered_map<Definition*, llvm::Value*> values{};
     std::unordered_map<EntryInstr*, llvm::BasicBlock*> blocks{};
-    // where each IR block ends: lowering an instruction can add blocks, and
-    // that's the block a phi's incoming value comes from
     std::unordered_map<EntryInstr*, llvm::BasicBlock*> ends{};
     std::vector<std::pair<PhiInstr*, llvm::PHINode*>> phis{};
   };

@@ -1,0 +1,62 @@
+---
+title: Modules
+description: Sharing code between .kui files with use and pub.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Planned">
+The module system is designed for v1 and will be implemented after the C interop work.
+</Aside>
+
+Kura source files use the `.kui` extension. A file can share code with other files through
+`pub` and `use`.
+
+## `pub`
+
+Declarations are private to their file unless marked `pub`:
+
+```kura
+// health.kui
+pub type Health = { current: Int, max: Int }
+
+pub fn percent(h: Health): Int => h.current * 100 / h.max
+
+fn helper() => ...   // private
+```
+
+## `use`
+
+`use` imports another file by its path, including the explicit `.kui` extension. Imports
+are **qualified**: you refer to the contents through the module's name.
+
+```kura
+use "health.kui"                // refer to it as health
+use "health.kui" as hp          // refer to it as hp
+
+fn bar(h: hp.Health): Int => hp.percent(h)
+```
+
+The default name is the file's base name. Unqualified imports are not supported.
+
+## The standard library
+
+The standard library root comes from an environment variable and is imported with a
+`std/` prefix:
+
+```kura
+use "std/color.kui" as color
+```
+
+The v1 standard library is intentionally minimal: just enough for runtime types with memory
+management, loading UIs, and rendering UIs.
+
+## C headers
+
+`use` also imports C headers. A `.h` extension says the file is C. See
+[C Interop](/kura/reference/c-interop/).
+
+## One UI per file
+
+By convention, a `.kui` file describes one UI or one UI element. A game HUD might be split
+into a health bar, a map and an inventory bar, each its own file with its own `view`.

@@ -1,0 +1,49 @@
+---
+title: Renderer ABI
+description: The interface between the Kura runtime and a platform renderer.
+---
+
+Compiled `view` code doesn't build a UI tree. It makes a linear series of calls into the
+runtime (`kura_rt_begin_frame`, `kura_rt_fill_rect`, `kura_rt_draw_text`,
+`kura_rt_end_frame`, and so on), which forward to a **renderer**.
+
+A renderer implements one table of function pointers, `KuraRendererOps`, defined in
+`Sources/renderer/renderer_abi.h`. Nothing outside that header is needed to write one.
+
+## Operations
+
+| Operation                          | Purpose                           |
+| ---------------------------------- | --------------------------------- |
+| `begin_frame(self, width, height)` | Start a frame                     |
+| `end_frame(self)`                  | Finish and present the frame      |
+| `push_clip(self, rect)` / `pop_clip(self)` | Clip rectangle stack      |
+| `fill_rect(self, rect, color)`     | Filled rectangle                  |
+| `stroke_rect(self, rect, color)`   | Rectangle outline                 |
+| `draw_line(self, from, to, color)` | Line                              |
+| `draw_text(self, pos, utf8, length, style, color)` | Text            |
+| `measure_text(self, utf8, length, style, out)`     | Text metrics, used by layout |
+
+Every operation returns a `KuraRendererStatus`. In debug builds the generated code checks that
+status after each draw call (`kura_rt_check_renderer`).
+
+## Compatibility
+
+`KuraRendererOps` starts with a `struct_size` field. A renderer sets it to
+`sizeof(KuraRendererOps)` as it was built. New operations are only ever added at the end, so a
+host reads `struct_size` to learn which operations an older renderer has.
+
+## Renderers in the tree
+
+| Renderer          | Purpose                                                                  |
+| ----------------- | ------------------------------------------------------------------------ |
+| Headless          | Implements the ABI without drawing. Used for unit tests (with GTest).    |
+| Image             | Renders to an image, for visual regression tests.                        |
+| OpenGL, Vulkan    | Platform renderers (in progress / planned).                              |
+
+The headless renderer defines the ABI every other renderer follows, and runs without a GPU so
+that tests are simple.
+
+## Viewport
+
+The viewport size is never fetched through an API. When it changes, the host sends it as a
+Message to `update`.

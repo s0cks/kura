@@ -11,8 +11,6 @@
 #include "backend/runtime_abi.h"
 
 namespace kura {
-// Runs generated code in this process: the runtime library's functions are the
-// ones compiled code calls.
 class Jit {
  private:
   std::unique_ptr<llvm::orc::LLJIT> jit_;
@@ -23,19 +21,10 @@ class Jit {
  public:
   ~Jit() = default;
 
-  // Makes the symbols of a shared library (`libm.so`, a path) visible to
-  // generated code, like linking against it.
   auto LoadLibrary(const std::string& path, std::string* error) -> bool;
-
-  // Takes ownership of the module and the context it lives in.
   auto Add(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context, std::string* error)
       -> bool;
-
-  // Runs the module's initializer: registers its names and strings and
-  // evaluates its top-level bindings. Do this once, before any call.
   auto Initialize(std::string* error) -> bool;
-
-  // Calls the module function `function`.
   auto Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
             std::string* error) -> bool;
 

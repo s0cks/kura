@@ -1,3 +1,34 @@
 ---
 title: Kura
+description: A purely functional UI language that compiles to native code for real-time engines.
+template: splash
+hero:
+  tagline: Declarative UI for game engines and real-time renderers. Compiled ahead of time, tiny at runtime.
+  actions:
+    - text: Get started
+      link: /kura/getting-started/
+      icon: right-arrow
+    - text: Read the introduction
+      link: /kura/introduction/
+      variant: minimal
 ---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Compiled, not interpreted" icon="rocket">
+    The compiler does the heavy lifting up front: layout, reactivity and render calls are
+    worked out at build time and lowered through LLVM to native code.
+  </Card>
+  <Card title="Predictable state" icon="random">
+    Every UI follows the Model-View-Update contract: `init`, `update`, `view`. State is
+    plain data and `view` is always pure.
+  </Card>
+  <Card title="Embeds in your engine" icon="puzzle">
+    Kura compiles to an object or library you link into your existing project. No manifest,
+    no framework, no browser.
+  </Card>
+  <Card title="Seamless C interop" icon="seti:c">
+    Call C headers directly and export Kura functions as C functions. No bindings to write.
+  </Card>
+</CardGrid>

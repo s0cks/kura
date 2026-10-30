@@ -1,4 +1,86 @@
 ---
-title: Welcome to Starlight
-description: Get started building your docs site with Starlight.
+title: Getting Started
+description: Write, compile and inspect your first Kura UI.
 ---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Build the compiler**
+
+   Follow [Building](/kura/building/) to build `kurac` from source. You need CMake and LLVM.
+
+2. **Write a UI**
+
+   Create `counter.kui`:
+
+   ```kura
+   type State = { count: Int }
+   type Message = Click
+
+   fn init(): State => { count: 0 }
+
+   fn update(msg: Message, state: State): State =>
+     match msg {
+       Click => { count: state.count + 1 },
+     }
+
+   fn view(state: State): Content =>
+     #button(on-click: Click) {
+       #text("Clicked")
+       #text(state.count)
+     }
+   ```
+
+   Only `view` is required. A static UI can be a single `view` function. See
+   [The MVU Model](/kura/guides/mvu/) for the rules.
+
+3. **Compile it**
+
+   Inspect the generated LLVM IR:
+
+   ```sh
+   kurac counter.kui --emit-llvm
+   ```
+
+   Or produce a native object file:
+
+   ```sh
+   kurac counter.kui --emit-obj counter.o
+   ```
+
+4. **Try a function**
+
+   `kurac` can JIT a single function and run it, which is handy for testing logic:
+
+   ```sh
+   kurac counter.kui --run init
+   ```
+
+   Arguments after the function name are parsed as numbers, units (`10px`), bools, `none`,
+   or strings. The command line can only pass scalars, so functions that take records
+   can't be called this way.
+
+</Steps>
+
+## Compiler options
+
+```text
+kurac <file> [<c-source>.c...] [options]
+```
+
+| Option                    | Purpose                                                                |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `--emit-llvm`             | Print the LLVM IR for the module                                       |
+| `--emit-obj <file.o>`     | Write a native object file                                             |
+| `--emit-header <file.h>`  | Write the C header for `extern fn`s that have bodies                   |
+| `--no-opt`                | Skip LLVM optimization                                                 |
+| `--run <fn> [args...]`    | JIT the module and call `fn`; everything after the name is an argument |
+| `-I<dir>`, `-D<name>`     | Include paths and defines for headers a program `use`s                 |
+| `-L<dir>`, `-l<lib>`      | Libraries the program calls (for `--run`)                              |
+| `file.c`                  | Compile a C file into the module so LLVM can inline into it            |
+
+<Aside>
+Embedding the compiled UI in a host application is covered in [Integration](/kura/integration/).
+</Aside>

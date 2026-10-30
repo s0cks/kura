@@ -1,0 +1,107 @@
+---
+title: UI Elements
+description: Building views with #elements, properties, and nesting.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Views are built from **elements**, written Typst-style with a leading `#`. This keeps
+structural markup visually distinct from code.
+
+```kura
+fn view(state: State): Content =>
+  #button(fill: blue, on-click: Click) {
+    #text("Clicked")
+    #text(state.count)
+  }
+```
+
+An element has:
+
+- a **kind** (`#button`, `#text`, `#fragment`, `#surface`, `#input`)
+- optional **properties** in parentheses: `#button(fill: red)`
+- optional **children** in braces
+
+Children blocks can contain `let` bindings before the elements:
+
+```kura
+#button(on-click: Tick) {
+  let label = "Count"
+  #text(label)
+}
+```
+
+## Properties are set once
+
+Properties are given when the element is constructed and never reassigned. There's no
+`node.fill = ...`. To change what's drawn, return different elements from `view`.
+
+## Content, Node and None
+
+`view` returns a `Node`. Helper functions that build part of a UI can return `Content`:
+
+```kura
+type Content = Node | None
+```
+
+`None` is a valid `Content`: it renders nothing. It behaves like an empty `#fragment`.
+
+## Fragments
+
+`#fragment` groups children without reserving any layout space itself. Use it to return
+several siblings, or to wrap a `for` loop.
+
+```kura
+fn view(state: State): Content =>
+  #fragment {
+    #text(state.count)
+    #button { #text("Increment") }
+  }
+```
+
+## Reusing parts of a UI
+
+Functions that return `Node` are the unit of reuse:
+
+```kura
+fn my-btn(label: String): Node =>
+  #button { #text(label) }
+```
+
+## Matching on kind
+
+You can match on the *kind* of a `Content` value:
+
+```kura
+match c {
+  block    => ...,
+  fragment => ...,
+  input    => ...,
+  _        => ...,
+}
+```
+
+Only kind-level matching is supported. Matching on node properties (for example
+`match c.fill`) is not part of v1.
+
+## Cascading properties with `set`
+
+<Aside type="caution" title="Planned">
+`set` rules are designed for v1 but not implemented yet.
+</Aside>
+
+A `set` rule, as in Typst, sets default properties for every matching node below it in
+the compilation unit:
+
+```kura
+set text(size: default-font-size)
+```
+
+In v1 a `set` value must be a compile-time constant. That includes computed constants such as
+`let default-font-size = a + b` where `a` and `b` are constant. Anything that depends on
+runtime state is an error. Typst-style `show` rules are out of scope for v1.
+
+## Directives on elements
+
+[Directives](/kura/reference/directives/) such as `@meta` can be attached to elements, and
+cascade to their children.
