@@ -1,3 +1,4 @@
+---
 lockfileVersion: '9.0'
 
 settings:
@@ -17,9 +18,6 @@ importers:
       '@astrojs/starlight-tailwind':
         specifier: ^5.0.0
         version: 5.0.0(@astrojs/starlight@0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(tailwindcss@4.3.3)
-      '@mermaid-js/layout-elk':
-        specifier: ^1.0.1
-        version: 1.0.1(mermaid@12.2.0)
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
@@ -2397,8 +2395,8 @@ snapshots:
     dependencies:
       prismjs: 1.30.0
 
-  '@astrojs/react@7.1.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(jiti@2.7.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(yaml@2.9.1)':
-    dependencies:
+  ? '@astrojs/react@7.1.1(@types/node@24.19.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(jiti@2.7.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(yaml@2.9.1)'
+  : dependencies:
       '@astrojs/internal-helpers': 0.13.0
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
@@ -2429,8 +2427,8 @@ snapshots:
       sitemap: 9.0.1
       zod: 4.6.7
 
-  '@astrojs/starlight-tailwind@5.0.0(@astrojs/starlight@0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(tailwindcss@4.3.3)':
-    dependencies:
+  ? '@astrojs/starlight-tailwind@5.0.0(@astrojs/starlight@0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(tailwindcss@4.3.3)'
+  : dependencies:
       '@astrojs/starlight': 0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
       tailwindcss: 4.3.3
 
@@ -3161,8 +3159,8 @@ snapshots:
       rehype-expressive-code: 0.44.3
       url-extras: 0.1.0
 
-  astro-mermaid@2.2.0(@mermaid-js/layout-elk@1.0.1(mermaid@12.2.0))(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(mermaid@12.2.0):
-    dependencies:
+  ? astro-mermaid@2.2.0(@mermaid-js/layout-elk@1.0.1(mermaid@12.2.0))(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(mermaid@12.2.0)
+  : dependencies:
       astro: 7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)
       import-meta-resolve: 4.2.0
       mdast-util-to-string: 4.0.0
@@ -4533,8 +4531,8 @@ snapshots:
 
   space-separated-tokens@2.0.2: {}
 
-  starlight-image-zoom@0.16.2(@astrojs/starlight@0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)):
-    dependencies:
+  ? starlight-image-zoom@0.16.2(@astrojs/starlight@0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+  : dependencies:
       '@astrojs/starlight': 0.42.7(astro@7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
       astro: 7.4.2(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)
       mdast-util-mdx-jsx: 3.2.0
