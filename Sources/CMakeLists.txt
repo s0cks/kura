@@ -59,6 +59,7 @@ target_link_libraries(kura-compiler
 add_subdirectory(heap)
 add_subdirectory(dom)
 add_subdirectory(backend)
+add_subdirectory(frontend)
 add_subdirectory(runtime)
 
 add_subdirectory(renderer)
