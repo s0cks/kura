@@ -45,7 +45,6 @@ tasks:
           .rumdl_cache/ \
           .styles/ \
           Sources/ \
-          cmake/ \
           docker/ \
           docs/ \
           examples/ \
