@@ -1,7 +1,3 @@
-# Tests for the syntax layer (lexer, parser, diagnostics), written with GTest.
-#
-# They need only kura-syntax (and GTest): no LLVM, no ANTLR, no heap. Run them with ctest, or run
-# kura-syntax-tests directly (it takes the usual --gtest_filter and --gtest_list_tests).
 find_package(GTest REQUIRED)
 include(GoogleTest)
 

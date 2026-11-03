@@ -3,9 +3,6 @@
 
 #include <cstdint>
 
-// The heap is deliberately free of the compiler's dependencies (LLVM, xxhash, ANTLR): it is what a small host
-// runtime links, so it only needs the standard library.
-
 #if defined(KURA_DEBUG) || defined(KURA_HEAP_DEBUG)
 #define KURA_HEAP_DEBUG_ENABLED 1
 #endif  // KURA_DEBUG || KURA_HEAP_DEBUG
@@ -48,10 +45,10 @@ constexpr auto IsAligned(const uword value, const uword alignment) -> bool {
 [[noreturn]] void Fatal(const char* file, int line, const char* format, ...) __attribute__((format(printf, 3, 4)));
 }  // namespace kura::heap
 
-#define KURA_HEAP_CHECK(cond, ...)                                                           \
-  do {                                                                                       \
-    if (!(cond))                                                                             \
-      ::kura::heap::Fatal(__FILE__, __LINE__, "check failed: " #cond " " __VA_ARGS__);       \
+#define KURA_HEAP_CHECK(cond, ...)                                                     \
+  do {                                                                                 \
+    if (!(cond))                                                                       \
+      ::kura::heap::Fatal(__FILE__, __LINE__, "check failed: " #cond " " __VA_ARGS__); \
   } while (false)
 
 #ifdef KURA_HEAP_DEBUG_ENABLED
