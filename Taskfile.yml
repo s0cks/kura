@@ -38,20 +38,24 @@ tasks:
     cmds:
       - |
         ouch compress \
+          --gitignore \
+          .cache/ \
           .git/ \
           .github/ \
+          .rumdl_cache/ \
           .styles/ \
           Sources/ \
-          assets/ \
           cmake/ \
+          docker/ \
           docs/ \
-          wiki/ \
           examples/ \
           tests/ \
           .clang-format \
           .clang-tidy \
           .clangd \
+          .dockerignore \
           .editorconfig \
+          .env \
           .gitattributes \
           .gitignore \
           .release-please-manifest.json \
