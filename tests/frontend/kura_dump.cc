@@ -41,7 +41,8 @@ int main(int argc, char** argv) {
       std::cout << ")";
       if (func->GetReturnType())
         std::cout << ": " << func->GetReturnType()->ToString();
-      std::cout << " = " << ExprPrinter::ToString(func->GetBody()) << std::endl;
+      // an `extern fn` that C provides has no body
+      std::cout << " = " << (func->GetBody() ? ExprPrinter::ToString(func->GetBody()) : "<extern>") << std::endl;
     }
   }
   return rc;

@@ -2,25 +2,6 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/kura.h.in ${CMAKE_CURRENT_BINARY_DIR}
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-include(Antlr4)
-
-set(GRAMMAR_NAME "Kura")
-list(APPEND GRAMMAR_SOURCES
-  "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}Parser.g4"
-  "${CMAKE_CURRENT_SOURCE_DIR}/${GRAMMAR_NAME}Lexer.g4")
-
-set(GEN_SOURCES
-  "${CMAKE_CURRENT_BINARY_DIR}/${GRAMMAR_NAME}Lexer.cpp"
-  "${CMAKE_CURRENT_BINARY_DIR}/${GRAMMAR_NAME}Parser.cpp"
-)
-
-add_custom_command(
-  OUTPUT ${GEN_SOURCES}
-  COMMAND ${ANTLR} ${ANTLR_ARGS} ${GRAMMAR_SOURCES}
-  DEPENDS ${GRAMMAR_SOURCES}
-  COMMENT "Generating c++ parser from ${GRAMMAR_NAME}.g4"
-  VERBATIM
-)
 
 add_library(kura-compiler SHARED
   function.cc
@@ -34,8 +15,7 @@ add_library(kura-compiler SHARED
   record.cc
   type.cc
   view.cc
-  ${GEN_SOURCES}
-) 
+)
 
 target_compile_definitions(kura-compiler
   PUBLIC ${LLVM_DEFINITIONS}
@@ -52,13 +32,14 @@ target_link_libraries(kura-compiler
   PUBLIC LLVM
          clang-cpp
          PkgConfig::XXHASH
-         antlr::antlr4
          glm::glm
+         kura-syntax
 )
 
 add_subdirectory(heap)
 add_subdirectory(dom)
 add_subdirectory(backend)
+add_subdirectory(frontend/syntax)
 add_subdirectory(frontend)
 add_subdirectory(runtime)
 

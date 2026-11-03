@@ -229,7 +229,7 @@ class TemplateExpr : public Expr {
   }
 
 class DynamicTemplateExpr : public Expr {
-  friend class UIExprBuilder;
+  friend class ExprBuilder;
 
  private:
   ExprList children_{};

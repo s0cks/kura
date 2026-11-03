@@ -66,7 +66,15 @@ class Parser {
     return scope_;
   }
 
+  // Reads `filename`, parses it and builds the module. A file with syntax errors
+  // fails with every error rendered (with the offending line, the way a
+  // compiler shows it); one that is well formed but wrong fails with a single
+  // `file:line:column: message`.
   auto ParseModuleFromFile(const std::string filename, Module** m) -> ParseResult;
+
+  // The same, for source text that is already in memory. `name` is only used to
+  // say where the text came from in messages.
+  auto ParseModuleFromSource(const std::string& name, std::string text, Module** m) -> ParseResult;
 };
 }  // namespace kura
 

@@ -12,10 +12,6 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_MODULE_PATH": {
-          "value": "${sourceDir}/cmake",
-          "type": "FILEPATH"
-        },
         "CMAKE_TOOLCHAIN_FILE": {
           "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
           "type": "FILEPATH"

@@ -1,21 +1,19 @@
 #ifndef KURA_EXPR_BUILDER_H
 #define KURA_EXPR_BUILDER_H
 
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-// clang-format off
-#include "KuraLexer.h"
-#include "KuraParser.h"
-#include "KuraParserBaseVisitor.h"
-// clang-format on
 
 #include "c_import.h"
 #include "c_type.h"
 #include "frontend/c_decl.h"
 #include "frontend/expr.h"
+#include "frontend/syntax/ast.h"
+#include "frontend/syntax/parser.h"
 #include "function.h"
 #include "local_scope.h"
 #include "object.h"
@@ -26,27 +24,36 @@ struct Module;
 }
 
 namespace kura::expr {
-// Raised when the parse tree is syntactically valid but cannot be turned into
-// an Expr tree: either the program is wrong (undefined name, ...) or it uses
-// syntax the Expr IR has no node for yet (see `Unsupported`).
+// Raised when the syntax tree is well formed but cannot be turned into an Expr
+// tree: either the program is wrong (undefined name, ...) or it uses syntax the
+// Expr IR has no node for yet (see `Unsupported`).
 class BuildError : public std::runtime_error {
  private:
   size_t line_;
   size_t column_;
+  syntax::Span span_;
 
  public:
-  BuildError(const size_t line, const size_t column, const std::string& message) :
+  BuildError(const size_t line, const size_t column, const std::string& message, const syntax::Span& span = {}) :
     std::runtime_error(message),
     line_(line),
-    column_(column) {}
+    column_(column),
+    span_(span) {}
   ~BuildError() override = default;
 
+  // One based, like a compiler prints it.
   auto GetLine() const -> size_t {
     return line_;
   }
 
+  // Zero based, like it always was.
   auto GetColumn() const -> size_t {
     return column_;
+  }
+
+  // Where in the source the problem is, for tools that want to underline it.
+  auto GetSpan() const -> const syntax::Span& {
+    return span_;
   }
 
   auto ToString() const -> std::string {
@@ -85,21 +92,18 @@ class ModuleBuilder {
     return scope_;
   }
 
-  // Throws BuildError.
-  auto Build(KuraParser::SourceContext* ctx) -> Module*;
+  // `tree` must be valid (no syntax errors). Throws BuildError.
+  auto Build(const syntax::SyntaxTree& tree) -> Module*;
 
-  auto operator()(KuraParser::SourceContext* ctx) -> Module* {
-    return Build(ctx);
+  auto operator()(const syntax::SyntaxTree& tree) -> Module* {
+    return Build(tree);
   }
 };
 
-// Turns the v1 parse tree into Expr nodes.
-//
-// Every visit method that produces an expression returns an `Expr*` inside the
-// std::any (never a subclass pointer), so callers can always `any_cast<Expr*>`.
-class ExprBuilder : public KuraParserBaseVisitor {
-  friend class UIExprBuilder;
-
+// Turns the v1 syntax tree into Expr nodes. This is where names are resolved,
+// C headers are imported and the semantic rules of the language are checked;
+// the syntax tree itself knows none of that.
+class ExprBuilder {
  protected:
   class LocalsScope {
    private:
@@ -121,6 +125,7 @@ class ExprBuilder : public KuraParserBaseVisitor {
 
  private:
   ModuleBuilder* owner_;
+  const syntax::SyntaxTree& tree_;
   LocalScope* module_scope_ = nullptr;
   std::unordered_set<std::string> function_names_{};
   std::unordered_set<std::string> use_aliases_{};
@@ -130,56 +135,67 @@ class ExprBuilder : public KuraParserBaseVisitor {
   std::unordered_map<std::string, std::unordered_set<std::string>> pure_names_{};
   Module* module_ = nullptr;
 
-  [[noreturn]] static void Error(antlr4::ParserRuleContext* ctx, const std::string& message);
+  [[noreturn]] void Error(const syntax::Span& where, const std::string& message) const;
+  [[noreturn]] void Error(const syntax::Node* where, const std::string& message) const;
 
   // An Int (`10`) or a Float (`10.0`).
-  static auto NumberLiteral(antlr4::ParserRuleContext* ctx, const std::string& text, const bool negate) -> Object*;
+  auto NumberLiteral(const syntax::Span& where, const std::string& text, const bool negate) const -> Object*;
   // Syntax that parses (it is part of v1) but that the Expr IR cannot represent yet.
   // Nothing in the core language is left in this state; it is only used for the
   // remaining unspecified corners (see the callers).
-  [[noreturn]] static void Unsupported(antlr4::ParserRuleContext* ctx, const std::string& what);
+  [[noreturn]] void Unsupported(const syntax::Node* where, const std::string& what) const;
 
-  auto Build(antlr4::tree::ParseTree* tree) -> Expr*;
-  auto BuildSeq(antlr4::tree::ParseTree* tree) -> SeqExpr*;
-  auto BuildBlock(antlr4::ParserRuleContext* ctx, const std::vector<KuraParser::StatementContext*>& statements,
-                  KuraParser::ExpressionContext* result) -> SeqExpr*;
-  auto BuildStatement(KuraParser::StatementContext* ctx) -> Expr*;
-  auto BuildBinding(const std::vector<KuraParser::DirectiveContext*>& directives, KuraParser::LetBindingContext* let,
-                    KuraParser::RedefinitionContext* redef) -> StoreLocalExpr*;
-  auto BuildDirectives(const std::vector<KuraParser::DirectiveContext*>& directives) -> DirectiveList;
-  auto BuildType(KuraParser::TypeExprContext* ctx) -> TypeExpr*;
-  auto BuildTypeMember(KuraParser::TypeMemberContext* ctx) -> TypeExpr*;
-  auto BuildTypeDecl(KuraParser::TypeDeclContext* ctx, const std::vector<KuraParser::DirectiveContext*>& directives)
-      -> TypeDecl*;
-  auto BuildUseDecl(KuraParser::UseDeclContext* ctx, const std::vector<KuraParser::DirectiveContext*>& directives)
-      -> UseDecl*;
-  auto BuildCSignature(KuraParser::ExternDeclContext* ctx, const std::string& name) -> CSignature*;
-  auto ToCType(antlr4::ParserRuleContext* where, TypeExpr* type, const bool is_result, const std::string& what)
-      -> CType;
-  auto ResolveImport(antlr4::ParserRuleContext* ctx, const std::string& alias, const std::string& member) -> Expr*;
-  auto BuildUnit(KuraParser::UnitLiteralContext* ctx, const bool negate) -> Object*;
-  auto BuildCall(antlr4::ParserRuleContext* ctx, Expr* target, ExprList args) -> Expr*;
-  auto BuildPipeTarget(KuraParser::PipeTargetContext* ctx, Expr* lhs) -> Expr*;
-  auto BuildPattern(KuraParser::PatternContext* ctx) -> PatternExpr*;
-  auto BuildLiteralPattern(KuraParser::LiteralPatternContext* ctx) -> PatternExpr*;
-  auto BuildArgs(KuraParser::ArgumentListContext* ctx) -> ExprList;
-  auto LoadName(antlr4::ParserRuleContext* ctx, const std::string& name) -> Expr*;
+  auto Build(const syntax::Node* node) -> Expr*;
+  auto BuildSeq(const syntax::Node* node) -> SeqExpr*;
+  auto BuildBlock(const syntax::Block* block) -> SeqExpr*;
+  auto BuildBinding(const syntax::Binding* binding) -> StoreLocalExpr*;
+  auto BuildDirectives(const std::vector<syntax::Node*>& directives) -> DirectiveList;
+  auto BuildType(const syntax::Node* node) -> TypeExpr*;
+  auto BuildTypeDecl(const syntax::TypeDecl* decl) -> TypeDecl*;
+  auto BuildUseDecl(const syntax::UseDecl* decl) -> UseDecl*;
+  auto BuildCSignature(const syntax::ExternDecl* decl, const std::string& name) -> CSignature*;
+  auto ToCType(const syntax::Node* where, TypeExpr* type, const bool is_result, const std::string& what) -> CType;
+  auto ResolveImport(const syntax::Node* where, const std::string& alias, const std::string& member) -> Expr*;
+  auto BuildUnit(const syntax::UnitLit* unit, const bool negate) const -> Object*;
+  auto BuildCall(Expr* target, ExprList args) -> Expr*;
+  auto BuildPipe(const syntax::Pipe* pipe) -> Expr*;
+  auto BuildPattern(const syntax::Node* node) -> PatternExpr*;
+  auto BuildLiteralPattern(const syntax::LiteralPattern* pattern) -> PatternExpr*;
+  auto BuildArgs(const std::vector<syntax::Node*>& args) -> ExprList;
+  auto BuildMember(const syntax::Member* member) -> Expr*;
+  auto BuildCallExpr(const syntax::Call* call) -> Expr*;
+  auto BuildMatch(const syntax::MatchExpr* match) -> Expr*;
+  auto BuildFor(const syntax::ForExpr* loop) -> Expr*;
+  auto BuildIf(const syntax::IfExpr* node) -> Expr*;
+  auto BuildLambda(const syntax::Lambda* lambda) -> Expr*;
+  auto BuildRecord(const syntax::RecordLit* record) -> Expr*;
+  auto BuildUi(const syntax::UiElement* element) -> Expr*;
+  auto BuildUiChildren(NodeExpr* node, const syntax::UiElement* element) -> void;
+  auto BuildBinary(const syntax::Binary* binary) -> Expr*;
+  auto LoadName(const syntax::Node* where, const std::string& name) -> Expr*;
   auto ToSeq(Expr* expr) -> SeqExpr*;
 
   // `let x = ...` / `x = ...`. Redefinition inside the same block reuses the
   // local; redefinition from a nested block shadows it for that block only.
-  auto DeclareLocal(antlr4::ParserRuleContext* ctx, const std::string& name) -> LocalVariable*;
-  auto CreateLocal(antlr4::ParserRuleContext* ctx, const std::string& name) -> LocalVariable*;
+  auto DeclareLocal(const syntax::Span& where, const std::string& name) -> LocalVariable*;
+  auto CreateLocal(const syntax::Span& where, const std::string& name) -> LocalVariable*;
+
+  // The text of a node, as it was written.
+  auto TextOf(const syntax::Node* node) const -> std::string {
+    return std::string(tree_.GetText(node));
+  }
 
   inline auto Literal(Object* rhs) -> Expr* {
     return LiteralExpr::New(rhs);
   }
 
+  auto BuildModule() -> Module*;
+
  public:
-  explicit ExprBuilder(ModuleBuilder* owner) :
-    KuraParserBaseVisitor(),
-    owner_(owner) {}
-  ~ExprBuilder() override = default;
+  ExprBuilder(ModuleBuilder* owner, const syntax::SyntaxTree& tree) :
+    owner_(owner),
+    tree_(tree) {}
+  ~ExprBuilder() = default;
 
   auto GetOwner() const -> ModuleBuilder* {
     return owner_;
@@ -189,74 +205,10 @@ class ExprBuilder : public KuraParserBaseVisitor {
     return GetOwner()->GetScope();
   }
 
-  // ╭──────────────╮
-  // │ Declarations │
-  // ╰──────────────╯
-  auto visitSource(KuraParser::SourceContext* ctx) -> std::any override;
-  auto visitFnDecl(KuraParser::FnDeclContext* ctx) -> std::any override;
-
-  // ╭─────────────╮
-  // │ Expressions │
-  // ╰─────────────╯
-  auto visitExpression(KuraParser::ExpressionContext* ctx) -> std::any override;
-  auto visitPropertyAccess(KuraParser::PropertyAccessContext* ctx) -> std::any override;
-  auto visitCallExpr(KuraParser::CallExprContext* ctx) -> std::any override;
-  auto visitUnaryExpr(KuraParser::UnaryExprContext* ctx) -> std::any override;
-  auto visitMultiplicativeExpr(KuraParser::MultiplicativeExprContext* ctx) -> std::any override;
-  auto visitAdditiveExpr(KuraParser::AdditiveExprContext* ctx) -> std::any override;
-  auto visitComparisonExpr(KuraParser::ComparisonExprContext* ctx) -> std::any override;
-  auto visitEqualityExpr(KuraParser::EqualityExprContext* ctx) -> std::any override;
-  auto visitLogicalAndExpr(KuraParser::LogicalAndExprContext* ctx) -> std::any override;
-  auto visitLogicalOrExpr(KuraParser::LogicalOrExprContext* ctx) -> std::any override;
-  auto visitPrimaryExpr(KuraParser::PrimaryExprContext* ctx) -> std::any override;
-
-  // ╭──────────╮
-  // │ Primary  │
-  // ╰──────────╯
-  auto visitNumberLit(KuraParser::NumberLitContext* ctx) -> std::any override;
-  auto visitStringLit(KuraParser::StringLitContext* ctx) -> std::any override;
-  auto visitTrueLit(KuraParser::TrueLitContext* ctx) -> std::any override;
-  auto visitFalseLit(KuraParser::FalseLitContext* ctx) -> std::any override;
-  auto visitNoneLit(KuraParser::NoneLitContext* ctx) -> std::any override;
-  auto visitUnitLit(KuraParser::UnitLitContext* ctx) -> std::any override;
-  auto visitVarRef(KuraParser::VarRefContext* ctx) -> std::any override;
-  auto visitVariantRef(KuraParser::VariantRefContext* ctx) -> std::any override;
-  auto visitSeqLit(KuraParser::SeqLitContext* ctx) -> std::any override;
-  auto visitRecordLit(KuraParser::RecordLitContext* ctx) -> std::any override;
-  auto visitBlockLit(KuraParser::BlockLitContext* ctx) -> std::any override;
-  auto visitIfLit(KuraParser::IfLitContext* ctx) -> std::any override;
-  auto visitMatchLit(KuraParser::MatchLitContext* ctx) -> std::any override;
-  auto visitForLit(KuraParser::ForLitContext* ctx) -> std::any override;
-  auto visitLambdaLit(KuraParser::LambdaLitContext* ctx) -> std::any override;
-  auto visitUiLit(KuraParser::UiLitContext* ctx) -> std::any override;
-  auto visitParenExpr(KuraParser::ParenExprContext* ctx) -> std::any override;
-
-  auto visitRecordLiteral(KuraParser::RecordLiteralContext* ctx) -> std::any override;
-  auto visitBlockExpr(KuraParser::BlockExprContext* ctx) -> std::any override;
-  auto visitBlock(KuraParser::BlockContext* ctx) -> std::any override;
-  auto visitIfExpr(KuraParser::IfExprContext* ctx) -> std::any override;
-  auto visitMatchExpr(KuraParser::MatchExprContext* ctx) -> std::any override;
-  auto visitForExpr(KuraParser::ForExprContext* ctx) -> std::any override;
-
-  auto operator()(KuraParser::SourceContext* ctx) -> std::any {
-    return visit(ctx);
+  // Builds the whole module. Throws BuildError.
+  auto operator()() -> Module* {
+    return BuildModule();
   }
-};
-
-// Builds `#tag(args) { children }` into a NodeExpr. Directives on an element
-// are hints and are currently dropped, as the Directives page allows.
-class UIExprBuilder {
- private:
-  ExprBuilder* parent_;
-
-  auto BuildChildren(NodeExpr* node, KuraParser::UiChildrenContext* ctx) -> void;
-
- public:
-  explicit UIExprBuilder(ExprBuilder* parent) :
-    parent_(parent) {}
-  ~UIExprBuilder() = default;
-
-  auto Build(KuraParser::UiExprContext* ctx) -> Expr*;
 };
 }  // namespace kura::expr
 
