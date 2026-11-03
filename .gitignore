@@ -7,3 +7,5 @@ elmgl2/
 *.zip
 *.log
 prompt.md
+node_modules/
+.astro/
