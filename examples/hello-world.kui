@@ -14,7 +14,10 @@ fn init() => { message: "Hello World" }
 
 fn view(count: Int): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }
-  #button(fill: red){
-    #text(text)
+  #fragment{
+    #button(fill: red){
+      #text(text)
+    }
+    #button(fill: blue)
   }
 }

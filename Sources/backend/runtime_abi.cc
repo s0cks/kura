@@ -428,36 +428,12 @@ void* kura_rt_seq_concat(void* a, void* b) {
   return result;
 }
 
-void kura_rt_begin_frame(uint32_t width, uint32_t height) {
-  std::cout << "renering frame " << width << "x" << height << std::endl;
-}
-
-void kura_rt_end_frame() {
-  NOT_IMPLEMENTED;
-}
-
-void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color) {
-  const uint8_t red = (color >> 24) & 0xFF;
-  const uint8_t green = (color >> 16) & 0xFF;
-  const uint8_t blue = (color >> 8) & 0xFF;
-  const uint8_t alpha = (color) & 0xFF;
-  std::cout << "rendering filled rect " << xbits << ", " << ybits << ", " << wbits << ", " << hbits << ", "
-            << "r=" << ((uint32_t)red) << ", "
-            << "g=" << ((uint32_t)green) << ", "
-            << "b=" << ((uint32_t)blue) << ", "
-            << "a=" << ((uint32_t)alpha) << std::endl;
-}
-
 void kura_rt_draw_rect() {
   NOT_IMPLEMENTED;
 }
 
 void kura_rt_draw_text(void* a) {
   std::cout << "rendering text: " << static_cast<kura::String*>(a)->GetValue() << std::endl;
-}
-
-void kura_rt_check_renderer() {
-  NOT_IMPLEMENTED;
 }
 
 int64_t kura_rt_len(void* object) {

@@ -24,6 +24,21 @@ cmake --preset=clang-debug .
 cmake --build build --target all
 ```
 
+### Building against LLVM 20
+
+Kura builds with LLVM 20 as well as LLVM 22 (the code that differs between them is guarded on
+`LLVM_VERSION_MAJOR`). The `clang-llvm20-debug` preset looks for LLVM 20 where Debian and Ubuntu
+(`/usr/lib/llvm-20`) and Homebrew (`llvm@20`) install it, and builds in `build-llvm20`, so it
+doesn't disturb a build against another LLVM:
+
+```sh
+cmake --preset=clang-llvm20-debug .
+cmake --build build-llvm20 --target all
+```
+
+If your LLVM 20 is somewhere else, add `-DLLVM_DIR=<prefix>/lib/cmake/llvm` and
+`-DClang_DIR=<prefix>/lib/cmake/clang`. To pin another version, set `-DKURA_LLVM_VERSION=<major>`.
+
 ## Building the Debugger
 
 Kura comes with a "debugger" - a standalone executable that runs a simple

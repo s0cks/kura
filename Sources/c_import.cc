@@ -3,17 +3,22 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Attr.h>
 #include <clang/AST/Decl.h>
-#include <clang/AST/NestedNameSpecifierBase.h>
 #include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
-#include <clang/AST/TypeBase.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Lex/MacroInfo.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstdlib>
+#include <llvm/Config/llvm-config.h>
 #include <optional>
+
+#if LLVM_VERSION_MAJOR >= 22
+// clang 22 split these out of Type.h and NestedNameSpecifier.h
+#include <clang/AST/NestedNameSpecifierBase.h>
+#include <clang/AST/TypeBase.h>
+#endif  // LLVM_VERSION_MAJOR >= 22
 
 namespace kura {
 auto CImportConfig::Get() -> CImportConfig& {
@@ -22,6 +27,25 @@ auto CImportConfig::Get() -> CImportConfig& {
 }
 
 namespace {
+// The type factories changed in clang 22: they take the elaborated keyword and the qualifier as
+// arguments (neither is ever written here, so they're always `None` and empty). These are the only
+// places the two versions disagree, so the rest of the file doesn't have to know.
+auto TypedefTypeOf(clang::ASTContext& ctx, const clang::TypedefNameDecl* decl) -> clang::QualType {
+#if LLVM_VERSION_MAJOR >= 22
+  return ctx.getTypedefType(clang::ElaboratedTypeKeyword::None, clang::NestedNameSpecifier{}, decl);
+#else
+  return ctx.getTypedefType(decl);
+#endif  // LLVM_VERSION_MAJOR >= 22
+}
+
+auto RecordTypeOf(clang::ASTContext& ctx, const clang::RecordDecl* decl) -> clang::QualType {
+#if LLVM_VERSION_MAJOR >= 22
+  return ctx.getTypeDeclType(clang::ElaboratedTypeKeyword::None, std::nullopt, decl);
+#else
+  return ctx.getTypeDeclType(decl);
+#endif  // LLVM_VERSION_MAJOR >= 22
+}
+
 #ifndef KURA_CLANG_RESOURCE_DIR
 #define KURA_CLANG_RESOURCE_DIR ""
 #endif
@@ -368,8 +392,7 @@ auto CHeader::Load(const std::string& header, std::string* error) -> std::shared
       if (underlying.getCanonicalType()->isRecordType()) {
         const auto record = underlying.getCanonicalType()->getAs<clang::RecordType>()->getDecl();
         if (record->getDefinition()) {
-          const auto converted = importer.Convert(
-              ctx.getTypedefType(clang::ElaboratedTypeKeyword::None, clang::NestedNameSpecifier{}, alias), true);
+          const auto converted = importer.Convert(TypedefTypeOf(ctx, alias), true);
           if (converted.type)
             type.type = *converted.type;
           else
@@ -395,8 +418,7 @@ auto CHeader::Load(const std::string& header, std::string* error) -> std::shared
         continue;
       Type type{};
       if (record->getDefinition()) {
-        const auto converted =
-            importer.Convert(ctx.getTypeDeclType(clang::ElaboratedTypeKeyword::None, std::nullopt, record), true);
+        const auto converted = importer.Convert(RecordTypeOf(ctx, record), true);
         if (converted.type)
           type.type = *converted.type;
         else

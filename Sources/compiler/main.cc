@@ -26,6 +26,7 @@
 #include "backend/ir_printer.h"
 #include "backend/jit.h"
 #include "backend/llvm_codegen.h"
+#include "backend/program.h"
 #include "backend/purity_analysis.h"
 #include "backend/runtime_abi.h"
 #include "backend/type_analysis.h"
@@ -35,6 +36,9 @@
 #include "frontend/parser.h"
 #include "kura.h"
 #include "module.h"
+#ifdef KURA_HAS_HEADLESS_RENDERER
+#include "renderer/renderer_headless.h"
+#endif  // KURA_HAS_HEADLESS_RENDERER
 
 using namespace kura;
 
@@ -171,132 +175,6 @@ auto ParseOptions(int argc, char** argv, Options* options) -> bool {
   return true;
 }
 
-// `12` is an Int, `1.5` a Float, `true`/`false` a Bool, `none` is None, `10px`
-// a Px, and anything else is a String.
-auto ParseArgument(const std::string& text) -> rt::KuraValue {
-  using rt::KuraValue;
-  const auto bits_of = [](const double value) {
-    uint64_t bits;
-    std::memcpy(&bits, &value, sizeof(bits));
-    return bits;
-  };
-  if (text == "true" || text == "false")
-    return {rt::kTagBool, text == "true" ? 1ULL : 0ULL};
-
-  if (text == "none")
-    return {rt::kTagNone, 0};
-
-  try {
-    size_t used = 0;
-    const auto value = std::stoll(text, &used);
-    if (used == text.size())
-      return {rt::kTagInt, static_cast<uint64_t>(value)};
-
-  } catch (...) {}
-
-  try {
-    size_t used = 0;
-    const auto value = std::stod(text, &used);
-    if (used == text.size())
-      return {rt::kTagFloat, bits_of(value)};
-
-    const auto unit = text.substr(used);
-    if (unit == "px")
-      return {rt::kTagPx, bits_of(value)};
-
-    if (unit == "%")
-      return {rt::kTagPct, bits_of(value)};
-
-    if (unit == "fr")
-      return {rt::kTagFr, bits_of(value)};
-  } catch (...) {}
-
-  return rt::MakeString(text);
-}
-// The command line can only build scalars, so the arguments of a call from it
-// are checked against the function's signature: handing the code a value of the
-// wrong type is undefined behaviour, not an error it can report.
-auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name,
-                    const std::vector<rt::KuraValue>& args, std::string* error) -> bool {
-  FlowGraph* graph = nullptr;
-  for (const auto function : module->functions) {
-    if (std::string(function->GetName()->GetData()) == name)
-      graph = graphs->GetGraphFor(function);
-  }
-
-  if (!graph || !graph->GetReturnType()) {
-    *error = "there is no function `" + name + "`";
-    return false;
-  }
-
-  const auto& params = graph->GetParameterTypes();
-  if (params.size() != args.size()) {
-    *error = "`" + name + "` takes " + std::to_string(params.size()) + " argument(s) but " +
-             std::to_string(args.size()) + " were given";
-    return false;
-  }
-
-  for (size_t idx = 0; idx < args.size(); idx++) {
-    const auto type = params[idx];
-    const auto tag = args[idx].tag;
-    bool ok = false;
-    for (const auto alt : type->GetAlternatives()) {
-      switch (alt->GetKind()) {
-        case CompileType::kAny:
-          ok = true;
-          break;
-
-        case CompileType::kNumber:
-          ok |= tag == rt::kTagInt || tag == rt::kTagFloat;
-          break;
-
-        case CompileType::kInt:
-          ok |= tag == rt::kTagInt;
-          break;
-
-        case CompileType::kFloat:
-          ok |= tag == rt::kTagFloat;
-          break;
-
-        case CompileType::kBool:
-          ok |= tag == rt::kTagBool;
-          break;
-
-        case CompileType::kNone:
-          ok |= tag == rt::kTagNone;
-          break;
-
-        case CompileType::kString:
-          ok |= tag == rt::kTagString;
-          break;
-
-        case CompileType::kPx:
-          ok |= tag == rt::kTagPx;
-          break;
-
-        case CompileType::kPct:
-          ok |= tag == rt::kTagPct;
-          break;
-
-        case CompileType::kFr:
-          ok |= tag == rt::kTagFr;
-          break;
-
-        default:
-          break;
-      }
-    }
-
-    if (!ok) {
-      *error = "argument " + std::to_string(idx + 1) + " of `" + name + "` is " + rt::Format(args[idx]) +
-               ", which isn't a " + type->ToString() +
-               " (the command line can only pass numbers, units, bools, none and strings)";
-      return false;
-    }
-  }
-
-  return true;
-}
 }  // namespace
 
 auto main(int argc, char** argv) -> int {
@@ -446,6 +324,13 @@ auto main(int argc, char** argv) -> int {
     return EXIT_FAILURE;
   }
 
+#ifdef KURA_HAS_HEADLESS_RENDERER
+  // `--run` has no window: a view draws into a renderer that only records what it's asked to draw.
+  renderer::HeadlessRenderer headless(renderer::HeadlessOptions{.rasterize = false});
+  auto headless_abi = headless.Abi();
+  kura_rt_set_renderer(&headless_abi);
+#endif  // KURA_HAS_HEADLESS_RENDERER
+
   const auto exec_start = std::chrono::high_resolution_clock::now();
   rt::KuraValue result{};
   if (!jit->Call(options.function, args, &result, &error)) {
@@ -454,6 +339,12 @@ auto main(int argc, char** argv) -> int {
   }
   const auto exec_end = std::chrono::high_resolution_clock::now();
   const auto exec_dur = std::chrono::duration_cast<std::chrono::microseconds>((exec_end - exec_start));
+
+#ifdef KURA_HAS_HEADLESS_RENDERER
+  if (headless.GetFrameCount() > 0)
+    std::cout << "rendered " << headless.GetFrameCount() << " frame(s), " << headless.GetCommands().size()
+              << " draw command(s) in the last one" << std::endl;
+#endif  // KURA_HAS_HEADLESS_RENDERER
 
   if (result.tag != rt::kTagInvalid)
     std::cout << "=> " << rt::Format(result) << "  (" << exec_dur.count() << "us)" << std::endl;

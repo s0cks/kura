@@ -307,7 +307,7 @@ class Color : public TemplateObject<kColorType> {
  public:
   static auto Parse(const std::string rhs) -> Color*;
 
-  static inline auto New(const uint8_t red, const uint8_t blue, const uint8_t green, const uint8_t alpha = 255)
+  static inline auto New(const uint8_t red, const uint8_t green, const uint8_t blue, const uint8_t alpha = 255)
       -> Color* {
     return new Color(red, blue, green, alpha);
   }

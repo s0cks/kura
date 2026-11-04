@@ -5,6 +5,13 @@
 #include "object.h"
 
 namespace kura {
+namespace {
+constexpr double kButtonWidth = 240.0;
+constexpr double kButtonHeight = 80.0;
+constexpr double kButtonX = (1024.0 - kButtonWidth) / 2.0;
+constexpr double kButtonY = (1024.0 - kButtonHeight) / 2.0;
+}  // namespace
+
 auto DomLowering::Fail(const std::string& message) -> bool {
   host_->Fail(message);
   return false;
@@ -47,10 +54,12 @@ auto DomLowering::VisitButton(dom::Node* node) -> bool {
   if (!ResolveProperties(node, &resolved))
     return false;
 
-  Value* x = host_->Bind(ConstantInstr::New(Int::New(1)));
-  Value* y = host_->Bind(ConstantInstr::New(Int::New(2)));
-  Value* w = host_->Bind(ConstantInstr::New(Int::New(3)));
-  Value* h = host_->Bind(ConstantInstr::New(Int::New(4)));
+  // TODO: there's no layout yet, so every button is the same rect: centered in the 1024x1024 frame
+  // that BuildViewBody begins.
+  Value* x = host_->Bind(ConstantInstr::New(Px::New(kButtonX)));
+  Value* y = host_->Bind(ConstantInstr::New(Px::New(kButtonY)));
+  Value* w = host_->Bind(ConstantInstr::New(Px::New(kButtonWidth)));
+  Value* h = host_->Bind(ConstantInstr::New(Px::New(kButtonHeight)));
   Value* color = ResolvePropertyByName(node, "fill", resolved);
   if (!color)
     color = host_->Bind(ConstantInstr::New(Int::New(0)));

@@ -1,138 +1,53 @@
 #ifndef KURA_RENDERER_GL_H
 #define KURA_RENDERER_GL_H
 
-#ifndef KURA_RENDERER_H
-#error "Please include <renderer/renderer.h> instead."
-#endif  // KURA_RENDERER_H
+// The OpenGL renderer: a KuraRenderer (see renderer_abi.h) that draws with OpenGL 3.3 core.
+//
+// It doesn't create a window or a context. The host does, makes the context
+// current on the calling thread, and then creates the renderer. Every call
+// through the ops table (and `destroy`) must be made on a thread where that
+// context is current. The renderer loads GL through libepoxy, so the host
+// doesn't need to hand it a loader.
+//
+// A frame draws into whatever framebuffer is bound when `begin_frame` is
+// called (the window's, or an FBO the host bound), with (0, 0) at the top-left
+// and one unit per pixel. The renderer saves the GL state it changes in
+// `begin_frame` and restores it in `end_frame`, so it can draw an overlay in
+// the middle of a host's own rendering. Between the two the host shouldn't
+// touch GL state that affects drawing.
+//
+// What's drawn today: fill_rect, stroke_rect, draw_line, push_clip and
+// pop_clip. `draw_text` checks its arguments and draws nothing, and
+// `measure_text` uses the same fixed-width model as the headless renderer, until
+// text rendering lands.
 
-#ifdef KURA_RENDER_TARGET_OPENGL
+#include <stdint.h>
 
-#include <epoxy/gl.h>
-#include <glm/glm.hpp>
-#include <memory>
+#include "renderer/renderer_abi.h"
 
-#include "renderer/batch_gl.h"
-#include "renderer/color.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-namespace kura {
-class Renderer;
-class RenderContext {
-  friend class Renderer;
-  friend class RenderScope;
+typedef struct KuraGlOptions {
+  // sizeof(KuraGlOptions). Must be set.
+  uint32_t struct_size;
+  // Nonzero: `begin_frame` clears the color buffer to `clear` first. Zero: the
+  // frame is drawn over whatever is already there (an overlay on a game).
+  uint32_t clear_on_begin;
+  KuraColor clear;
+} KuraGlOptions;
 
- private:
-  Renderer* owner_;
-  Color color_;
-  std::unique_ptr<TriangleBatch> tris_;
-  std::unique_ptr<LineBatch> lines_;
+// Creates an OpenGL renderer that owns itself: `renderer->ops->destroy` frees
+// it. `options` may be NULL, which clears to opaque black on every frame.
+//
+// Returns KURA_RENDERER_ERR_INVALID_ARG if `renderer` is NULL, `options` is
+// malformed, or there is no OpenGL 3.3+ context current on this thread, and
+// KURA_RENDERER_ERR_OUT_OF_RESOURCES if the shaders or buffers can't be made.
+KuraRendererStatus kura_gl_renderer_create(const KuraGlOptions* options, KuraRenderer* renderer);
 
-  inline auto GetTriangles() const -> const std::unique_ptr<TriangleBatch>& {
-    return tris_;
-  }
-
-  inline auto GetLines() const -> const std::unique_ptr<LineBatch>& {
-    return lines_;
-  }
-
-  void Flush();
-
- public:
-  explicit RenderContext(Renderer* owner);
-  ~RenderContext() = default;
-
-  auto GetOwner() const -> Renderer* {
-    return owner_;
-  }
-
-  void SetColor(const Color rhs) {
-    color_ = std::move(rhs);
-  }
-
-  inline void SetColor(const glm::vec3 rhs) {
-    return SetColor(Color(std::move(rhs), 1.0f));
-  }
-
-  inline void SetColor(const float r, const float g, const float b) {
-    return SetColor(glm::vec3(r, g, b));
-  }
-
-  auto GetColor() const -> const Color& {
-    return color_;
-  }
-
-  void ClipRect(const glm::vec2 pos, const glm::vec2 size);
-  void ClipReset();
-
-  void DrawRect(const glm::vec2 pos, const glm::vec2 size);
-  void DrawLine(const glm::vec2 start, const glm::vec2 end);
-
-  void FillRect(const glm::vec2 pos, const glm::vec2 size);
-};
-
-class Shader {
- public:
-  using Handle = GLuint;
-
-  enum Kind : GLenum {
-    kFragment = GL_FRAGMENT_SHADER,
-    kVertex = GL_VERTEX_SHADER,
-  };
-
- private:
-  Handle handle_;
-
- public:
-  Shader(const Kind kind, const std::string_view source);
-  ~Shader();
-
-  auto GetHandle() const -> Handle {
-    return handle_;
-  }
-
-  operator Handle() const {
-    return handle_;
-  }
-};
-
-class Renderer {
-  friend class Debugger;
-
- private:
-  glm::vec2 resolution_;
-  GLuint program_;
-  GLint loc_res_;
-  std::unique_ptr<RenderContext> ctx_;
-
- public:
-  explicit Renderer(const glm::vec2 resolution);
-  ~Renderer();
-
-  auto GetProgram() const -> GLuint {
-    return program_;
-  }
-
-  auto GetResolutionLoc() const -> GLint {
-    return loc_res_;
-  }
-
-  auto GetResolution() const -> const glm::vec2& {
-    return resolution_;
-  }
-
-  auto GetContext() const -> const std::unique_ptr<RenderContext>& {
-    return ctx_;
-  }
-
- private:
-  static void SetRenderer(Renderer* rhs);
-
- public:
-  static void Init();
-  static void DeInit();
-  static auto Get() -> Renderer*;
-};
-}  // namespace kura
-
-#endif  // KURA_RENDER_TARGET_OPENGL
+#ifdef __cplusplus
+}  // extern "C"
+#endif
 
 #endif  // KURA_RENDERER_GL_H

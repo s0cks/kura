@@ -50,6 +50,27 @@
       "inherits": [
         "base-clang"
       ]
+    },
+    {
+      "name": "clang-llvm20-debug",
+      "displayName": "Debug (Clang, LLVM 20)",
+      "binaryDir": "${sourceDir}/build-llvm20",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": {
+          "value": "Debug",
+          "type": "STRING"
+        },
+        "KURA_LLVM_VERSION": {
+          "value": "20",
+          "type": "STRING"
+        }
+      },
+      "environment": {
+        "BUILD_ENVIRONMENT": "dev"
+      },
+      "inherits": [
+        "base-clang"
+      ]
     }
   ],
   "buildPresets": [
@@ -57,6 +78,11 @@
       "name": "clang-debug",
       "displayName": "Debug (Clang)",
       "configurePreset": "clang-debug"
+    },
+    {
+      "name": "clang-llvm20-debug",
+      "displayName": "Debug (Clang, LLVM 20)",
+      "configurePreset": "clang-llvm20-debug"
     }
   ]
 }

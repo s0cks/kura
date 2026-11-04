@@ -533,11 +533,23 @@ class Generator {
     CallRt("kura_rt_draw_rect", void_ty_, {});
   }
 
+  // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
+  auto CoordinateBits(Value* value) -> llvm::Value* {
+    auto v = Val(value);
+    if (v->getType()->isIntegerTy(64)) {
+      v = b_.CreateSIToFP(v, f64_);
+    } else if (!v->getType()->isDoubleTy()) {
+      Fail("internal error: a rect coordinate must be a number");
+      return b_.getInt64(0);
+    }
+    return b_.CreateBitCast(v, i64_);
+  }
+
   void EmitFillRect(FillRectInstr* draw) {
-    llvm::Value* x = Val(draw->GetX());
-    llvm::Value* y = Val(draw->GetY());
-    llvm::Value* w = Val(draw->GetWidth());
-    llvm::Value* h = Val(draw->GetHeight());
+    llvm::Value* x = CoordinateBits(draw->GetX());
+    llvm::Value* y = CoordinateBits(draw->GetY());
+    llvm::Value* w = CoordinateBits(draw->GetWidth());
+    llvm::Value* h = CoordinateBits(draw->GetHeight());
     llvm::Value* c = Val(draw->GetColor());
     CallRt("kura_rt_fill_rect", void_ty_, {x, y, w, h, c});
   }

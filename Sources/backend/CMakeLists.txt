@@ -12,8 +12,10 @@ target_sources(kura-compiler
          ir_printer.cc
          jit.cc
          llvm_codegen.cc
+         program.cc
          purity_analysis.cc
          runtime_abi.cc
+         runtime_renderer.cc
          type_analysis.cc
          node_visitor.cc
          value_visitor.cc)

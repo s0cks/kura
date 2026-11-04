@@ -5,6 +5,8 @@
 #include <string>
 #include <string_view>
 
+#include "renderer/renderer_abi.h"
+
 namespace kura::rt {
 struct KuraValue {
   uint64_t tag;
@@ -118,10 +120,27 @@ void* kura_rt_seq_concat(void* a, void* b);
 int64_t kura_rt_len(void* object);
 void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bits);
 
+// ── rendering ──────────────────────────────────────────────────────────────
+// The draw calls compiled code makes. They forward to the renderer the host gave this thread (see
+// kura_rt_set_renderer), so the runtime knows nothing about which renderer that is.
+//
+// A draw call's arguments are what compiled code has: coordinates are the bit patterns of f64s,
+// and the color is a packed RGBA8 (0xRRGGBBAA). The status the renderer returns is kept, and
+// `kura_rt_check_renderer` panics if the last draw call failed (debug builds emit a call to it
+// after every draw call).
 void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
 void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color);
+
+// Called by the host, not by compiled code. Sets the renderer this thread draws with; the host
+// creates it, owns it and destroys it, and the runtime keeps only a copy of the handle. The
+// renderer is thread-local: a thread that draws has to set its own. A NULL `renderer` clears it.
+// Returns KURA_RENDERER_ERR_INVALID_ARG, and leaves the current renderer alone, if the ops
+// table isn't one this runtime can use.
+KuraRendererStatus kura_rt_set_renderer(const KuraRenderer* renderer);
+// The renderer set on this thread, or NULL.
+const KuraRenderer* kura_rt_get_renderer();
 void kura_rt_draw_rect();
 void kura_rt_draw_text(void* text);
 

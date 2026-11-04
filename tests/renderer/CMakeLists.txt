@@ -44,3 +44,38 @@ if(TARGET kura-renderer-image)
   gtest_discover_tests(kura-renderer-image-tests
     DISCOVERY_MODE PRE_TEST)
 endif()
+
+add_executable(kura-runtime-renderer-tests
+  test_runtime_renderer.cc)
+target_link_libraries(kura-runtime-renderer-tests
+  PRIVATE kura-compiler
+          kura-renderer-headless
+          GTest::gtest_main)
+gtest_discover_tests(kura-runtime-renderer-tests
+  DISCOVERY_MODE PRE_TEST)
+
+if(TARGET kura-renderer-gl)
+  pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
+  add_executable(kura-renderer-gl-tests
+    test_gl.cc)
+  target_link_libraries(kura-renderer-gl-tests
+    PRIVATE kura-renderer-conformance
+            kura-renderer-gl
+            PkgConfig::EGL
+            GTest::gtest_main)
+  gtest_discover_tests(kura-renderer-gl-tests
+    DISCOVERY_MODE PRE_TEST)
+
+  # a Kura program, from source to pixels
+  add_executable(kura-gl-program-tests
+    test_gl_program.cc)
+  target_compile_definitions(kura-gl-program-tests
+    PRIVATE KURA_EXAMPLES_DIR="${PROJECT_SOURCE_DIR}/examples")
+  target_link_libraries(kura-gl-program-tests
+    PRIVATE kura-compiler
+            kura-renderer-gl
+            PkgConfig::EGL
+            GTest::gtest_main)
+  gtest_discover_tests(kura-gl-program-tests
+    DISCOVERY_MODE PRE_TEST)
+endif()
