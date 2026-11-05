@@ -1,0 +1,7 @@
+// args: 1
+// 200 + 100 in 150: shrinking is weighted by size, so 100 and 50.
+fn view(n: Int): Node =>
+  #block(width: 150px, height: 30px, align: "start") {
+    #button(width: 200px, height: 10px, fill: red)
+    #button(width: 100px, height: 10px, fill: blue)
+  }

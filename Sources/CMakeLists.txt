@@ -34,8 +34,10 @@ target_link_libraries(kura-compiler
          PkgConfig::XXHASH
          glm::glm
          kura-syntax
+         kura-layout
 )
 
+add_subdirectory(layout)
 add_subdirectory(heap)
 add_subdirectory(dom)
 add_subdirectory(backend)

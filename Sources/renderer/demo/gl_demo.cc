@@ -102,6 +102,7 @@ int main(const int argc, char** argv) {
     glfwTerminate();
     return EXIT_FAILURE;
   }
+
   // On a high-DPI display the framebuffer is bigger than the window, and the renderer would draw the
   // 1024x1024 frame into one corner of it. The frame is a fixed size, so shrink the window to match.
   int fb_width = 0;
@@ -137,12 +138,16 @@ int main(const int argc, char** argv) {
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
 
+    const auto call_start = std::chrono::high_resolution_clock::now();
     kura::rt::KuraValue result{};
     if (!program->Call(options.function, args, &result, &error)) {
       std::fprintf(stderr, "error3: %s\n", error.c_str());
       exit_code = EXIT_FAILURE;
       break;
     }
+    const auto call_end = std::chrono::high_resolution_clock::now();
+    const auto call_dur = std::chrono::duration_cast<std::chrono::microseconds>((call_end - call_start));
+    std::cout << "call finished in " << call_dur.count() << "us" << std::endl;
 
     glfwSwapBuffers(window);
     frame++;

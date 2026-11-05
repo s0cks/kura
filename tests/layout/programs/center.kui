@@ -1,0 +1,5 @@
+// args: 1
+fn view(n: Int): Node =>
+  #block(direction: "column", justify: "center", align: "center", width: 200px, height: 100px) {
+    #button(width: 50px, height: 20px, fill: red)
+  }

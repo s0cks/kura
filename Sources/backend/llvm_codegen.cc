@@ -520,9 +520,58 @@ class Generator {
   }
 
   void EmitBeginFrame(BeginFrameInstr* draw) {
-    llvm::Value* width = b_.getInt32(draw->GetWidth());
-    llvm::Value* height = b_.getInt32(draw->GetHeight());
+    llvm::Value* width = nullptr;
+    llvm::Value* height = nullptr;
+    if (draw->UsesViewport()) {
+      width = CallRt("kura_rt_viewport_width", b_.getInt32Ty(), {});
+      height = CallRt("kura_rt_viewport_height", b_.getInt32Ty(), {});
+    } else {
+      width = b_.getInt32(draw->GetWidth());
+      height = b_.getInt32(draw->GetHeight());
+    }
     CallRt("kura_rt_begin_frame", void_ty_, {width, height});
+  }
+
+  // The constant table of layout nodes of a plan. It's the bytes of `kura::layout::Node`s, which the runtime
+  // copies, and its address names the plan's state at run time.
+  auto LayoutTable(LayoutPlan* plan) -> llvm::Constant* {
+    const auto name = "kura.layout." + std::to_string(plan->GetIndex());
+    if (const auto existing = module_->getNamedGlobal(name))
+      return existing;
+    const auto bytes = plan->GetBytes();
+    const auto init = llvm::ConstantDataArray::get(module_->getContext(), llvm::ArrayRef<uint8_t>(bytes));
+    const auto global = new llvm::GlobalVariable(*module_, init->getType(), true, llvm::GlobalValue::InternalLinkage,
+                                                 init, name);
+    global->setAlignment(llvm::Align(alignof(layout::Node)));
+    return global;
+  }
+
+  void EmitLayoutSetText(LayoutSetTextInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    CallRt("kura_rt_layout_set_text", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
+            As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize())});
+  }
+
+  void EmitLayoutSetProperty(LayoutSetPropertyInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    CallRt("kura_rt_layout_set", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
+            b_.getInt64(static_cast<uint64_t>(instr->GetProperty())), As(instr->GetValue(), CompileType::Any())});
+  }
+
+  void EmitLayoutRun(LayoutRunInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    CallRt("kura_rt_layout_run", void_ty_, {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes())});
+  }
+
+  void EmitLayoutBox(LayoutBoxInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    Define(instr,
+           CallRt("kura_rt_layout_get", f64_,
+                  {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
+                   b_.getInt64(static_cast<uint64_t>(instr->GetComponent()))}),
+           CompileType::Px());
   }
 
   void EmitEndFrame(EndFrameInstr* draw) {
@@ -664,6 +713,14 @@ class Generator {
       return EmitDrawText(d);
     if (const auto d = instr->AsBeginFrame())
       return EmitBeginFrame(d);
+    if (const auto d = instr->AsLayoutSetText())
+      return EmitLayoutSetText(d);
+    if (const auto d = instr->AsLayoutSetProperty())
+      return EmitLayoutSetProperty(d);
+    if (const auto d = instr->AsLayoutRun())
+      return EmitLayoutRun(d);
+    if (const auto d = instr->AsLayoutBox())
+      return EmitLayoutBox(d);
     if (const auto d = instr->AsEndFrame())
       return EmitEndFrame(d);
     if (const auto d = instr->AsCheckRendererStatus())

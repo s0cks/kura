@@ -1,0 +1,7 @@
+// args: 1
+// Free space is shared by grow factor: 400 split 1:3.
+fn view(n: Int): Node =>
+  #block(width: 400px, height: 100px) {
+    #button(grow: 1, fill: red)
+    #button(grow: 3, fill: blue)
+  }

@@ -65,6 +65,8 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("wrap", kContainers, kBool);
   add("grow", kBoxes, kNumbers, {}, 0);
   add("shrink", kBoxes, kNumbers, {}, 0);
+  add("basis", kBoxes, kSizes | kString, kAuto, 0);
+  add("align-self", kBoxes, kString, kAligns);
 
   add("fill", kBoxes, kColor);
   add("border-color", kBoxes, kColor);

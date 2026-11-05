@@ -1,6 +1,9 @@
 #ifndef KURA_GIR_H
 #define KURA_GIR_H
 
+#include <memory>
+
+#include "backend/layout_plan.h"
 #include "ir.h"
 
 namespace kura {
@@ -66,11 +69,21 @@ class BeginFrameInstr : public GraphicsInstr {
     return height_;
   }
 
+  // A frame as big as the viewport the host set (kura_rt_set_viewport), which is read when the frame
+  // begins. It is the frame of a view: the window can change size between two of them.
+  auto UsesViewport() const -> bool {
+    return width_ == 0 && height_ == 0;
+  }
+
   DECLARE_INSTRUCTION_TYPE(BeginFrame);
 
  public:
   static inline auto New(const uint32_t width, const uint32_t height) -> BeginFrameInstr* {
     return new BeginFrameInstr(width, height);
+  }
+
+  static inline auto New() -> BeginFrameInstr* {
+    return new BeginFrameInstr(0, 0);
   }
 };
 
@@ -368,6 +381,157 @@ class MeasureTextInstr : public GraphicsInstr {
  public:
   static inline auto New() -> MeasureTextInstr* {
     return new MeasureTextInstr();
+  }
+};
+
+// Gives a text node of a layout plan its content, which layout has to measure.
+class LayoutSetTextInstr : public TemplateGraphicsInstr<1> {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
+  double font_size_;
+
+ public:
+  LayoutSetTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* text, const double font_size) :
+    plan_(std::move(plan)),
+    node_(node),
+    font_size_(font_size) {
+    SetInputAt(0, text);
+  }
+  ~LayoutSetTextInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetText() const -> Value* {
+    return GetInputAt(0);
+  }
+
+  inline auto GetFontSize() const -> double {
+    return font_size_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutSetText);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* text,
+                         const double font_size) -> LayoutSetTextInstr* {
+    return new LayoutSetTextInstr(std::move(plan), node, text, font_size);
+  }
+};
+
+// Sets a layout property of a node to a value that is only known at run time. The value is whatever the
+// property accepts (`Px`, `Pct`, `Fr`, a number, a string, a bool): the runtime reads it by its tag.
+class LayoutSetPropertyInstr : public TemplateGraphicsInstr<1> {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
+  layout::Property property_;
+
+ public:
+  LayoutSetPropertyInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const layout::Property property,
+                         Value* value) :
+    plan_(std::move(plan)),
+    node_(node),
+    property_(property) {
+    SetInputAt(0, value);
+  }
+  ~LayoutSetPropertyInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetProperty() const -> layout::Property {
+    return property_;
+  }
+
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(0);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutSetProperty);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const layout::Property property,
+                         Value* value) -> LayoutSetPropertyInstr* {
+    return new LayoutSetPropertyInstr(std::move(plan), node, property, value);
+  }
+};
+
+// Lays a plan's tree out, if what it depends on changed since the last time.
+class LayoutRunInstr : public GraphicsInstr {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+
+ public:
+  explicit LayoutRunInstr(std::shared_ptr<LayoutPlan> plan) :
+    GraphicsInstr(),
+    plan_(std::move(plan)) {}
+  ~LayoutRunInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutRun);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan) -> LayoutRunInstr* {
+    return new LayoutRunInstr(std::move(plan));
+  }
+};
+
+// One coordinate of a node's laid out box: a Px, in the viewport's coordinates.
+class LayoutBoxInstr : public GraphicsInstr {
+ public:
+  enum Component : uint64_t {
+    kX = 0,
+    kY = 1,
+    kWidth = 2,
+    kHeight = 3,
+  };
+
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
+  Component component_;
+
+ public:
+  LayoutBoxInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const Component component) :
+    GraphicsInstr(),
+    plan_(std::move(plan)),
+    node_(node),
+    component_(component) {}
+  ~LayoutBoxInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetComponent() const -> Component {
+    return component_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutBox);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const Component component)
+      -> LayoutBoxInstr* {
+    return new LayoutBoxInstr(std::move(plan), node, component);
   }
 };
 }  // namespace kura

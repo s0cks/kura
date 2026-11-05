@@ -105,6 +105,7 @@ struct Options {
   std::string emit_header{};
   bool optimize = true;
   bool dump_dom = false;
+  bool dump_draw = false;
   bool run = false;
   std::string function{};
   std::vector<std::string> args{};
@@ -154,6 +155,9 @@ auto ParseOptions(int argc, char** argv, Options* options) -> bool {
       options->optimize = false;
     } else if (arg == "--dump-dom") {
       options->dump_dom = true;
+    } else if (arg == "--dump-draw") {
+      // with --run: print the rects the view filled
+      options->dump_draw = true;
     } else if (arg == "--run") {
       if (idx + 1 >= argc) {
         std::cerr << "--run needs a function name" << std::endl;
@@ -341,6 +345,14 @@ auto main(int argc, char** argv) -> int {
   const auto exec_dur = std::chrono::duration_cast<std::chrono::microseconds>((exec_end - exec_start));
 
 #ifdef KURA_HAS_HEADLESS_RENDERER
+  if (options.dump_draw) {
+    for (const auto& command : headless.GetCommands()) {
+      if (command.kind != renderer::Command::Kind::kFillRect)
+        continue;
+      std::cout << "fill-rect x=" << command.rect.x << " y=" << command.rect.y << " w=" << command.rect.width
+                << " h=" << command.rect.height << std::endl;
+    }
+  }
   if (headless.GetFrameCount() > 0)
     std::cout << "rendered " << headless.GetFrameCount() << " frame(s), " << headless.GetCommands().size()
               << " draw command(s) in the last one" << std::endl;

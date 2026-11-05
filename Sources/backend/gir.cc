@@ -20,8 +20,51 @@ auto CheckRendererStatusInstr::ToString() const -> std::string {
 auto BeginFrameInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "BeginFrame(";
-  ss << "width=" << GetWidth() << ", ";
-  ss << "height=" << GetHeight();
+  if (UsesViewport()) {
+    ss << "viewport";
+  } else {
+    ss << "width=" << GetWidth() << ", ";
+    ss << "height=" << GetHeight();
+  }
+  ss << ")";
+  return ss.str();
+}
+
+auto LayoutSetTextInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutSetText(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << "text=" << Name(GetText()) << ", ";
+  ss << "size=" << GetFontSize();
+  ss << ")";
+  return ss.str();
+}
+
+auto LayoutSetPropertyInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutSetProperty(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << "property=" << static_cast<uint64_t>(GetProperty()) << ", ";
+  ss << "value=" << Name(GetValue());
+  ss << ")";
+  return ss.str();
+}
+
+auto LayoutRunInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutRun(layout=" << GetPlan()->GetIndex() << ", nodes=" << GetPlan()->GetNumberOfNodes() << ")";
+  return ss.str();
+}
+
+auto LayoutBoxInstr::ToString() const -> std::string {
+  static constexpr const char* kNames[] = {"x", "y", "width", "height"};
+  std::stringstream ss{};
+  ss << "LayoutBox(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << kNames[GetComponent()];
   ss << ")";
   return ss.str();
 }

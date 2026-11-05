@@ -117,7 +117,7 @@ void FlowGraphBuilder::DumpDom(dom::Node* root) const {
 
 auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
   {
-    const auto defn = BeginFrameInstr::New(1024, 1024);
+    const auto defn = BeginFrameInstr::New();
 #ifdef KURA_DEBUG
     Emit(CheckRendererStatusInstr::New(Bind(defn)));
 #else

@@ -939,6 +939,9 @@ class Analyzer {
     if (const auto c = instr->AsConstant())
       return Set(def, ConstantType(c->GetValue()));
 
+    if (instr->IsLayoutBox())
+      return Set(def, CompileType::Px());
+
     if (const auto p = instr->AsParameter())
       return Set(def, p->GetIndex() < params.size() ? params[p->GetIndex()] : CompileType::Any());
 

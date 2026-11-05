@@ -1,0 +1,6 @@
+// args: 1
+// Padding takes 10 off each side (inner width 180); 50% of that is 90; the margin adds 5.
+fn view(n: Int): Node =>
+  #block(padding: 10px, width: 200px, height: 100px, align: "start") {
+    #button(width: 50%, height: 20px, margin: 5px, fill: red)
+  }

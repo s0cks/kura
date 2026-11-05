@@ -433,7 +433,7 @@ void kura_rt_draw_rect() {
 }
 
 void kura_rt_draw_text(void* a) {
-  std::cout << "rendering text: " << static_cast<kura::String*>(a)->GetValue() << std::endl;
+  // std::cout << "rendering text: " << static_cast<kura::String*>(a)->GetValue() << std::endl;
 }
 
 int64_t kura_rt_len(void* object) {

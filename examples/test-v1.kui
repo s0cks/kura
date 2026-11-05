@@ -55,7 +55,6 @@ fn view2(count: Number): Content =>
     #text(label)
   }
 
-
 type State = {
   message: String
 }

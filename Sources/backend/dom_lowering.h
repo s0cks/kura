@@ -1,26 +1,54 @@
 #ifndef KURA_BACKEND_DOM_LOWERING_H
 #define KURA_BACKEND_DOM_LOWERING_H
 
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "backend/ir.h"
+#include "backend/layout_plan.h"
 #include "dom/node.h"
 
 namespace kura {
 class NodeVisitor;
 
+// Lowers a DOM tree to the calls that draw it.
+//
+// It takes two passes over the tree, because where a node is drawn depends on every node's size:
+//
+//  1. Collect: in tree order, evaluate every property and bind, and tell the layout the content of each
+//     text. Nothing is drawn yet; what's to be drawn is noted down.
+//  2. Draw: lay the tree out, then emit the draws in the order noted, reading each box from the layout.
+//     Draws keep the tree's order, so a parent is painted before its children.
+//
+// A dynamic node (`for`, `if`) is rendered in the second pass, at its place in that order. It is a tree of
+// its own, laid out on its own: it doesn't take part in this tree's layout yet.
 class DomLowering : public dom::Visitor {
  private:
   using Resolved = std::unordered_map<const dom::PropertyDef*, Value*>;
 
+  struct Op {
+    dom::Node* node = nullptr;
+    Value* text = nullptr;  // a text's content
+  };
+
   NodeVisitor* host_;
+  std::shared_ptr<LayoutPlan> plan_{};
+  std::unordered_map<const dom::Node*, Resolved> resolved_{};
+  std::vector<Op> ops_{};
 
   auto ResolvePropertyByName(dom::Node* node, const std::string name, Resolved& resolved) -> Value*;
 
   auto Fail(const std::string& message) -> bool;
   void EmitRenderCall(Definition* defn);
   auto ResolveProperties(dom::Node* node, Resolved* resolved) -> bool;
+  void EmitLayoutProperties(dom::Node* node, const Resolved& resolved);
+  auto Box(dom::Node* node, int component) -> Value*;
+  auto DrawButton(dom::Node* node) -> bool;
+  auto DrawBlock(dom::Node* node) -> bool;
+  auto DrawText(const Op& op) -> bool;
+  auto LowerDynamic(dom::Node* node) -> bool;
 
  public:
   explicit DomLowering(NodeVisitor* host) :
@@ -30,13 +58,12 @@ class DomLowering : public dom::Visitor {
 
   auto VisitNode(dom::Node* node) -> bool override;
   auto VisitButton(dom::Node* node) -> bool override;
+  auto VisitBlock(dom::Node* node) -> bool override;
   auto VisitText(dom::Node* node) -> bool override;
   auto VisitDynamic(dom::Node* node) -> bool override;
   auto VisitBind(dom::Node* node) -> bool override;
 
-  inline auto Lower(dom::Node* root) -> bool {
-    return root->Accept(this);
-  }
+  auto Lower(dom::Node* root) -> bool;
 };
 }  // namespace kura
 

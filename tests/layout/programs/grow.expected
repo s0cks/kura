@@ -1,0 +1,2 @@
+fill-rect x=0 y=0 w=100 h=100
+fill-rect x=100 y=0 w=300 h=100

@@ -51,6 +51,10 @@ namespace kura {
   V(PushClip)                   \
   V(PopClip)                    \
   V(MeasureText)                \
+  V(LayoutSetText)              \
+  V(LayoutSetProperty)          \
+  V(LayoutRun)                  \
+  V(LayoutBox)                  \
   V(FillRect)                   \
   V(FillRoundRect)              \
   V(FillCircle)                 \

@@ -1,0 +1,6 @@
+// args: 2
+// A width that depends on the model is patched into the layout when the view runs.
+fn view(n: Int): Node =>
+  #block(align: "start") {
+    #button(width: if n > 1 { 200px } else { 100px }, height: 10px, fill: red)
+  }

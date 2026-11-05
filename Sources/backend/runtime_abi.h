@@ -99,7 +99,13 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_end_frame)            \
   V(kura_rt_fill_rect)            \
   V(kura_rt_draw_rect)            \
-  V(kura_rt_draw_text)
+  V(kura_rt_draw_text)            \
+  V(kura_rt_viewport_width)       \
+  V(kura_rt_viewport_height)      \
+  V(kura_rt_layout_set_text)      \
+  V(kura_rt_layout_set)           \
+  V(kura_rt_layout_run)           \
+  V(kura_rt_layout_get)
 // clang-format on
 
 extern "C" {
@@ -143,6 +149,32 @@ KuraRendererStatus kura_rt_set_renderer(const KuraRenderer* renderer);
 const KuraRenderer* kura_rt_get_renderer();
 void kura_rt_draw_rect();
 void kura_rt_draw_text(void* text);
+
+// ── viewport and layout ────────────────────────────────────────────────────
+// The size of the surface a view lays out in and draws into. The host sets it (a window's size, say)
+// and a view reads it at the start of every frame, so changing it reflows the next frame. It is
+// thread-local like the renderer, and defaults to 1024x1024.
+void kura_rt_set_viewport(uint32_t width, uint32_t height);
+uint32_t kura_rt_viewport_width();
+uint32_t kura_rt_viewport_height();
+
+// Measures text with this thread's renderer, outside of a frame. Returns 0 and sets `width` and
+// `height`, or non-zero (and sets nothing) when there is no renderer or it couldn't measure.
+int kura_rt_measure_text(const char* utf8, uint64_t length, float size, float* width, float* height);
+
+// What compiled code lays a view out with. `table` is the constant table of `count` layout nodes
+// (layout/layout.h) that the compiler emitted for one DOM tree; it also keys the layout state kept
+// for that tree on this thread, so the tree is only laid out again when something it depends on
+// changed: a text, or the viewport.
+//
+// `set_text` gives a text node its content and font size; `run` lays the tree out if it needs it;
+// `get` reads a node's box back (component 0, 1, 2, 3 is x, y, width, height).
+void kura_rt_layout_set_text(const void* table, uint64_t count, uint64_t node, void* text, double size);
+// `set` changes a node's style property (a layout::Property) to a value known only at run time.
+void kura_rt_layout_set(const void* table, uint64_t count, uint64_t node, uint64_t property, uint64_t tag,
+                        uint64_t bits);
+void kura_rt_layout_run(const void* table, uint64_t count);
+double kura_rt_layout_get(const void* table, uint64_t count, uint64_t node, uint64_t component);
 
 void* kura_rt_record_new();
 void kura_rt_record_set(void* object, uint64_t hash, const char* name, uint64_t tag, uint64_t bits);

@@ -15,6 +15,8 @@ namespace {
 thread_local KuraRenderer tl_renderer{};
 thread_local KuraRendererStatus tl_status = KURA_RENDERER_OK;
 thread_local const char* tl_op = "";
+thread_local uint32_t tl_viewport_width = 1024;
+thread_local uint32_t tl_viewport_height = 1024;
 
 auto StatusName(const KuraRendererStatus status) -> const char* {
   switch (status) {
@@ -99,6 +101,31 @@ void kura_rt_fill_rect(const uint64_t xbits, const uint64_t ybits, const uint64_
   const auto& ops = Current("kura_rt_fill_rect");
   const KuraRect rect{Coordinate(xbits), Coordinate(ybits), Coordinate(wbits), Coordinate(hbits)};
   Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, rect, UnpackColor(color)));
+}
+
+void kura_rt_set_viewport(const uint32_t width, const uint32_t height) {
+  tl_viewport_width = width;
+  tl_viewport_height = height;
+}
+
+uint32_t kura_rt_viewport_width() {
+  return tl_viewport_width;
+}
+
+uint32_t kura_rt_viewport_height() {
+  return tl_viewport_height;
+}
+
+int kura_rt_measure_text(const char* utf8, const uint64_t length, const float size, float* width, float* height) {
+  if (tl_renderer.ops == nullptr || tl_renderer.ops->measure_text == nullptr)
+    return 1;
+  KuraTextMetrics metrics{};
+  if (tl_renderer.ops->measure_text(tl_renderer.self, utf8, static_cast<size_t>(length), KuraTextStyle{size},
+                                    &metrics) != KURA_RENDERER_OK)
+    return 2;
+  *width = metrics.width;
+  *height = metrics.height;
+  return 0;
 }
 
 void kura_rt_check_renderer() {
