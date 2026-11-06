@@ -8,17 +8,27 @@
 #include <string>
 #include <variant>
 
+#include "common.h"
+#include "frontend/syntax/ast.h"
 #include "log.h"
+#include "lsp/error.h"
+#include "lsp/hover.h"
 #include "lsp/params.h"
 #include "lsp/request.h"
+#include "lsp/task/index_doc_task.h"
+#include "lsp/task/task.h"
 #include "lsp/types.h"
 
 namespace kura::lsp {
 Server::Server(uv_loop_t* loop) :
   loop_(loop) {
-  if (!loop_)
-    return;
+  KASSERT(loop_);
+  info_.name = "kura-lsp";
+  info_.version = 1;
+  caps_.textDocumentSync = kFullTextDocumentSync;
+  caps_.hoverProvider = true;
 
+  uv_os_setenv("UV_THREADPOOL_SIZE", "4");
   uv_pipe_init(loop, &stdin_, 0);
   uv_pipe_init(loop, &stdout_, 0);
   uv_pipe_open(&stdin_, 0);
@@ -123,7 +133,7 @@ void Server::Send(const std::string rhs) {
   });
 }
 
-void Server::Send(json_t* doc) {
+void Server::Send(const json_t* doc) {
   if (!doc)
     return;
 
@@ -161,9 +171,9 @@ void Server::DispatchJsonRpc(std::string_view json_msg) {
   (*handler)(req);
 }
 
-void Server::Send(Response& resp) {
+void Server::Send(const Response& resp) {
   JsonResponse json_res{};
-  ToJson(json_res, resp);
+  resp >> json_res;
   Send(json_res);
 }
 
@@ -180,16 +190,10 @@ void Server::HandleInitialized(const Request& req) {
 }
 
 void Server::HandleInitialize(const Request& req) {
-  InitializeResponse res{.info =
-                             ServerInfo{
-                                 .name = "kura-lsp",
-                                 .version = 1,
-                             },
-                         .capabilities = {
-                             .textDocumentSync = kFullTextDocumentSync,
-                             .hoverProvider = true,
-                         }};
-  return Send(req.id, res);
+  return Send(req.id, InitializeResponse{
+                          .info = info_,
+                          .capabilities = caps_,
+                      });
 }
 
 void Server::HandleExit(const Request& req) {
@@ -201,56 +205,19 @@ void Server::HandleShutdown(const Request& req) {
   log::info("shutdown");
 }
 
-struct IndexTaskContext {
-  Server* server_instance;
-  std::string uri;
-  std::string text_content;
-};
-
-void Server::OffloadCompilerTask(json_t* params) {
-  auto* context = new IndexTaskContext();
-  context->server_instance = this;
-
-  json_t* text_doc = json_object_get(params, "textDocument");
-  if (text_doc) {
-    json_t* uri_node = json_object_get(text_doc, "uri");
-    if (json_is_string(uri_node)) {
-      context->uri = json_string_value(uri_node);
-    }
-  }
-
-  json_t* content_changes = json_object_get(params, "contentChanges");
-  if (json_is_array(content_changes) && json_array_size(content_changes) > 0) {
-    json_t* first_change = json_array_get(content_changes, 0);
-    json_t* text_node = json_object_get(first_change, "text");
-    if (json_is_string(text_node)) {
-      context->text_content = json_string_value(text_node);
-    }
-  }
-
-  auto* work_req = new uv_work_t();
-  work_req->data = context;
-
-  uv_queue_work(
-      loop_, work_req,
-      [](uv_work_t* req) {
-        auto* ctx = static_cast<IndexTaskContext*>(req->data);
-      },
-      [](uv_work_t* req, int status) {
-        auto* ctx = static_cast<IndexTaskContext*>(req->data);
-        delete ctx;
-        delete req;
-      });
-}
-
 void Server::HandleDidOpen(const Request& req) {
   json_t* doc = json_object_get(req.params, "textDocument");
   if (!doc)
     return;
 
-  TextDocument textDocument(doc);
+  TextDocument textDocument{};
+  textDocument << doc;
   docs_.Update(textDocument.uri, std::move(textDocument.text));
   log::info(std::format("didOpen: {}", textDocument.uri));
+
+  IndexDocumentTask* ctx = new IndexDocumentTask();
+  ctx->doc = docs_.Get(textDocument.uri);
+  Queue(ctx);
 }
 
 void Server::HandleDidSave(const Request& req) {
@@ -258,7 +225,8 @@ void Server::HandleDidSave(const Request& req) {
   if (!doc)
     return;
 
-  TextDocument textDocument(doc);
+  TextDocument textDocument{};
+  textDocument << doc;
   log::info(std::format("didSave: {}", textDocument.uri));
 }
 
@@ -271,7 +239,8 @@ void Server::HandleDidChange(const Request& req) {
   if (!contentChanges)
     return;
 
-  TextDocument textDocument(doc);
+  TextDocument textDocument{};
+  textDocument << doc;
   log::info(std::format("didChange: {}", textDocument.uri));
 }
 
@@ -280,27 +249,35 @@ void Server::HandleDidClose(const Request& req) {
   if (!doc)
     return;
 
-  TextDocument textDocument(doc);
+  TextDocument textDocument{};
+  textDocument << doc;
   log::info(std::format("didClose: {}", textDocument.uri));
   docs_.Remove(textDocument.uri);
 }
 
 void Server::HandleHover(const Request& req) {
   TextDocumentPositionParams params{};
-  FromJson(req.params, params);
+  params << req.params;
 
-  Hover hover{
-      .range =
-          Range{
-              .start = params.position,
-              .end = params.position,
-          },
-      .contents =
-          MarkupContent{
-              .kind = MarkupContent::kPlainText,
-              .value = "Hello World",
-          },
-  };
-  return Send(req.id, hover);
+  auto* doc = docs_.Get(params.textDocument.uri);
+  if (doc) {
+    const auto node = doc->GetNodeAtPos(params.position);
+
+    if (node) {
+      std::stringstream ss{};
+      if (ToHoverInfo(ss, node))
+        return Send(req.id, HoverForRange(ss.str(), params.position, params.position, MarkupContent::kMarkdown));
+    }
+
+    return WriteError(req.id, Error{
+                                  .code = LSP_ERROR_INTERNAL_ERROR,
+                                  .message = "No node found at position",
+                              });
+  }
+
+  return WriteError(req.id, Error{
+                                .code = LSP_ERROR_PARSE,
+                                .message = "No parsed document",
+                            });
 }
 }  // namespace kura::lsp

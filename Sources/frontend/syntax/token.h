@@ -36,6 +36,7 @@ namespace kura::syntax {
   V(Plus,     "+")                    \
   V(Star,     "*")                    \
   V(Slash,    "/")                    \
+  V(Percent,  "%")                    \
   V(Pipe,     "|>")                   \
   V(Or,       "||")                   \
   V(And,      "&&")                   \

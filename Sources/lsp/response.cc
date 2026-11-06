@@ -5,42 +5,41 @@
 #include "common.h"
 
 namespace kura::lsp {
-void ToJson(json_t* doc, const InitializeResponse& res) {
+void InitializeResponse::operator>>(json_t* doc) const {
   KASSERT(doc);
 
-  json_t* info = json_object();
-  if (info) {
-    ToJson(info, res.info);
-    json_object_set_new(doc, "serverInfo", info);
+  json_t* info_node = json_object();
+  if (info_node) {
+    info >> info_node;
+    json_object_set_new(doc, "serverInfo", info_node);
   }
 
-  json_t* caps = json_object();
-  if (caps) {
-    ToJson(caps, res.capabilities);
-    json_object_set_new(doc, "capabilities", caps);
+  json_t* caps_node = json_object();
+  if (caps_node) {
+    capabilities >> caps_node;
+    json_object_set_new(doc, "capabilities", caps_node);
   }
 }
 
-void ToJson(json_t* doc, const Response& resp) {
+void Response::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_object_set_new(doc, "jsonrpc", json_string("2.0"));
-  json_object_set_new(doc, "id", json_integer(resp.id));
+  json_object_set_new(doc, "id", json_integer(id));
 
-  json_t* value = json_object();
-  if (const auto* err = std::get_if<Error>(&resp.value)) {
-    json_object_set_new(value, "code", json_integer(err->code));
-    json_object_set_new(value, "message", json_string(err->message.data()));
+  json_t* val = json_object();
+  if (const auto* err = std::get_if<Error>(&value)) {
+    (*err) >> val;
 
-    json_object_set_new(doc, "error", value);
+    json_object_set_new(doc, "error", val);
     return;
-  } else if (const auto* res = std::get_if<ResponseType>(&resp.value)) {
+  } else if (const auto* res = std::get_if<ResponseType>(&value)) {
     if (const auto* init_resp = std::get_if<InitializeResponse>(res)) {
-      ToJson(value, *init_resp);
+      (*init_resp) >> val;
     } else if (const auto* hover_resp = std::get_if<Hover>(res)) {
-      ToJson(value, *hover_resp);
+      (*hover_resp) >> val;
     }
 
-    json_object_set_new(doc, "result", value);
+    json_object_set_new(doc, "result", val);
     return;  // TODO(@s0cks): serialize
   }
 

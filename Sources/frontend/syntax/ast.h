@@ -140,9 +140,9 @@ struct Name {
   }
 };
 
-#define DEFINE_NODE(Name_)                      \
-  static constexpr Kind kKind = k##Name_;       \
-  Name_() :                                     \
+#define DEFINE_NODE(Name_)                \
+  static constexpr Kind kKind = k##Name_; \
+  Name_() :                               \
     Node(kKind) {}
 
 namespace detail {
@@ -559,7 +559,7 @@ struct Unary : Node {
 };
 
 struct Binary : Node {
-  enum Op : uint8_t { kAdd, kSub, kMul, kDiv, kLt, kLe, kGt, kGe, kEq, kNeq, kAnd, kOr };
+  enum Op : uint8_t { kAdd, kSub, kMul, kDiv, kLt, kLe, kGt, kGe, kEq, kNeq, kAnd, kOr, kMod };
   DEFINE_NODE(Binary)
   Op op = kAdd;
   Span op_span{};

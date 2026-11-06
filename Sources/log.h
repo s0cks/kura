@@ -6,6 +6,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <source_location>
 #include <string_view>
 
@@ -20,6 +21,7 @@ enum class LogLevel {
 
 class FileLogger {
  private:
+  std::mutex mutex_{};
   std::ofstream file_;
 
   constexpr std::string_view level_to_string(LogLevel level) noexcept {
@@ -51,7 +53,12 @@ class FileLogger {
     }
   }
 
+  inline auto stream() -> std::ostream& {
+    return file_;
+  }
+
   void Log(LogLevel level, const std::source_location location, const std::string_view message) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!file_.is_open())
       return;
 

@@ -10,9 +10,9 @@ namespace {
 using K = Token;
 
 const auto kExpressionStart = K::Set({
-    K::kNumber, K::kString, K::kTrue, K::kFalse, K::kNone, K::kPxLit, K::kPctLit, K::kFrLit, K::kColorLit,
-    K::kIdent, K::kUpperIdent, K::kLBrack, K::kLBrace, K::kIf, K::kMatch, K::kFor, K::kHash, K::kDirective,
-    K::kLParen, K::kMinus, K::kBang,
+    K::kNumber, K::kString,   K::kTrue,  K::kFalse,      K::kNone,   K::kPxLit,  K::kPctLit,
+    K::kFrLit,  K::kColorLit, K::kIdent, K::kUpperIdent, K::kLBrack, K::kLBrace, K::kIf,
+    K::kMatch,  K::kFor,      K::kHash,  K::kDirective,  K::kLParen, K::kMinus,  K::kBang,
 });
 
 // Where parsing of a top level item can safely start again.
@@ -185,8 +185,7 @@ class TreeBuilder {
     return diagnostics_.Error(code, span, std::move(message), std::move(label));
   }
 
-  auto Report(const DiagnosticCode code, const Span& span, std::string message, std::string label = {})
-      -> Diagnostic& {
+  auto Report(const DiagnosticCode code, const Span& span, std::string message, std::string label = {}) -> Diagnostic& {
     return diagnostics_.Error(code, span, std::move(message), std::move(label));
   }
 
@@ -198,8 +197,9 @@ class TreeBuilder {
     if (token.kind == K::kMinus && index_ > 0) {
       const auto& prev = tokens_[index_ - 1];
       if ((prev.kind == K::kIdent || prev.kind == K::kUpperIdent) && prev.span.end == token.span.begin)
-        d.WithHelp("a `-` is only part of a name when a letter, digit or `_` follows it; to subtract, put spaces "
-                   "around the `-`");
+        d.WithHelp(
+            "a `-` is only part of a name when a letter, digit or `_` follows it; to subtract, put spaces "
+            "around the `-`");
     }
   }
 
@@ -220,8 +220,9 @@ class TreeBuilder {
       auto& last = const_cast<Diagnostic&>(diagnostics_.at(diagnostics_.size() - 1));
       if (last.code == DiagnosticCode::kUnexpectedToken) {
         last.code = DiagnosticCode::kMissingClosingDelimiter;
-        const auto has_label = std::any_of(last.labels.begin(), last.labels.end(),
-                                           [&](const Label& label) { return label.span == opener; });
+        const auto has_label = std::any_of(last.labels.begin(), last.labels.end(), [&](const Label& label) {
+          return label.span == opener;
+        });
         if (has_label)
           last.labels.back().message = "this `" + Text(opener) + "` is never closed";
         else
@@ -464,11 +465,14 @@ class TreeBuilder {
   auto ParseDirective() -> Node* {
     const auto token = Next();
     auto* directive = tree_.arena_.New<Directive>(token.span);
-    directive->name = MakeName(Span(token.span.begin + 1, token.span.end), Text(Span(token.span.begin + 1, token.span.end)));
+    directive->name =
+        MakeName(Span(token.span.begin + 1, token.span.end), Text(Span(token.span.begin + 1, token.span.end)));
     if (Is(K::kLParen)) {
       const auto open = Next();
       directive->has_parens = true;
-      ParseDelimited(K::kRParen, open.span, [&] { directive->args.push_back(ParseUiArg()); });
+      ParseDelimited(K::kRParen, open.span, [&] {
+        directive->args.push_back(ParseUiArg());
+      });
     }
     directive->span = SpanFrom(token.span.begin);
     return directive;
@@ -579,7 +583,9 @@ class TreeBuilder {
     const auto begin = Here();
     const auto open = Next();
     auto* fn = New<FunctionType>(begin);
-    ParseDelimited(K::kRParen, open.span, [&] { fn->params.push_back(ParseTypeExpr()); });
+    ParseDelimited(K::kRParen, open.span, [&] {
+      fn->params.push_back(ParseTypeExpr());
+    });
     Expect(K::kFatArrow);
     fn->result = ParseTypeExpr();
     fn->span = SpanFrom(begin);
@@ -753,6 +759,9 @@ class TreeBuilder {
       case K::kSlash:
         *info = {Binary::kDiv, 6};
         return true;
+      case K::kPercent:
+        *info = {Binary::kMod, 6};
+        return true;
       default:
         return false;
     }
@@ -818,7 +827,9 @@ class TreeBuilder {
   }
 
   void ParseArguments(std::vector<Node*>& args, const Span& opener) {
-    ParseDelimited(K::kRParen, opener, [&] { args.push_back(ParseExpression()); });
+    ParseDelimited(K::kRParen, opener, [&] {
+      args.push_back(ParseExpression());
+    });
   }
 
   auto ParsePostfix() -> Node* {
@@ -903,12 +914,11 @@ class TreeBuilder {
       const auto open = Next();
       ParseArguments(node->args, open.span);
     } else {
-      ReportHere(DiagnosticCode::kPipeTargetNotCall, "the right side of `|>` must be a call, but `" +
-                                                         Text(node->callee->span) + "` has no argument list",
+      ReportHere(DiagnosticCode::kPipeTargetNotCall,
+                 "the right side of `|>` must be a call, but `" + Text(node->callee->span) + "` has no argument list",
                  "add `()` here")
           .WithLabel(pipe.span, "this pipes the value on its left into a call")
-          .WithHelp("write `|> " + Text(node->callee->span) +
-                    "()`; the value on the left becomes the first argument");
+          .WithHelp("write `|> " + Text(node->callee->span) + "()`; the value on the left becomes the first argument");
     }
     node->span = SpanFrom(begin);
     return node;
@@ -936,7 +946,9 @@ class TreeBuilder {
     const auto begin = Here();
     const auto open = Next();
     auto* lambda = New<Lambda>(begin);
-    ParseDelimited(K::kRParen, open.span, [&] { lambda->params.push_back(ParseName("a parameter name")); });
+    ParseDelimited(K::kRParen, open.span, [&] {
+      lambda->params.push_back(ParseName("a parameter name"));
+    });
     Expect(K::kFatArrow);
     lambda->body = ParseExpression();
     lambda->span = SpanFrom(begin);
@@ -947,7 +959,9 @@ class TreeBuilder {
     const auto begin = Here();
     const auto open = Next();
     auto* seq = New<SeqLit>(begin);
-    ParseDelimited(K::kRBrack, open.span, [&] { seq->elements.push_back(ParseExpression()); });
+    ParseDelimited(K::kRBrack, open.span, [&] {
+      seq->elements.push_back(ParseExpression());
+    });
     seq->span = SpanFrom(begin);
     return seq;
   }
@@ -979,12 +993,12 @@ class TreeBuilder {
         entry->value = ParseExpression();
       } else {
         // `{ a: 1, 2 }`: not an entry. Say what an entry looks like and skip it.
-        ReportHere(DiagnosticCode::kBadRecordEntry, "expected `name: value` or `...spread` in this record, found " +
-                                                        Found(Peek()),
-                   "not a record entry")
+        ReportHere(DiagnosticCode::kBadRecordEntry,
+                   "expected `name: value` or `...spread` in this record, found " + Found(Peek()), "not a record entry")
             .WithLabel(open.span, "this `{` starts a record")
-            .WithHelp("every entry in a record needs a name, like `{ x: 1, y: 2 }`; to copy another record's "
-                      "entries use `...other`");
+            .WithHelp(
+                "every entry in a record needs a name, like `{ x: 1, y: 2 }`; to copy another record's "
+                "entries use `...other`");
         SkipUntil(K::Set({K::kComma}));
         entry->form = Arg::kPositional;
         entry->value = NewError(entry_begin);
@@ -1059,7 +1073,8 @@ class TreeBuilder {
           if (Is(K::kComma) && block->statements.empty()) {
             // `{ 10, }`, `{ get-data(), }`: a record whose entry has no name
             ReportHere(DiagnosticCode::kBadRecordEntry,
-                       "`{ ... }` with `" + Text(expr->span) + "` in it is a block, not a record", "a `,` doesn't belong here")
+                       "`{ ... }` with `" + Text(expr->span) + "` in it is a block, not a record",
+                       "a `,` doesn't belong here")
                 .WithLabel(open.span, "this `{` starts a block because its first entry has no name")
                 .WithHelp("records need a name for every entry, like `{ value: " + Text(expr->span) +
                           " }`; a block is `{ ... }` holding one expression, with no commas");
@@ -1073,9 +1088,8 @@ class TreeBuilder {
           SkipUntil(K::Set({K::kRBrace}));
         }
       } else {
-        ReportHere(DiagnosticCode::kUnexpectedToken, "expected a `let` binding, an expression or `}`, found " +
-                                                         Found(Peek()),
-                   "not allowed here");
+        ReportHere(DiagnosticCode::kUnexpectedToken,
+                   "expected a `let` binding, an expression or `}`, found " + Found(Peek()), "not allowed here");
         SkipUntil(K::Set({K::kRBrace, K::kLet}));
         if (index_ == before && !AtEof() && !Is(K::kRBrace) && !AtItemKeyword())
           Next();
@@ -1181,7 +1195,9 @@ class TreeBuilder {
     if (Is(K::kLParen)) {
       const auto open = Next();
       element->has_props = true;
-      ParseDelimited(K::kRParen, open.span, [&] { element->props.push_back(ParseUiArg()); });
+      ParseDelimited(K::kRParen, open.span, [&] {
+        element->props.push_back(ParseUiArg());
+      });
     }
     if (Is(K::kLBrace)) {
       const auto open = Next();
@@ -1270,9 +1286,8 @@ class TreeBuilder {
       case K::kDirective: {
         auto directives = ParseDirectives();
         if (!Is(K::kHash)) {
-          ReportHere(DiagnosticCode::kUnexpectedToken, "expected a `#element` after this directive, found " +
-                                                           Found(Peek()),
-                     "expected `#` here")
+          ReportHere(DiagnosticCode::kUnexpectedToken,
+                     "expected a `#element` after this directive, found " + Found(Peek()), "expected `#` here")
               .WithLabel(directives.back()->span, "directives in an expression apply to the element after them");
           return NewError(begin);
         }
@@ -1441,8 +1456,8 @@ class TreeBuilder {
     if (Accept(K::kColon)) {
       decl->result = ParseTypeExpr();
     } else {
-      ReportHere(DiagnosticCode::kExternWithoutReturnType, "this extern function has no return type, found " +
-                                                               Found(Peek()),
+      ReportHere(DiagnosticCode::kExternWithoutReturnType,
+                 "this extern function has no return type, found " + Found(Peek()),
                  "expected `:` and a return type here")
           .WithLabel(extern_token.span, "in this declaration")
           .WithHelp("say what the C function returns, like `extern fn sqrt(x: Float): Float`");
@@ -1567,10 +1582,14 @@ class TreeBuilder {
       stack.pop_back();
       if (!frame.expanded) {
         stack.push_back({frame.node, true});
-        frame.node->ForEachChild([&](const Node* child) { stack.push_back({const_cast<Node*>(child), false}); });
+        frame.node->ForEachChild([&](const Node* child) {
+          stack.push_back({const_cast<Node*>(child), false});
+        });
         continue;
       }
-      frame.node->ForEachChild([&](const Node* child) { frame.node->span = frame.node->span.Join(child->span); });
+      frame.node->ForEachChild([&](const Node* child) {
+        frame.node->span = frame.node->span.Join(child->span);
+      });
     }
   }
 

@@ -9,9 +9,16 @@
 #include "lsp/document.h"
 #include "lsp/response.h"
 #include "lsp/router.h"
+#include "lsp/task/task.h"
 #include "lsp/types.h"
 
 namespace kura::lsp {
+template <typename T>
+concept Task = requires(T* value, int status) {
+  { T::DoWork(value) };
+  { T::OnFinished(value, status) };
+};
+
 class Server {
   struct JsonResponse {
     json_t* doc;
@@ -40,10 +47,12 @@ class Server {
   std::vector<char> buffer_{};
   Router router_{};
   DocumentStore docs_{};
+  ServerInfo info_{};
+  ServerCapabilities caps_{};
 
   void Send(const std::string rhs);
-  void Send(json_t* doc);
-  void Send(Response& resp);
+  void Send(const json_t* doc);
+  void Send(const Response& resp);
   void Send(const json_int_t req_id, const ResponseType& rhs);
 
   void ProcessRawBytes(const char* data, size_t size);
@@ -68,6 +77,11 @@ class Server {
   }
 
   static void OnRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buff);
+
+  template <Task T>
+  inline void Queue(T* value) {
+    ::kura::lsp::Queue(loop_, T::DoWork, T::OnFinished, value);
+  }
 
  public:
   explicit Server(uv_loop_t* loop);

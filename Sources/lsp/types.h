@@ -6,21 +6,31 @@
 #include <variant>
 #include <vector>
 
+#include "frontend/syntax/parser.h"
+
 namespace kura::lsp {
 struct Position {
   int line;
   int character;
+
+  void operator>>(json_t* rhs) const;
+
+  operator syntax::Position() const {
+    return syntax::Position{
+        .line = static_cast<uint32_t>(line),
+        .column = static_cast<uint32_t>(character),
+    };
+  }
 };
 
-void ToJson(json_t* doc, const Position& rhs);
 void FromJson(json_t* doc, Position& rhs);
 
 struct Range {
   Position start;
   Position end;
-};
 
-void ToJson(json_t* doc, const Range& rhs);
+  void operator>>(json_t* rhs) const;
+};
 
 struct MarkupContent {
   enum Kind {
@@ -30,24 +40,39 @@ struct MarkupContent {
 
   Kind kind;
   std::string value;
-};
 
-void ToJson(json_t* doc, const MarkupContent& rhs);
+  void operator>>(json_t* rhs) const;
+};
 
 struct Hover {
   Range range;
   MarkupContent contents;
+
+  void operator>>(json_t* rhs) const;
 };
 
-void ToJson(json_t* doc, const Hover& rhs);
+static inline auto HoverForRange(const std::string contents, const Range range,
+                                 const MarkupContent::Kind kind = MarkupContent::kPlainText) -> Hover {
+  return Hover{
+      .range = range,
+      .contents =
+          MarkupContent{
+              .kind = kind,
+              .value = std::move(contents),
+          },
+  };
+}
+
+static inline auto HoverForRange(const std::string contents, const Position start, const Position end,
+                                 const MarkupContent::Kind kind = MarkupContent::kPlainText) -> Hover {
+  return HoverForRange(std::move(contents), Range{.start = start, .end = end}, kind);
+}
 
 struct TextDocument {
   std::string uri{};
   std::string text{};
 
-  TextDocument() = default;
-  TextDocument(json_t* doc);
-  ~TextDocument() = default;
+  auto operator<<(json_t* doc) -> TextDocument&;
 };
 
 struct WorkspaceFolder {
@@ -64,9 +89,9 @@ struct InitializeParams {
 struct ServerInfo {
   std::string name;
   int version;
-};
 
-void ToJson(json_t* doc, const ServerInfo& rhs);
+  void operator>>(json_t* rhs) const;
+};
 
 enum TextDocumentSync : uint8_t {
   kNoTextDocumentSync,
@@ -87,9 +112,9 @@ struct ServerCapabilities {
 #define DEFINE_PROVIDER_FLAG(Name) bool Name;
   FOR_EACH_PROVIDER_FLAG(DEFINE_PROVIDER_FLAG)
 #undef DEFINE_PROVIDER_FLAG
-};
 
-void ToJson(json_t* doc, const ServerCapabilities& rhs);
+  void operator>>(json_t* rhs) const;
+};
 }  // namespace kura::lsp
 
 #endif  // KURA_LSP_TYPES_H

@@ -1,6 +1,7 @@
 #ifndef KURA_LSP_ERROR_H
 #define KURA_LSP_ERROR_H
 
+#include <jansson.h>
 #include <string>
 
 namespace kura::lsp {
@@ -14,6 +15,8 @@ struct Error {
   int code;
   std::string message;
   void* data = nullptr;
+
+  void operator>>(json_t* doc) const;
 };
 }  // namespace kura::lsp
 

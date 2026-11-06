@@ -1,7 +1,7 @@
 #include "log.h"
 
 namespace kura::log {
-thread_local FileLogger* logger;
+static FileLogger* logger;
 
 void FileLogger::Init(const std::string_view filename) {
   if (logger)

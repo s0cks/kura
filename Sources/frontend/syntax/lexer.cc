@@ -30,10 +30,18 @@ auto Keywords() -> const std::unordered_map<std::string_view, Token::Kind>& {
 #define DEFINE_ENTRY(Name, Spelling) {Spelling, Token::k##Name},
       FOR_EACH_KEYWORD_TOKEN(DEFINE_ENTRY)
 #undef DEFINE_ENTRY
-          {"black", Token::kColorLit},   {"white", Token::kColorLit},   {"red", Token::kColorLit},
-      {"green", Token::kColorLit},   {"blue", Token::kColorLit},    {"yellow", Token::kColorLit},
-      {"cyan", Token::kColorLit},    {"magenta", Token::kColorLit}, {"gray", Token::kColorLit},
-      {"orange", Token::kColorLit},  {"purple", Token::kColorLit},  {"transparent", Token::kColorLit},
+          {"black", Token::kColorLit},
+      {"white", Token::kColorLit},
+      {"red", Token::kColorLit},
+      {"green", Token::kColorLit},
+      {"blue", Token::kColorLit},
+      {"yellow", Token::kColorLit},
+      {"cyan", Token::kColorLit},
+      {"magenta", Token::kColorLit},
+      {"gray", Token::kColorLit},
+      {"orange", Token::kColorLit},
+      {"purple", Token::kColorLit},
+      {"transparent", Token::kColorLit},
   };
   return kKeywords;
 }
@@ -63,8 +71,7 @@ class Lexer {
     result_.tokens.push_back(token);
   }
 
-  auto Error(const DiagnosticCode code, const Span& span, std::string message, std::string label = {})
-      -> Diagnostic& {
+  auto Error(const DiagnosticCode code, const Span& span, std::string message, std::string label = {}) -> Diagnostic& {
     return diagnostics_.Error(code, span, std::move(message), std::move(label));
   }
 
@@ -177,8 +184,7 @@ class Lexer {
           continue;
         }
         const auto len = (AtEnd() || Peek(1) == '\0' || next == '\n' || next == '\r') ? 1U : 2U;
-        Error(DiagnosticCode::kInvalidEscape, Span(pos_, pos_ + len), "unknown escape sequence",
-              "not a valid escape")
+        Error(DiagnosticCode::kInvalidEscape, Span(pos_, pos_ + len), "unknown escape sequence", "not a valid escape")
             .WithHelp("the escapes are `\\n`, `\\t`, `\\\"` and `\\\\`");
         pos_ += len;
         continue;
@@ -284,6 +290,8 @@ class Lexer {
         return one(Token::kLBrack);
       case ']':
         return one(Token::kRBrack);
+      case '%':
+        return one(Token::kPercent);
       default:
         break;
     }

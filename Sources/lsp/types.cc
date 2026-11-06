@@ -6,7 +6,7 @@
 #include "common.h"
 
 namespace kura::lsp {
-TextDocument::TextDocument(json_t* doc) {
+auto TextDocument::operator<<(json_t* doc) -> TextDocument& {
   KASSERT(doc);
   json_t* uri_node = json_object_get(doc, "uri");
   if (uri_node)
@@ -15,29 +15,30 @@ TextDocument::TextDocument(json_t* doc) {
   json_t* text_node = json_object_get(doc, "text");
   if (text_node)
     text = std::string(json_string_value(text_node));
+  return *this;
 }
 
-void ToJson(json_t* doc, const Position& rhs) {
+void Position::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set(doc, "line", json_integer(rhs.line));
-  json_object_set(doc, "character", json_integer(rhs.character));
+  json_object_set(doc, "line", json_integer(line));
+  json_object_set(doc, "character", json_integer(character));
 }
 
-void ToJson(json_t* doc, const Range& rhs) {
+void Range::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_t* start_node = json_object();
-  ToJson(start_node, rhs.start);
+  start >> start_node;
   json_object_set(doc, "start", start_node);
 
   json_t* end_node = json_object();
-  ToJson(end_node, rhs.end);
+  end >> end_node;
   json_object_set(doc, "end", end_node);
 }
 
-void ToJson(json_t* doc, const MarkupContent& rhs) {
+void MarkupContent::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set(doc, "value", json_string(rhs.value.data()));
-  switch (rhs.kind) {
+  json_object_set(doc, "value", json_string(value.data()));
+  switch (kind) {
     case kura::lsp::MarkupContent::kPlainText:
       json_object_set(doc, "kind", json_string("plaintext"));
       break;
@@ -49,14 +50,14 @@ void ToJson(json_t* doc, const MarkupContent& rhs) {
   }
 }
 
-void ToJson(json_t* doc, const Hover& rhs) {
+void Hover::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_t* range_node = json_object();
-  ToJson(range_node, rhs.range);
+  range >> range_node;
   json_object_set(doc, "range", range_node);
 
   json_t* contents_node = json_object();
-  ToJson(contents_node, rhs.contents);
+  contents >> contents_node;
   json_object_set(doc, "contents", contents_node);
 }
 
@@ -71,19 +72,19 @@ void FromJson(json_t* doc, Position& rhs) {
     rhs.character = json_integer_value(character_node);
 }
 
-void ToJson(json_t* doc, const ServerInfo& rhs) {
+void ServerInfo::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set_new(doc, "name", json_string(rhs.name.data()));
-  json_object_set_new(doc, "version", json_integer(rhs.version));
+  json_object_set_new(doc, "name", json_string(name.data()));
+  json_object_set_new(doc, "version", json_integer(version));
 }
 
-void ToJson(json_t* doc, const ServerCapabilities& rhs) {
+void ServerCapabilities::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set_new(doc, "textDocumentSync", json_integer(rhs.textDocumentSync));
+  json_object_set_new(doc, "textDocumentSync", json_integer(textDocumentSync));
 
 #define SET_PROVIDER_FLAG(Name) \
-  if (rhs.Name)                 \
-    json_object_set(doc, #Name, json_boolean(rhs.Name));
+  if (Name)                     \
+    json_object_set(doc, #Name, json_boolean(Name));
 
   FOR_EACH_PROVIDER_FLAG(SET_PROVIDER_FLAG)
 #undef SET_PROVIDER_FLAG

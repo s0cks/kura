@@ -7,9 +7,9 @@ namespace kura::lsp {
 struct TextDocumentPositionParams {
   TextDocument textDocument;
   Position position;
-};
 
-void FromJson(json_t* doc, TextDocumentPositionParams& params);
+  auto operator<<(const json_t* doc) -> TextDocumentPositionParams&;
+};
 }  // namespace kura::lsp
 
 #endif  // KURA_LSP_PARAMS_H
