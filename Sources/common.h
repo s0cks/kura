@@ -36,6 +36,27 @@
 
 #endif  // OS
 
+#ifdef KURA_DEBUG
+
+#include <cassert>
+#define KASSERT(x)            assert((x))
+#define KASSERT_EQ(lhs, rhs)  KASSERT(lhs == rhs)
+#define KASSERT_GT(lhs, rhs)  KASSERT(lhs > rhs)
+#define KASSERT_GTE(lha, rhs) KASSERT(lhs >= rhs)
+#define KASSERT_LT(lhs, rhs)  KASSERT(lhs < rhs)
+#define KASSERT_LTE(lhs, rhs) KASSERT(lhs <= rhs)
+
+#else
+
+#define KASSERT(x)
+#define KASSERT_EQ(lhs, rhs)
+#define KASSERT_GT(lhs, rhs)
+#define KASSERT_GTE(lha, rhs)
+#define KASSERT_LT(lhs, rhs)
+#define KASSERT_LTE(lhs, rhs)
+
+#endif  // KURA_DEBUG
+
 namespace kura {
 #define DEFINE_NON_COPYABLE_TYPE(Name)             \
  public:                                           \

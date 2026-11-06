@@ -15,6 +15,7 @@ add_library(kura-compiler SHARED
   record.cc
   type.cc
   view.cc
+  log.cc
 )
 
 target_compile_definitions(kura-compiler
@@ -51,4 +52,9 @@ add_subdirectory(compiler)
 
 if(KURA_BUILD_DEBUGGER)
   add_subdirectory(debugger)
+endif()
+
+option(KURA_BUILD_LSP "Build lsp (needs libuv)" OFF)
+if(KURA_BUILD_LSP)
+  add_subdirectory(lsp)
 endif()

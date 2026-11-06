@@ -88,7 +88,7 @@ struct Token {
 #define DEFINE_KIND(Name, Spelling) k##Name,
     FOR_EACH_TOKEN(DEFINE_KIND)
 #undef DEFINE_KIND
-    kTotalNumberOfTokens,
+        kTotalNumberOfTokens,
   };
 
   using KindSet = std::bitset<kTotalNumberOfTokens>;
