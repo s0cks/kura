@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "compiler/frontend/syntax/parser.h"
+#include "lsp/symbol.h"
 #include "lsp/types.h"
 
 namespace kura::lsp {
@@ -41,6 +42,13 @@ class Document {
     return tree_;
   }
 
+  auto GetRoot() const -> const syntax::Module* {
+    if (!tree_)
+      return nullptr;
+
+    return tree_->GetRoot();
+  }
+
   auto GetNodeAtPos(const Position& rhs) const -> const syntax::Node* {
     const auto offset = tree_->GetSource().GetOffset(syntax::Position{
         .line = static_cast<uint32_t>(rhs.line),
@@ -53,6 +61,7 @@ class Document {
     tree_ = std::move(rhs);
   }
 
+  void GetSymbols(std::vector<Symbol>& rhs) const;
   auto ToString() const -> std::string;
 
   auto operator=(Document&& rhs) -> Document& = delete;

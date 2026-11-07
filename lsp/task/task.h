@@ -28,7 +28,6 @@ static inline void Queue(uv_loop_t* loop, Fn1 on_work, Fn2 after_work, C* data) 
     delete handle;
   };
 
-  log::debug("queueing work...");
   const int status = uv_queue_work(loop, work, on, after);
   if (status != 0) {
     log::error(std::format("failed to queue work: {}", uv_strerror(status)));

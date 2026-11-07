@@ -1,26 +1,10 @@
-#include "lsp/response.h"
+#include "lsp/server/response.h"
 
 #include <jansson.h>
 
 #include "common.h"
 
 namespace kura::lsp {
-void InitializeResponse::operator>>(json_t* doc) const {
-  KASSERT(doc);
-
-  json_t* info_node = json_object();
-  if (info_node) {
-    info >> info_node;
-    json_object_set_new(doc, "serverInfo", info_node);
-  }
-
-  json_t* caps_node = json_object();
-  if (caps_node) {
-    capabilities >> caps_node;
-    json_object_set_new(doc, "capabilities", caps_node);
-  }
-}
-
 void Response::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_object_set_new(doc, "jsonrpc", json_string("2.0"));
@@ -33,7 +17,7 @@ void Response::operator>>(json_t* doc) const {
     json_object_set_new(doc, "error", val);
     return;
   } else if (const auto* res = std::get_if<ResponseType>(&value)) {
-    if (const auto* init_resp = std::get_if<InitializeResponse>(res)) {
+    if (const auto* init_resp = std::get_if<InitializeResult>(res)) {
       (*init_resp) >> val;
     } else if (const auto* hover_resp = std::get_if<Hover>(res)) {
       (*hover_resp) >> val;

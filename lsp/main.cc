@@ -2,7 +2,7 @@
 #include <print>
 
 #include "log.h"
-#include "lsp/server.h"
+#include "lsp/server/server.h"
 
 using namespace kura;
 

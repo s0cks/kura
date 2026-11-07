@@ -18,6 +18,30 @@ auto TextDocument::operator<<(json_t* doc) -> TextDocument& {
   return *this;
 }
 
+auto TextDocumentPosition::operator<<(json_t* doc) -> TextDocumentPosition& {
+  json_t* textDocument_node = json_object_get(doc, "textDocument");
+  if (textDocument_node)
+    textDocument << textDocument_node;
+
+  json_t* position_node = json_object_get(doc, "position");
+  if (position_node)
+    position << position_node;
+
+  return *this;
+}
+
+auto Position::operator<<(const json_t* rhs) -> Position& {
+  json_t* line_node = json_object_get(rhs, "line");
+  if (line_node)
+    line = json_integer_value(line_node);
+
+  json_t* character_node = json_object_get(rhs, "character");
+  if (character_node)
+    character = json_integer_value(character_node);
+
+  return *this;
+}
+
 void Position::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_object_set(doc, "line", json_integer(line));
@@ -33,6 +57,12 @@ void Range::operator>>(json_t* doc) const {
   json_t* end_node = json_object();
   end >> end_node;
   json_object_set(doc, "end", end_node);
+}
+
+auto Range::operator<<(const json_t* doc) -> Range& {
+  KASSERT(doc);
+  // TODO(@s0cks): implement
+  return *this;
 }
 
 void MarkupContent::operator>>(json_t* doc) const {

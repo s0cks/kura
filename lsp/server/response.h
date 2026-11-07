@@ -2,17 +2,11 @@
 #define KURA_LSP_RESPONSE_H
 
 #include "lsp/error.h"
+#include "lsp/server/initialize.h"
 #include "lsp/types.h"
 
 namespace kura::lsp {
-struct InitializeResponse {
-  ServerInfo info;
-  ServerCapabilities capabilities;
-
-  void operator>>(json_t* rhs) const;
-};
-
-using ResponseType = std::variant<InitializeResponse, Hover>;
+using ResponseType = std::variant<InitializeResult, Hover>;
 
 struct Response {
   long id;

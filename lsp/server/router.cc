@@ -1,4 +1,4 @@
-#include "lsp/router.h"
+#include "lsp/server/router.h"
 
 #include "log.h"
 

@@ -1,4 +1,4 @@
-#include "server.h"
+#include "lsp/server/server.h"
 
 #include <charconv>
 #include <cstring>
@@ -14,8 +14,8 @@
 #include "log.h"
 #include "lsp/error.h"
 #include "lsp/hover.h"
-#include "lsp/params.h"
-#include "lsp/request.h"
+#include "lsp/server/params.h"
+#include "lsp/server/request.h"
 #include "lsp/task/index_doc_task.h"
 #include "lsp/task/task.h"
 #include "lsp/types.h"
@@ -28,6 +28,8 @@ Server::Server(uv_loop_t* loop) :
   info_.version = 1;
   caps_.textDocumentSync = kFullTextDocumentSync;
   caps_.hoverProvider = true;
+  caps_.documentSymbolProvider = true;
+  caps_.referencesProvider = true;
 
   uv_os_setenv("UV_THREADPOOL_SIZE", "4");
   uv_pipe_init(loop, &stdin_, 0);
@@ -38,16 +40,20 @@ Server::Server(uv_loop_t* loop) :
   stdin_.data = this;
   stdout_.data = this;
 
-#define FOR_EACH_ROUTE(V)                \
-  V(Initialize, "initialize")            \
-  V(Initialized, "initialized")          \
-  V(Shutdown, "shutdown")                \
-  V(Exit, "exit")                        \
-  V(DidOpen, "textDocument/didOpen")     \
-  V(DidChange, "textDocument/didChange") \
-  V(DidSave, "textDocument/didSave")     \
-  V(DidClose, "textDocument/didClose")   \
-  V(Hover, "textDocument/hover")
+#define FOR_EACH_ROUTE(V)                           \
+  V(Initialize, "initialize")                       \
+  V(Initialized, "initialized")                     \
+  V(Shutdown, "shutdown")                           \
+  V(Exit, "exit")                                   \
+  V(DidOpen, "textDocument/didOpen")                \
+  V(DidChange, "textDocument/didChange")            \
+  V(DidSave, "textDocument/didSave")                \
+  V(DidClose, "textDocument/didClose")              \
+  V(Hover, "textDocument/hover")                    \
+  V(CodeAction, "textDocument/codeAction")          \
+  V(CodeActionResolve, "codeAction/resolve")        \
+  V(DocumentSymbols, "textDocument/documentSymbol") \
+  V(References, "textDocument/references")
 
 #define MAP(Name, Route)                             \
   router_.Insert(Route, [this](const Request& req) { \
@@ -149,6 +155,35 @@ void Server::Send(const json_t* doc) {
   free(raw);
 }
 
+void Server::Send(const Response& resp) {
+  JsonResponse json_res{};
+  resp >> json_res;
+  Send(json_res);
+}
+
+void Server::Send(const json_int_t req_id, const Error& err) {
+  return Send({
+      .id = req_id,
+      .value = err,
+  });
+}
+
+void Server::Send(const json_int_t req_id, const std::vector<Symbol>& rhs) {
+  JsonResponse json_res{};
+  json_object_set_new(json_res, "jsonrpc", json_string("2.0"));
+  json_object_set_new(json_res, "id", json_integer(req_id));
+
+  json_t* result = json_array();
+  for (const auto& symbol : rhs) {
+    json_t* sym = json_object();
+    symbol >> sym;
+    json_array_append(result, sym);
+  }
+  json_object_set(json_res, "result", result);
+
+  Send(json_res);
+}
+
 void Server::Send(const json_int_t req_id, const ResponseType& rhs) {
   Response res = {
       .id = req_id,
@@ -164,45 +199,11 @@ void Server::DispatchJsonRpc(std::string_view json_msg) {
     return;
   }
 
-  log::info(std::format("searching for {} route...", req.method));
   const auto handler = router_.Search(req.method);
   if (!handler)
     return log::error(std::format("failed to find route for {}", req.method));
 
   (*handler)(req);
-}
-
-void Server::Send(const Response& resp) {
-  JsonResponse json_res{};
-  resp >> json_res;
-  Send(json_res);
-}
-
-void Server::Send(const json_int_t req_id, const Error& err) {
-  return Send({
-      .id = req_id,
-      .value = err,
-  });
-}
-
-void Server::HandleInitialized(const Request& req) {
-  log::info("client initialized");
-}
-
-void Server::HandleInitialize(const Request& req) {
-  return Send(req.id, InitializeResponse{
-                          .info = info_,
-                          .capabilities = caps_,
-                      });
-}
-
-void Server::HandleExit(const Request& req) {
-  log::info("exit");
-  std::exit(0);
-}
-
-void Server::HandleShutdown(const Request& req) {
-  log::info("shutdown");
 }
 
 void Server::HandleDidOpen(const Request& req) {
@@ -268,7 +269,16 @@ void Server::HandleHover(const Request& req) {
     return SendInternalError(req.id);
 
   std::stringstream ss{};
-  ToHoverInfo(ss, *node);
+  hover_info_stream his(ss);
+  his << *node;
   return Send(req.id, HoverForRange(ss.str(), params.position, params.position, MarkupContent::kMarkdown));
+}
+
+void Server::HandleCodeAction(const Request& req) {
+  // TODO(@s0cks): implement
+}
+
+void Server::HandleCodeActionResolve(const Request& req) {
+  // TODO(@s0cks): implement
 }
 }  // namespace kura::lsp

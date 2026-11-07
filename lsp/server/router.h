@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-#include "lsp/request.h"
+#include "lsp/server/request.h"
 
 namespace kura::lsp {
 class Router {

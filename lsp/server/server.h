@@ -8,8 +8,8 @@
 
 #include "lsp/document.h"
 #include "lsp/error.h"
-#include "lsp/response.h"
-#include "lsp/router.h"
+#include "lsp/server/response.h"
+#include "lsp/server/router.h"
 #include "lsp/task/task.h"
 #include "lsp/types.h"
 
@@ -56,6 +56,7 @@ class Server {
   void Send(const Response& resp);
   void Send(const json_int_t req_id, const ResponseType& rhs);
   void Send(const json_int_t req_id, const Error& err);
+  void Send(const json_int_t req_id, const std::vector<Symbol>& rhs);
 
   inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
     return Send(req_id, Error{
@@ -85,6 +86,10 @@ class Server {
   void HandleDidClose(const Request& req);
   void HandleDidSave(const Request& req);
   void HandleHover(const Request& req);
+  void HandleCodeAction(const Request& req);
+  void HandleCodeActionResolve(const Request& req);
+  void HandleDocumentSymbols(const Request& req);
+  void HandleReferences(const Request& req);
 
   static inline void AllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buff) {
     buff->base = new char[suggested_size];

@@ -13,6 +13,7 @@ struct Position {
   int line;
   int character;
 
+  auto operator<<(const json_t* rhs) -> Position&;
   void operator>>(json_t* rhs) const;
 
   operator syntax::Position() const {
@@ -20,6 +21,14 @@ struct Position {
         .line = static_cast<uint32_t>(line),
         .column = static_cast<uint32_t>(character),
     };
+  }
+
+  friend auto operator<<(std::ostream& stream, const Position& rhs) -> std::ostream& {
+    stream << "Position{";
+    stream << "line=" << rhs.line << ", ";
+    stream << "character=" << rhs.character;
+    stream << "}";
+    return stream;
   }
 };
 
@@ -30,6 +39,15 @@ struct Range {
   Position end;
 
   void operator>>(json_t* rhs) const;
+  auto operator<<(const json_t* rhs) -> Range&;
+
+  friend auto operator<<(std::ostream& stream, const Range& rhs) -> std::ostream& {
+    stream << "Range{";
+    stream << "start=" << rhs.start << ", ";
+    stream << "end=" << rhs.end;
+    stream << "}";
+    return stream;
+  }
 };
 
 struct MarkupContent {
@@ -75,15 +93,16 @@ struct TextDocument {
   auto operator<<(json_t* doc) -> TextDocument&;
 };
 
+struct TextDocumentPosition {
+  TextDocument textDocument;
+  Position position;
+
+  auto operator<<(json_t* doc) -> TextDocumentPosition&;
+};
+
 struct WorkspaceFolder {
   std::string uri;
   std::string name;
-};
-
-struct InitializeParams {
-  int processId;
-  std::string rootUri;
-  std::vector<WorkspaceFolder> workspaceFolders;
 };
 
 struct ServerInfo {
@@ -103,7 +122,7 @@ enum TextDocumentSync : uint8_t {
   V(hoverProvider)                \
   V(documentSymbolProvider)       \
   V(definitionProvider)           \
-  V(referenceProvider)            \
+  V(referencesProvider)           \
   V(codeActionProvider)           \
   V(completionProvider)
 

@@ -1,4 +1,4 @@
-#include "lsp/request.h"
+#include "lsp/server/request.h"
 
 namespace kura::lsp {
 Request::Request(const char* data, const size_t len) {

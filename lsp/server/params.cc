@@ -1,11 +1,10 @@
-#include "lsp/params.h"
+#include "lsp/server/params.h"
 
 #include <jansson.h>
 
 #include "common.h"
 
 namespace kura::lsp {
-
 auto TextDocumentPositionParams::operator<<(const json_t* doc) -> TextDocumentPositionParams& {
   KASSERT(doc);
   json_t* textDocument_node = json_object_get(doc, "textDocument");
@@ -16,6 +15,12 @@ auto TextDocumentPositionParams::operator<<(const json_t* doc) -> TextDocumentPo
   if (position_node)
     FromJson(position_node, position);
 
+  return *this;
+}
+
+auto CodeActionParams::operator<<(const json_t* doc) -> CodeActionParams& {
+  KASSERT(doc);
+  // TODO(@s0cks): implement
   return *this;
 }
 }  // namespace kura::lsp
