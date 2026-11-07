@@ -77,3 +77,7 @@ tasks:
       - task: ouch
         vars:
           OUCH_COMPRESSION: zip
+  fuzz:
+    cmds:
+      - cmake --build build --target kura-fuzzing
+      - ./build/tests/bin/kura-fuzzing fuzz_corpus
