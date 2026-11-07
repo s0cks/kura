@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 
 namespace kura::renderer {
 struct Image {

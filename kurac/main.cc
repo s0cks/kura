@@ -36,8 +36,9 @@
 #include "frontend/parser.h"
 #include "kura.h"
 #include "module.h"
+
 #ifdef KURA_HAS_HEADLESS_RENDERER
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 #endif  // KURA_HAS_HEADLESS_RENDERER
 
 using namespace kura;

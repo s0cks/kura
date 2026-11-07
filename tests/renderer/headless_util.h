@@ -1,14 +1,13 @@
 #ifndef KURA_TESTS_HEADLESS_UTIL_H
 #define KURA_TESTS_HEADLESS_UTIL_H
 
+#include <gtest/gtest.h>
 #include <map>
 #include <ostream>
 #include <string>
 
-#include <gtest/gtest.h>
-
 #include "abi_print.h"
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 
 namespace kura::renderer {
 inline auto operator<<(std::ostream& out, const Rgba8& value) -> std::ostream& {
@@ -67,8 +66,7 @@ class Drawer {
   }
 
   void Text(const KuraVec2& pos, const std::string& text, const float size, const KuraColor& color) {
-    EXPECT_EQ(Ops().draw_text(Self(), pos, text.data(), text.size(), KuraTextStyle{size}, color),
-                   KURA_RENDERER_OK);
+    EXPECT_EQ(Ops().draw_text(Self(), pos, text.data(), text.size(), KuraTextStyle{size}, color), KURA_RENDERER_OK);
   }
 
   void Push(const KuraRect& rect) {

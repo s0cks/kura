@@ -1,14 +1,13 @@
 // The runtime's draw calls (kura_rt_*), the ones compiled code makes, against the headless renderer:
 // they have to reach whichever renderer the host set on the thread, decoded the way the compiler
 // passes them.
-#include <gtest/gtest.h>
-
 #include <cstdint>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <thread>
 
 #include "backend/runtime_abi.h"
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 
 namespace {
 using kura::renderer::Command;
@@ -111,7 +110,9 @@ TEST_F(RuntimeRendererTest, AnUnusableRendererIsRefusedAndTheOldOneKept) {
 
 TEST_F(RuntimeRendererTest, TheRendererIsPerThread) {
   bool had_one = true;
-  std::thread other([&] { had_one = kura_rt_get_renderer() != nullptr; });
+  std::thread other([&] {
+    had_one = kura_rt_get_renderer() != nullptr;
+  });
   other.join();
   EXPECT_FALSE(had_one);
   EXPECT_NE(kura_rt_get_renderer(), nullptr);

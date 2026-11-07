@@ -2,15 +2,14 @@
 // the right pixels are drawn. The tests render into an offscreen framebuffer of a surfaceless EGL
 // context (Mesa's software rasterizer is enough), so no window or display is needed. If no context
 // can be made the tests are skipped and the suite isn't registered.
-#include <gtest/gtest.h>
-
 #include <cstdint>
 #include <cstdlib>
+#include <gtest/gtest.h>
 #include <vector>
 
 #include "conformance.h"
 #include "gl_test_util.h"
-#include "renderer/renderer_gl.h"
+#include "renderer/gl/renderer.h"
 
 namespace {
 class GlRendererTest : public ::testing::Test {

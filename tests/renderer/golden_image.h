@@ -2,11 +2,10 @@
 #define KURA_TESTS_GOLDEN_IMAGE_H
 
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
 
-#include <gtest/gtest.h>
-
-#include "renderer/renderer_image.h"
+#include "renderer/image/renderer.h"
 
 namespace kura::test {
 // Whether the image has the same pixels as golden/<name>.png (every channel

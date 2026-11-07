@@ -2,14 +2,13 @@
 // the JIT, its view is called, and what the compiled code asked the runtime to draw is drawn by the
 // OpenGL renderer into an offscreen framebuffer.
 #include <gtest/gtest.h>
-
 #include <string>
 #include <vector>
 
 #include "backend/program.h"
 #include "backend/runtime_abi.h"
 #include "gl_test_util.h"
-#include "renderer/renderer_gl.h"
+#include "renderer/gl/renderer.h"
 
 #ifndef KURA_EXAMPLES_DIR
 #error "KURA_EXAMPLES_DIR must name the examples directory"

@@ -1,10 +1,9 @@
-#include "renderer/renderer_gl.h"
-
-#include <epoxy/gl.h>
+#include "renderer/gl/renderer.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <epoxy/gl.h>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -432,7 +431,9 @@ class GlImpl {
 
   // The pixels `rect` touches, clamped so that huge rects can't overflow an int.
   static auto CoveredPixels(const KuraRect& rect) -> PixelRect {
-    const auto clamp = [](const double v) { return static_cast<int>(std::clamp(v, -1048576.0, 1048576.0)); };
+    const auto clamp = [](const double v) {
+      return static_cast<int>(std::clamp(v, -1048576.0, 1048576.0));
+    };
     const auto x = static_cast<double>(rect.x);
     const auto y = static_cast<double>(rect.y);
     return PixelRect{clamp(std::floor(x)), clamp(std::floor(y)), clamp(std::ceil(x + static_cast<double>(rect.width))),
@@ -507,41 +508,59 @@ inline auto Self(void* self) -> GlImpl* {
 }
 
 auto OpBeginFrame(void* self, const uint32_t width, const uint32_t height) -> Status {
-  return Guard([&] { return Self(self)->BeginFrame(width, height); });
+  return Guard([&] {
+    return Self(self)->BeginFrame(width, height);
+  });
 }
 
 auto OpEndFrame(void* self) -> Status {
-  return Guard([&] { return Self(self)->EndFrame(); });
+  return Guard([&] {
+    return Self(self)->EndFrame();
+  });
 }
 
 auto OpPushClip(void* self, const KuraRect rect) -> Status {
-  return Guard([&] { return Self(self)->PushClip(rect); });
+  return Guard([&] {
+    return Self(self)->PushClip(rect);
+  });
 }
 
 auto OpPopClip(void* self) -> Status {
-  return Guard([&] { return Self(self)->PopClip(); });
+  return Guard([&] {
+    return Self(self)->PopClip();
+  });
 }
 
 auto OpFillRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->FillRect(rect, color); });
+  return Guard([&] {
+    return Self(self)->FillRect(rect, color);
+  });
 }
 
 auto OpStrokeRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->StrokeRect(rect, color); });
+  return Guard([&] {
+    return Self(self)->StrokeRect(rect, color);
+  });
 }
 
 auto OpDrawLine(void* self, const KuraVec2 from, const KuraVec2 to, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->DrawLine(from, to, color); });
+  return Guard([&] {
+    return Self(self)->DrawLine(from, to, color);
+  });
 }
 
 auto OpDrawText(void* self, const KuraVec2 pos, const char* utf8, const size_t length, const KuraTextStyle style,
                 const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->DrawText(pos, utf8, length, style, color); });
+  return Guard([&] {
+    return Self(self)->DrawText(pos, utf8, length, style, color);
+  });
 }
 
 auto OpMeasureText(void*, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
     -> Status {
-  return Guard([&] { return GlImpl::MeasureText(utf8, length, style, out); });
+  return Guard([&] {
+    return GlImpl::MeasureText(utf8, length, style, out);
+  });
 }
 
 void OpDestroy(void* self) {

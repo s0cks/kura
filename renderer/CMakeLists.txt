@@ -2,8 +2,6 @@ set(KURA_MAX_VERTICES "16384" CACHE STRING "The max number of vertices the rende
 set(KURA_MAX_INDICES "32768" CACHE STRING "The max number of indices the renderer should have")
 
 add_library(kura-renderer-base INTERFACE)
-target_include_directories(kura-renderer-base
-  INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 set_target_properties(kura-renderer-base PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(kura-renderer-base
@@ -14,52 +12,20 @@ target_compile_definitions(kura-renderer-base
 
 option(KURA_BUILD_HEADLESS_RENDERER "Build the headless renderer" ON)
 if(KURA_BUILD_HEADLESS_RENDERER)
-  message(STATUS "building the headless renderer")
-  add_library(kura-renderer-headless STATIC
-    renderer_headless.cc)
-  target_link_libraries(kura-renderer-headless
-    PUBLIC
-      kura-renderer-base)
+  add_subdirectory(headless)
 endif()
 
 option(KURA_BUILD_IMAGE_RENDERER "Build kura-renderer-image (PNG/JPEG output; needs libpng and libjpeg)" ON)
 if(KURA_BUILD_IMAGE_RENDERER)
-  message(STATUS "building the image renderer")
-  find_package(PNG REQUIRED)
-  find_package(JPEG REQUIRED)
-  add_library(kura-renderer-image STATIC
-    renderer_image.cc)
-  target_link_libraries(kura-renderer-image
-    PUBLIC kura-renderer-base
-           PNG::PNG
-           JPEG::JPEG)
+  add_subdirectory(image)
 endif()
 
 option(KURA_BUILD_GL_RENDERER "Build the OpenGL renderer (needs libepoxy)" ON)
 if(KURA_BUILD_GL_RENDERER)
-  message(STATUS "building the OpenGL renderer")
-  pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
-
-  add_library(kura-renderer-gl STATIC
-    renderer_gl.cc)
-  target_link_libraries(kura-renderer-gl
-    PUBLIC kura-renderer-base
-           PkgConfig::EPOXY)
-
-  option(KURA_BUILD_GL_DEMO "Build kura-gl-demo, which draws a rect in a loop through the runtime (needs GLFW)" ON)
-  if(KURA_BUILD_GL_DEMO)
-    pkg_check_modules(GLFW REQUIRED IMPORTED_TARGET glfw3)
-    message(STATUS "building the gl demo")
-    add_executable(kura-gl-demo
-      demo/gl_demo.cc)
-    target_link_libraries(kura-gl-demo
-      PRIVATE kura-renderer-gl
-              kura-compiler
-              PkgConfig::GLFW)
-  endif()
+  add_subdirectory(gl)
 endif()
 
 option(KURA_BUILD_VK_RENDERER "Build the vulkan renderer" OFF)
 if(KURA_BUILD_VK_RENDERER)
-  message(STATUS "building the Vulkan renderer")
+  add_subdirectory(vulkan)
 endif()

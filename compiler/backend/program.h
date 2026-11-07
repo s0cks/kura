@@ -43,8 +43,7 @@ class Program {
   // One value per parameter of `function`, each the zero of its type (0, 0.0, false, none, ""),
   // for a host that has nothing better to pass. False, with `error` set, if a parameter has no
   // such value.
-  auto ZeroArguments(const std::string& function, std::vector<rt::KuraValue>* args, std::string* error) const
-      -> bool;
+  auto ZeroArguments(const std::string& function, std::vector<rt::KuraValue>* args, std::string* error) const -> bool;
 
   // Parses, compiles and loads `path`. Null, with `error` saying why, if any step fails.
   static auto Load(const std::string& path, const Options& options, std::string* error) -> std::unique_ptr<Program>;

@@ -17,7 +17,7 @@
 
 #include "backend/program.h"
 #include "backend/runtime_abi.h"
-#include "renderer/renderer_gl.h"
+#include "renderer/gl/renderer.h"
 
 namespace {
 constexpr int kFrameSize = 1024;

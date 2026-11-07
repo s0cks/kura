@@ -1,4 +1,4 @@
-#include "renderer/renderer_image.h"
+#include "renderer/image/renderer.h"
 
 #include <algorithm>
 #include <cstdlib>

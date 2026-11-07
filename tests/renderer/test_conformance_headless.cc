@@ -1,7 +1,7 @@
 // The headless renderer against the ABI conformance suite, with and without a
 // framebuffer: the contract doesn't depend on whether pixels are drawn.
 #include "conformance.h"
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 
 namespace {
 auto Create(const bool rasterize) -> KuraRenderer {
@@ -15,8 +15,12 @@ auto Create(const bool rasterize) -> KuraRenderer {
 
 struct Registration {
   Registration() {
-    kura::test::RegisterConformanceSuite("Headless", [] { return Create(true); });
-    kura::test::RegisterConformanceSuite("HeadlessWithoutPixels", [] { return Create(false); });
+    kura::test::RegisterConformanceSuite("Headless", [] {
+      return Create(true);
+    });
+    kura::test::RegisterConformanceSuite("HeadlessWithoutPixels", [] {
+      return Create(false);
+    });
   }
 };
 

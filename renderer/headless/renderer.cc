@@ -1,4 +1,4 @@
-#include "renderer/renderer_headless.h"
+#include "renderer/headless/renderer.h"
 
 #include <algorithm>
 #include <charconv>
@@ -28,8 +28,8 @@ inline auto IsValid(const KuraVec2& value) -> bool {
 }
 
 inline auto IsValid(const KuraRect& value) -> bool {
-  return IsValid(value.x) && IsValid(value.y) && IsValid(value.width) && IsValid(value.height) &&
-         value.width >= 0.0f && value.height >= 0.0f;
+  return IsValid(value.x) && IsValid(value.y) && IsValid(value.width) && IsValid(value.height) && value.width >= 0.0f &&
+         value.height >= 0.0f;
 }
 
 inline auto IsValid(const KuraColor& value) -> bool {
@@ -429,41 +429,59 @@ inline auto Self(void* self) -> HeadlessImpl* {
 }
 
 auto OpBeginFrame(void* self, const uint32_t width, const uint32_t height) -> Status {
-  return Guard([&] { return Self(self)->BeginFrame(width, height); });
+  return Guard([&] {
+    return Self(self)->BeginFrame(width, height);
+  });
 }
 
 auto OpEndFrame(void* self) -> Status {
-  return Guard([&] { return Self(self)->EndFrame(); });
+  return Guard([&] {
+    return Self(self)->EndFrame();
+  });
 }
 
 auto OpPushClip(void* self, const KuraRect rect) -> Status {
-  return Guard([&] { return Self(self)->PushClip(rect); });
+  return Guard([&] {
+    return Self(self)->PushClip(rect);
+  });
 }
 
 auto OpPopClip(void* self) -> Status {
-  return Guard([&] { return Self(self)->PopClip(); });
+  return Guard([&] {
+    return Self(self)->PopClip();
+  });
 }
 
 auto OpFillRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->FillRect(rect, color); });
+  return Guard([&] {
+    return Self(self)->FillRect(rect, color);
+  });
 }
 
 auto OpStrokeRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->StrokeRect(rect, color); });
+  return Guard([&] {
+    return Self(self)->StrokeRect(rect, color);
+  });
 }
 
 auto OpDrawLine(void* self, const KuraVec2 from, const KuraVec2 to, const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->DrawLine(from, to, color); });
+  return Guard([&] {
+    return Self(self)->DrawLine(from, to, color);
+  });
 }
 
 auto OpDrawText(void* self, const KuraVec2 pos, const char* utf8, const size_t length, const KuraTextStyle style,
                 const KuraColor color) -> Status {
-  return Guard([&] { return Self(self)->DrawText(pos, utf8, length, style, color); });
+  return Guard([&] {
+    return Self(self)->DrawText(pos, utf8, length, style, color);
+  });
 }
 
 auto OpMeasureText(void*, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
     -> Status {
-  return Guard([&] { return HeadlessImpl::MeasureText(utf8, length, style, out); });
+  return Guard([&] {
+    return HeadlessImpl::MeasureText(utf8, length, style, out);
+  });
 }
 
 void OpDestroyOwned(void* self) {

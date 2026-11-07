@@ -6,7 +6,7 @@
 
 #include "golden_image.h"
 #include "headless_util.h"
-#include "renderer/renderer_image.h"
+#include "renderer/image/renderer.h"
 
 using namespace kura::test;
 using namespace kura::renderer;
