@@ -26,7 +26,9 @@ add_subdirectory(heap)
 add_subdirectory(runtime)
 add_subdirectory(layout)
 add_subdirectory(compiler)
+
 add_subdirectory(renderer)
+
 add_subdirectory(kurac)
 
 option(KURA_BUILD_DEBUGGER "Build kura-debugger (needs GTK4, EGL and epoxy)" OFF)
