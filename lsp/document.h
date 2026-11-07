@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "frontend/syntax/parser.h"
+#include "compiler/frontend/syntax/parser.h"
 #include "lsp/types.h"
 
 namespace kura::lsp {

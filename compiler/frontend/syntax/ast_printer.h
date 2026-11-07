@@ -4,8 +4,8 @@
 #include <iosfwd>
 #include <string>
 
-#include "frontend/syntax/ast.h"
-#include "frontend/syntax/parser.h"
+#include "compiler/frontend/syntax/ast.h"
+#include "compiler/frontend/syntax/parser.h"
 
 namespace kura::syntax {
 struct PrintOptions {

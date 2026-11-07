@@ -1,9 +1,9 @@
-#include "frontend/syntax/parser.h"
+#include "compiler/frontend/syntax/parser.h"
 
 #include <algorithm>
 #include <cctype>
 
-#include "frontend/syntax/lexer.h"
+#include "compiler/frontend/syntax/lexer.h"
 
 namespace kura::syntax {
 namespace {

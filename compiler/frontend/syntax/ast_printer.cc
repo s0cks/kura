@@ -1,4 +1,4 @@
-#include "frontend/syntax/ast_printer.h"
+#include "compiler/frontend/syntax/ast_printer.h"
 
 #include <ostream>
 #include <sstream>
@@ -165,7 +165,9 @@ void Print(std::ostream& out, const Node* node, const int depth, const PrintOpti
   if (options.spans)
     out << ' ' << node->span;
   out << '\n';
-  node->ForEachChild([&](const Node* child) { Print(out, child, depth + 1, options); });
+  node->ForEachChild([&](const Node* child) {
+    Print(out, child, depth + 1, options);
+  });
 }
 }  // namespace
 

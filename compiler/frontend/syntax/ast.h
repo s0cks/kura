@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "frontend/syntax/diagnostic.h"
-#include "frontend/syntax/source.h"
-#include "frontend/syntax/token.h"
+#include "compiler/frontend/syntax/diagnostic.h"
+#include "compiler/frontend/syntax/source.h"
+#include "compiler/frontend/syntax/token.h"
 
 namespace kura::syntax {
 // The syntax tree is *only* syntax: it mirrors what was written, keeps a Span

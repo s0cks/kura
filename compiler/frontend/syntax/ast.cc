@@ -1,4 +1,4 @@
-#include "frontend/syntax/ast.h"
+#include "compiler/frontend/syntax/ast.h"
 
 namespace kura::syntax {
 auto FindPathAt(const Node* root, const uint32_t offset) -> std::vector<const Node*> {

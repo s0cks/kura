@@ -4,10 +4,10 @@
 #include <memory>
 #include <vector>
 
-#include "frontend/syntax/ast.h"
-#include "frontend/syntax/diagnostic.h"
-#include "frontend/syntax/source.h"
-#include "frontend/syntax/token.h"
+#include "compiler/frontend/syntax/ast.h"
+#include "compiler/frontend/syntax/diagnostic.h"
+#include "compiler/frontend/syntax/source.h"
+#include "compiler/frontend/syntax/token.h"
 
 namespace kura::syntax {
 // Everything the front end knows about one source file. Owns the text, the

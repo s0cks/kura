@@ -1,4 +1,4 @@
-#include "frontend/syntax/diagnostic.h"
+#include "compiler/frontend/syntax/diagnostic.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -135,8 +135,7 @@ void Render(std::ostream& out, const SourceFile& source, const Diagnostic& d, co
     const auto line = ExpandLine(source.GetText(line_span), options.tab_width);
     const auto number = std::to_string(start.line + 1);
     if (!same_line) {
-      out << std::string(gutter.size() - number.size(), ' ') << paint(kBlue, number + " |") << ' ' << line.text
-          << '\n';
+      out << std::string(gutter.size() - number.size(), ' ') << paint(kBlue, number + " |") << ' ' << line.text << '\n';
     }
 
     // The carets cover the span on this line; a span that runs on past the

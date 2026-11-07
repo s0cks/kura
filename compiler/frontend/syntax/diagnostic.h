@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "frontend/syntax/source.h"
+#include "compiler/frontend/syntax/source.h"
 
 namespace kura::syntax {
 // Every diagnostic the syntax layer can produce has a stable numeric code, so
@@ -127,8 +127,9 @@ class DiagnosticList {
   // Orders by where in the file the diagnostics are; equal positions keep the
   // order they were reported in.
   void SortBySpan() {
-    std::stable_sort(diagnostics_.begin(), diagnostics_.end(),
-                     [](const Diagnostic& a, const Diagnostic& b) { return a.span.begin < b.span.begin; });
+    std::stable_sort(diagnostics_.begin(), diagnostics_.end(), [](const Diagnostic& a, const Diagnostic& b) {
+      return a.span.begin < b.span.begin;
+    });
   }
 
   auto empty() const -> bool {

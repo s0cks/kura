@@ -7,7 +7,7 @@
 #include <ostream>
 #include <string_view>
 
-#include "frontend/syntax/source.h"
+#include "compiler/frontend/syntax/source.h"
 
 namespace kura::syntax {
 // Name, spelling. Fixed tokens spell themselves; the rest are described in
