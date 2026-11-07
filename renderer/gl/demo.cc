@@ -19,6 +19,22 @@
 #include "backend/runtime_abi.h"
 #include "renderer/gl/renderer.h"
 
+// TODO(@s0cks): move to common
+#ifdef KURA_DEBUG
+
+#define PROFILE_BEGIN(Name) const auto Name##_start = std::chrono::high_resolution_clock::now();
+#define PROFILE_END(Name)                                                                                     \
+  const auto Name##_end = std::chrono::high_resolution_clock::now();                                          \
+  const auto Name##_dur = std::chrono::duration_cast<std::chrono::microseconds>((Name##_end - Name##_start)); \
+  std::cout << #Name << " finished in " << Name##_dur.count() << "us" << std::endl;
+
+#else
+
+#define PROFILE_BEGIN(Name)
+#define PROFILE_END(Name)
+
+#endif  // KURA_DEBUG
+
 namespace {
 constexpr int kFrameSize = 1024;
 
@@ -138,16 +154,14 @@ int main(const int argc, char** argv) {
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
 
-    const auto call_start = std::chrono::high_resolution_clock::now();
+    PROFILE_BEGIN(call);
     kura::rt::KuraValue result{};
     if (!program->Call(options.function, args, &result, &error)) {
       std::fprintf(stderr, "error3: %s\n", error.c_str());
       exit_code = EXIT_FAILURE;
       break;
     }
-    const auto call_end = std::chrono::high_resolution_clock::now();
-    const auto call_dur = std::chrono::duration_cast<std::chrono::microseconds>((call_end - call_start));
-    std::cout << "call finished in " << call_dur.count() << "us" << std::endl;
+    PROFILE_END(call);
 
     glfwSwapBuffers(window);
     frame++;

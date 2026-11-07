@@ -8,10 +8,14 @@
       "release-type": "simple",
       "initial-version": "1.0.0"
     },
+    "lsp": {
+      "release-type": "simple",
+      "initialize-version": "1.0.0"
+    },
     ".": {
       "release-type": "simple",
       "extra-files": ["VERSION"],
-      "exclude-paths": ["docker/build", "docker/kura"],
+      "exclude-paths": ["docker/build", "docker/kura", "lsp"],
       "initial-version": "0.0.0",
       "bump-minor-pre-major": true,
       "bump-patch-pre-major": true
