@@ -2,11 +2,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/kura.h.in ${CMAKE_CURRENT_BINARY_DIR}
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-
-add_library(kura-compiler SHARED
+add_library(kurart SHARED
   function.cc
   unary_op.cc
   binary_op.cc
@@ -21,43 +17,23 @@ add_library(kura-compiler SHARED
   log.cc
 )
 
-target_compile_definitions(kura-compiler
+target_compile_definitions(kurart
   PUBLIC ${LLVM_DEFINITIONS}
          KURA_CLANG_EXECUTABLE="${KURA_CLANG_EXECUTABLE}"
   PRIVATE KURA_CLANG_RESOURCE_DIR="${KURA_CLANG_RESOURCE_DIR}"
 )
-target_include_directories(kura-compiler
+target_include_directories(kurart
   PUBLIC ${LLVM_INCLUDE_DIRS}
          ${CLANG_INCLUDE_DIRS}
          ${CMAKE_CURRENT_SOURCE_DIR}
          ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_link_libraries(kura-compiler
+target_link_libraries(kurart
   PUBLIC LLVM
          clang-cpp
          PkgConfig::XXHASH
          glm::glm
+         kura-heap
          kura-syntax
          kura-layout
 )
-
-add_subdirectory(layout)
-add_subdirectory(heap)
-add_subdirectory(dom)
-add_subdirectory(backend)
-add_subdirectory(frontend/syntax)
-add_subdirectory(frontend)
-add_subdirectory(runtime)
-
-add_subdirectory(renderer)
-
-add_subdirectory(compiler)
-
-if(KURA_BUILD_DEBUGGER)
-  add_subdirectory(debugger)
-endif()
-
-option(KURA_BUILD_LSP "Build lsp (needs libuv)" OFF)
-if(KURA_BUILD_LSP)
-  add_subdirectory(lsp)
-endif()
