@@ -5,6 +5,7 @@
 #include <iostream>
 #include <jansson.h>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <variant>
 
@@ -177,12 +178,11 @@ void Server::Send(const Response& resp) {
   Send(json_res);
 }
 
-void Server::WriteError(json_int_t req_id, const Error& err) {
-  Response res = {
+void Server::Send(const json_int_t req_id, const Error& err) {
+  return Send({
       .id = req_id,
       .value = err,
-  };
-  return Send(res);
+  });
 }
 
 void Server::HandleInitialized(const Request& req) {
@@ -260,24 +260,15 @@ void Server::HandleHover(const Request& req) {
   params << req.params;
 
   auto* doc = docs_.Get(params.textDocument.uri);
-  if (doc) {
-    const auto node = doc->GetNodeAtPos(params.position);
+  if (!doc)
+    return SendParseError(req.id);
 
-    if (node) {
-      std::stringstream ss{};
-      if (ToHoverInfo(ss, node))
-        return Send(req.id, HoverForRange(ss.str(), params.position, params.position, MarkupContent::kMarkdown));
-    }
+  const auto node = doc->GetNodeAtPos(params.position);
+  if (!node)
+    return SendInternalError(req.id);
 
-    return WriteError(req.id, Error{
-                                  .code = LSP_ERROR_INTERNAL_ERROR,
-                                  .message = "No node found at position",
-                              });
-  }
-
-  return WriteError(req.id, Error{
-                                .code = LSP_ERROR_PARSE,
-                                .message = "No parsed document",
-                            });
+  std::stringstream ss{};
+  ToHoverInfo(ss, *node);
+  return Send(req.id, HoverForRange(ss.str(), params.position, params.position, MarkupContent::kMarkdown));
 }
 }  // namespace kura::lsp

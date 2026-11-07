@@ -36,7 +36,7 @@ if(KURA_BUILD_DEBUGGER)
   add_subdirectory(debugger)
 endif()
 
-option(KURA_BUILD_LSP "Build lsp (needs libuv)" OFF)
+option(KURA_BUILD_LSP "Build lsp (needs libuv)" ON)
 if(KURA_BUILD_LSP)
   add_subdirectory(lsp)
 endif()

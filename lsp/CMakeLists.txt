@@ -7,7 +7,6 @@ add_executable(kura-lsp
   server.cc
   request.cc
   response.cc
-  hover.cc
   router.cc
   error.cc
   params.cc

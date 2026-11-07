@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lsp/document.h"
+#include "lsp/error.h"
 #include "lsp/response.h"
 #include "lsp/router.h"
 #include "lsp/task/task.h"
@@ -54,6 +55,22 @@ class Server {
   void Send(const json_t* doc);
   void Send(const Response& resp);
   void Send(const json_int_t req_id, const ResponseType& rhs);
+  void Send(const json_int_t req_id, const Error& err);
+
+  inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
+    return Send(req_id, Error{
+                            .code = code,
+                            .message = std::string(message),
+                        });
+  }
+
+  inline void SendParseError(const json_int_t req_id, const std::string_view message = "No parsed document") {
+    return SendError(req_id, LSP_ERROR_PARSE, std::move(message));
+  }
+
+  inline void SendInternalError(const json_int_t req_id, const std::string_view message = "Internal error") {
+    return SendError(req_id, LSP_ERROR_INTERNAL_ERROR, std::move(message));
+  }
 
   void ProcessRawBytes(const char* data, size_t size);
   void DispatchJsonRpc(std::string_view json);
@@ -68,8 +85,6 @@ class Server {
   void HandleDidClose(const Request& req);
   void HandleDidSave(const Request& req);
   void HandleHover(const Request& req);
-
-  void WriteError(json_int_t req_id, const Error& err);
 
   static inline void AllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buff) {
     buff->base = new char[suggested_size];
