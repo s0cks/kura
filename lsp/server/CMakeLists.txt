@@ -8,5 +8,6 @@ target_sources(kura-lsp
          router.cc
          server.cc
          shutdown.cc
+         completion.cc
          document_symbols.cc
          document_references.cc)

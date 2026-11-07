@@ -108,6 +108,16 @@ void ServerInfo::operator>>(json_t* doc) const {
   json_object_set_new(doc, "version", json_integer(version));
 }
 
+void CompletionProvider::operator>>(json_t* doc) const {
+  json_object_set(doc, "resolveProvider", json_boolean(resolveProvider));
+
+  json_t* triggerCharacters_node = json_array();
+  KASSERT(triggerCharacters_node);
+  for (const auto& triggerChar : triggerCharacters)
+    json_array_append(triggerCharacters_node, json_string(triggerChar.c_str()));
+  json_object_set(doc, "triggerCharacters", triggerCharacters_node);
+}
+
 void ServerCapabilities::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_object_set_new(doc, "textDocumentSync", json_integer(textDocumentSync));
@@ -118,5 +128,10 @@ void ServerCapabilities::operator>>(json_t* doc) const {
 
   FOR_EACH_PROVIDER_FLAG(SET_PROVIDER_FLAG)
 #undef SET_PROVIDER_FLAG
+
+  json_t* completionProvider_node = json_object();
+  KASSERT(completionProvider_node);
+  completionProvider >> completionProvider_node;
+  json_object_set(doc, "completionProvider", completionProvider_node);
 }
 }  // namespace kura::lsp

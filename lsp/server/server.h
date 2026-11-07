@@ -20,27 +20,27 @@ concept Task = requires(T* value, int status) {
   { T::OnFinished(value, status) };
 };
 
+struct JsonResponse {
+  json_t* doc;
+
+  JsonResponse() {
+    doc = json_object();
+  }
+  ~JsonResponse() {
+    if (doc)
+      json_decref(doc);
+  }
+
+  auto c_str() const -> const char* {
+    return json_dumps(doc, JSON_COMPACT);
+  }
+
+  operator json_t*() const {
+    return doc;
+  }
+};
+
 class Server {
-  struct JsonResponse {
-    json_t* doc;
-
-    JsonResponse() {
-      doc = json_object();
-    }
-    ~JsonResponse() {
-      if (doc)
-        json_decref(doc);
-    }
-
-    auto c_str() const -> const char* {
-      return json_dumps(doc, JSON_COMPACT);
-    }
-
-    operator json_t*() const {
-      return doc;
-    }
-  };
-
  private:
   uv_loop_t* loop_;
   uv_pipe_t stdin_{};
@@ -57,6 +57,7 @@ class Server {
   void Send(const json_int_t req_id, const ResponseType& rhs);
   void Send(const json_int_t req_id, const Error& err);
   void Send(const json_int_t req_id, const std::vector<Symbol>& rhs);
+  void Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs);
 
   inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
     return Send(req_id, Error{
@@ -90,6 +91,7 @@ class Server {
   void HandleCodeActionResolve(const Request& req);
   void HandleDocumentSymbols(const Request& req);
   void HandleReferences(const Request& req);
+  void HandleCompletion(const Request& req);
 
   static inline void AllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buff) {
     buff->base = new char[suggested_size];

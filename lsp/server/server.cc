@@ -30,6 +30,12 @@ Server::Server(uv_loop_t* loop) :
   caps_.hoverProvider = true;
   caps_.documentSymbolProvider = true;
   caps_.referencesProvider = true;
+  caps_.completionProvider.triggerCharacters = {
+      ".",
+      "=>",
+      ":",
+      "fn",
+  };
 
   uv_os_setenv("UV_THREADPOOL_SIZE", "4");
   uv_pipe_init(loop, &stdin_, 0);
@@ -53,7 +59,8 @@ Server::Server(uv_loop_t* loop) :
   V(CodeAction, "textDocument/codeAction")          \
   V(CodeActionResolve, "codeAction/resolve")        \
   V(DocumentSymbols, "textDocument/documentSymbol") \
-  V(References, "textDocument/references")
+  V(References, "textDocument/references")          \
+  V(Completion, "textDocument/completion")
 
 #define MAP(Name, Route)                             \
   router_.Insert(Route, [this](const Request& req) { \
@@ -168,20 +175,30 @@ void Server::Send(const json_int_t req_id, const Error& err) {
   });
 }
 
-void Server::Send(const json_int_t req_id, const std::vector<Symbol>& rhs) {
-  JsonResponse json_res{};
-  json_object_set_new(json_res, "jsonrpc", json_string("2.0"));
-  json_object_set_new(json_res, "id", json_integer(req_id));
+template <typename T>
+static inline void SerializeList(const json_int_t req_id, const std::vector<T>& items, JsonResponse& res) {
+  json_object_set_new(res, "jsonrpc", json_string("2.0"));
+  json_object_set_new(res, "id", json_integer(req_id));
 
   json_t* result = json_array();
-  for (const auto& symbol : rhs) {
+  for (const auto& symbol : items) {
     json_t* sym = json_object();
     symbol >> sym;
     json_array_append(result, sym);
   }
-  json_object_set(json_res, "result", result);
+  json_object_set(res, "result", result);
+}
 
-  Send(json_res);
+void Server::Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs) {
+  JsonResponse res{};
+  SerializeList(req_id, rhs, res);
+  Send(res);
+}
+
+void Server::Send(const json_int_t req_id, const std::vector<Symbol>& rhs) {
+  JsonResponse res{};
+  SerializeList(req_id, rhs, res);
+  Send(res);
 }
 
 void Server::Send(const json_int_t req_id, const ResponseType& rhs) {

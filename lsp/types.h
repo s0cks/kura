@@ -123,11 +123,19 @@ enum TextDocumentSync : uint8_t {
   V(documentSymbolProvider)       \
   V(definitionProvider)           \
   V(referencesProvider)           \
-  V(codeActionProvider)           \
-  V(completionProvider)
+  V(codeActionProvider)
+
+struct CompletionProvider {
+  bool resolveProvider;
+  std::vector<std::string> triggerCharacters{};
+
+  void operator>>(json_t* rhs) const;
+};
 
 struct ServerCapabilities {
-  TextDocumentSync textDocumentSync;
+  TextDocumentSync textDocumentSync{};
+  CompletionProvider completionProvider{};
+
 #define DEFINE_PROVIDER_FLAG(Name) bool Name;
   FOR_EACH_PROVIDER_FLAG(DEFINE_PROVIDER_FLAG)
 #undef DEFINE_PROVIDER_FLAG
