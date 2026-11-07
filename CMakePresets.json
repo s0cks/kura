@@ -27,9 +27,7 @@
     {
       "name": "base-clang",
       "hidden": true,
-      "inherits": [
-        "base"
-      ],
+      "inherits": ["base"],
       "environment": {
         "CC": "clang",
         "CXX": "clang++"
@@ -47,9 +45,7 @@
       "environment": {
         "BUILD_ENVIRONMENT": "dev"
       },
-      "inherits": [
-        "base-clang"
-      ]
+      "inherits": ["base-clang"]
     },
     {
       "name": "clang-llvm20-debug",
@@ -68,9 +64,7 @@
       "environment": {
         "BUILD_ENVIRONMENT": "dev"
       },
-      "inherits": [
-        "base-clang"
-      ]
+      "inherits": ["base-clang"]
     }
   ],
   "buildPresets": [

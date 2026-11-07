@@ -1,6 +1,6 @@
 fn init() => { message: "Hello World" }
 
-fn view(count: Int): Node => {
+fn view(count: Int, test: Bool): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }
   #block(direction: "column",
          fill: white,
