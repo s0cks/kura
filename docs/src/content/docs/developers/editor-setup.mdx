@@ -1,0 +1,92 @@
+---
+title: Editor Setup
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Kura provides an implementation of the [language-server-protocol](https://microsoft.github.io/language-server-protocol/) (LSP).
+
+## Setup
+
+<Aside type="note" title="Work In Progress">
+  Support for any editor is currently non-existent.
+
+  This note will be removed when at least official Neovim support is added.
+</Aside>
+
+### Neovim
+
+<Aside type="caution" title="Works, but no official support yet">
+  Kura - including the lsp, has been developed mostly using Neovim.
+
+  Provided you configure Neovim correctly it **should** work.
+
+  Official support for Neovim will come once the LSP is more established.
+</Aside>
+
+```lua
+--- Register the filetype with Neovim:
+vim.filetype.add({
+  extension = {
+    kui = 'kura',
+  },
+})
+
+--- Configure the LSP:
+local make_default_capabilities = require('plugins.lsp.capabilities')
+local capabilities = make_default_capabilities()
+
+vim.lsp.config('kura', {
+  capabilities = capabilities,
+  settings = {},
+  cmd = {
+    'kura-lsp',
+  },
+  filetypes = {
+    'kura',
+  },
+  root_markers = {
+    '.git',
+  },
+})
+
+--- Enable the LSP
+vim.lsp.enable('kura')
+```
+
+#### Syntax Highlighting Using Tree-sitter
+
+<Aside type="caution" title="Works, but no official support yet">
+  The tree-sitter plugin is still a work-in-progress and may not support
+  the entire syntax suite for Kura.
+
+  Official support will begin along with the LSP
+</Aside>
+
+Kura also provides a [tree-sitter parser](https://github.com/s0cks/tree-sitter-kura) for syntax highlighting using Neovim:
+
+```lua
+--- Enable using tree-sitter-manager:
+{
+  'romus204/tree-sitter-manager.nvim',
+  dependencies = {},
+  opts = {
+    languages = {
+      kura = {
+        install_info = {
+          url = 'https://github.com/s0cks/tree-sitter-kura.git',
+          files = { 'src/parser.c' },
+          queries = 'queries/kura',
+        },
+        filetype = 'kura',
+      },
+    },
+  },
+}
+```
+
+### VSCode
+
+<Aside type="danger" title="Planned">
+  VSCode support is currently planned
+</Aside>

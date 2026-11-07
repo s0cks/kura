@@ -55,7 +55,17 @@ export default defineConfig({
         },
         {
           label: "Reference",
-          items: [{ autogenerate: { directory: "reference" } }],
+          items: [
+            { label: "Syntax", slug: "reference/syntax" },
+            { label: "Primitives", slug: "reference/primitives" },
+            { label: "Types", slug: "reference/types" },
+            { label: "Control Flow", slug: "reference/control-flow" },
+            { label: "Pipelines", slug: "reference/pipelines" },
+            { label: "UI Primitives", slug: "reference/ui-primitives" },
+            { label: "Modules", slug: "reference/modules" },
+            { label: "Directives", slug: "reference/directives" },
+            { label: "C-Interop", slug: "reference/c-interop" },
+          ],
         },
         {
           label: "Developers",
