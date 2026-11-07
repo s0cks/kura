@@ -31,10 +31,7 @@ Server::Server(uv_loop_t* loop) :
   caps_.documentSymbolProvider = true;
   caps_.referencesProvider = true;
   caps_.completionProvider.triggerCharacters = {
-      ".",
-      "=>",
-      ":",
-      "fn",
+      ".", "=>", ":", "fn", "type",
   };
 
   uv_os_setenv("UV_THREADPOOL_SIZE", "4");
