@@ -1,7 +1,7 @@
 #ifndef KURA_HEAP_PAGE_PROVIDER_H
 #define KURA_HEAP_PAGE_PROVIDER_H
 
-#include "heap/base.h"
+#include "platform.h"
 
 namespace kura::heap {
 // A span of address space: [start, start + size).

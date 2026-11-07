@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#include "heap/base.h"
+#include "platform.h"
 
 namespace kura::heap {
 // What a heap object is. Mirrors the runtime ABI's object kinds; the collector uses it to find an object's slots.

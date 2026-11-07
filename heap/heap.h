@@ -5,12 +5,12 @@
 #include <vector>
 
 #include "heap/arena.h"
-#include "heap/base.h"
 #include "heap/header.h"
 #include "heap/objects.h"
 #include "heap/page_provider.h"
 #include "heap/semispace.h"
 #include "heap/tenured_space.h"
+#include "platform.h"
 
 namespace kura::heap {
 struct HeapOptions {

@@ -4,9 +4,9 @@
 #include <cstdint>
 #include <string_view>
 
-#include "heap/base.h"
 #include "heap/header.h"
 #include "heap/value.h"
+#include "platform.h"
 
 namespace kura::heap {
 class Heap;

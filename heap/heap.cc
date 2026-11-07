@@ -9,11 +9,10 @@ thread_local Heap* current_heap = nullptr;
 
 void DefaultOutOfMemory(const Heap& heap, const Space space, const uword requested) {
   using ull = unsigned long long;
-  Fatal(__FILE__, __LINE__,
-        "out of memory: cannot allocate %llu bytes in the %s space (model %llu/%llu, tenured %llu/%llu)",
-        static_cast<ull>(requested), SpaceName(space), static_cast<ull>(heap.model().used()),
-        static_cast<ull>(heap.model().capacity()), static_cast<ull>(heap.tenured().used()),
-        static_cast<ull>(heap.tenured().reserved()));
+  Fatal(std::format("out of memory: cannot allocate %llu bytes in the %s space (model %llu/%llu, tenured %llu/%llu)",
+                    static_cast<ull>(requested), SpaceName(space), static_cast<ull>(heap.model().used()),
+                    static_cast<ull>(heap.model().capacity()), static_cast<ull>(heap.tenured().used()),
+                    static_cast<ull>(heap.tenured().reserved())));
 }
 }  // namespace
 

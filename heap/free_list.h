@@ -1,9 +1,9 @@
 #ifndef KURA_HEAP_FREE_LIST_H
 #define KURA_HEAP_FREE_LIST_H
 
-#include "heap/base.h"
 #include "heap/header.h"
 #include "heap/page_provider.h"
+#include "platform.h"
 
 namespace kura::heap {
 // The free blocks of the tenured space, kept in address order inside the free memory itself.

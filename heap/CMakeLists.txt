@@ -1,6 +1,5 @@
 add_library(kura-heap STATIC
   arena.cc
-  base.cc
   free_list.cc
   heap.cc
   objects.cc

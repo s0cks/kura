@@ -1,9 +1,9 @@
 #ifndef KURA_HEAP_SEMISPACE_H
 #define KURA_HEAP_SEMISPACE_H
 
-#include "heap/base.h"
 #include "heap/header.h"
 #include "heap/page_provider.h"
+#include "platform.h"
 
 namespace kura::heap {
 // The model space: two equal halves, one allocated into at a time.

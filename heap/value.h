@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#include "heap/base.h"
+#include "platform.h"
 
 namespace kura::heap {
 // A tagged value, laid out exactly like kura::rt::KuraValue (backend/runtime_abi.h); abi_check.cc keeps the two in

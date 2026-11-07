@@ -1,13 +1,22 @@
-#ifndef KURA_HEAP_BASE_H
-#define KURA_HEAP_BASE_H
+#ifndef KURA_PLATFORM_H
+#define KURA_PLATFORM_H
 
 #include <cstdint>
+#include <print>
+#include <source_location>
+#include <stdarg.h>
 
 #if defined(KURA_DEBUG) || defined(KURA_HEAP_DEBUG)
 #define KURA_HEAP_DEBUG_ENABLED 1
 #endif  // KURA_DEBUG || KURA_HEAP_DEBUG
 
-namespace kura::heap {
+#ifdef KURA_HEAP_DEBUG_ENABLED
+#define KURA_HEAP_DCHECK(cond, ...) KURA_HEAP_CHECK(cond, __VA_ARGS__)
+#else
+#define KURA_HEAP_DCHECK(cond, ...)
+#endif  // KURA_HEAP_DEBUG_ENABLED
+
+namespace kura {
 using word = intptr_t;
 using uword = uintptr_t;
 
@@ -42,19 +51,21 @@ constexpr auto IsAligned(const uword value, const uword alignment) -> bool {
   return (value & (alignment - 1)) == 0;
 }
 
-[[noreturn]] void Fatal(const char* file, int line, const char* format, ...) __attribute__((format(printf, 3, 4)));
-}  // namespace kura::heap
+namespace heap {
+static inline void Fatal(std::string s, const std::source_location loc = std::source_location::current()) {
+  std::fflush(stdout);
+  std::fprintf(stderr, "%s:%c", loc.file_name(), loc.line());
+  std::fprintf(stderr, "%s\n", s.c_str());
+  std::fflush(stderr);
+  std::abort();
+}
 
-#define KURA_HEAP_CHECK(cond, ...)                                                     \
-  do {                                                                                 \
-    if (!(cond))                                                                       \
-      ::kura::heap::Fatal(__FILE__, __LINE__, "check failed: " #cond " " __VA_ARGS__); \
+#define KURA_HEAP_CHECK(cond, ...)                                              \
+  do {                                                                          \
+    if (!(cond))                                                                \
+      ::kura::heap::Fatal(std::format("check failed: " #cond " " __VA_ARGS__)); \
   } while (false)
+}  // namespace heap
+}  // namespace kura
 
-#ifdef KURA_HEAP_DEBUG_ENABLED
-#define KURA_HEAP_DCHECK(cond, ...) KURA_HEAP_CHECK(cond, __VA_ARGS__)
-#else
-#define KURA_HEAP_DCHECK(cond, ...) ((void)sizeof(!(cond)))
-#endif  // KURA_HEAP_DEBUG_ENABLED
-
-#endif  // KURA_HEAP_BASE_H
+#endif  // KURA_PLATFORM_H

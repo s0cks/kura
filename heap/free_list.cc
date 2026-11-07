@@ -75,8 +75,8 @@ void FreeList::Free(const uword address, uword size) {
   std::memset(reinterpret_cast<void*>(address), 0xDD, size);
 #endif  // KURA_HEAP_DEBUG_ENABLED
 
-  auto* block = new (reinterpret_cast<void*>(address))
-      FreeBlock{ObjectHeader::Make(ObjKind::kFree, Space::kTenured, size), next};
+  auto* block =
+      new (reinterpret_cast<void*>(address)) FreeBlock{ObjectHeader::Make(ObjKind::kFree, Space::kTenured, size), next};
   if (prev)
     prev->next = block;
   else
@@ -96,13 +96,17 @@ void FreeList::Free(const uword address, uword size) {
 
 auto FreeList::num_blocks() const -> uword {
   uword count = 0;
-  ForEachBlock([&](uword, uword) { count++; });
+  ForEachBlock([&](uword, uword) {
+    count++;
+  });
   return count;
 }
 
 auto FreeList::largest_block() const -> uword {
   uword largest = 0;
-  ForEachBlock([&](uword, const uword size) { largest = std::max(largest, size); });
+  ForEachBlock([&](uword, const uword size) {
+    largest = std::max(largest, size);
+  });
   return largest;
 }
 }  // namespace kura::heap

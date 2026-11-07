@@ -1,10 +1,10 @@
 #ifndef KURA_HEAP_TENURED_SPACE_H
 #define KURA_HEAP_TENURED_SPACE_H
 
-#include "heap/base.h"
 #include "heap/free_list.h"
 #include "heap/header.h"
 #include "heap/page_provider.h"
+#include "platform.h"
 
 namespace kura::heap {
 // Large objects and objects that outlived the model space. Nothing in here ever moves.

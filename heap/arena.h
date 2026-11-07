@@ -3,9 +3,9 @@
 
 #include <vector>
 
-#include "heap/base.h"
 #include "heap/header.h"
 #include "heap/page_provider.h"
+#include "platform.h"
 
 namespace kura::heap {
 // A bump allocator that is emptied in one step. Backs the frame and tick scratch spaces (and the permanent region).
@@ -91,7 +91,7 @@ class Arena {
       uword address = chunk.region.start();
       while (address < chunk.cursor) {
         const auto header = reinterpret_cast<const ObjectHeader*>(address);
-        KURA_HEAP_CHECK(header->size() >= kMinBlockSize, "(corrupt header at %p)", reinterpret_cast<void*>(address));
+        KURA_HEAP_CHECK(header->size() >= kMinBlockSize, "(corrupt header at {})", reinterpret_cast<void*>(address));
         visit(address);
         address += header->size();
       }
