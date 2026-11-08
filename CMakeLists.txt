@@ -46,6 +46,11 @@ if(KURA_BUILD_FORMATTER)
   add_subdirectory(kurafmt)
 endif()
 
+option(KURA_BUILD_LINTER "Build kuralint" ON)
+if(KURA_BUILD_LINTER)
+  add_subdirectory(kuralint)
+endif()
+
 option(KURA_BUILD_TESTS "Build the unit tests (run them with ctest)" ON)
 if(KURA_BUILD_TESTS)
   enable_testing()
