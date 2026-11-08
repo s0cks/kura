@@ -41,9 +41,13 @@ if(KURA_BUILD_LSP)
   add_subdirectory(lsp)
 endif()
 
+option(KURA_BUILD_FORMATTER "Build kurafmt" ON)
+if(KURA_BUILD_FORMATTER)
+  add_subdirectory(kurafmt)
+endif()
+
 option(KURA_BUILD_TESTS "Build the unit tests (run them with ctest)" ON)
 if(KURA_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif()
-
