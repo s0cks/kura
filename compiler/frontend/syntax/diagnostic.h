@@ -18,7 +18,7 @@ namespace kura::syntax {
 // clang-format off
 #define FOR_EACH_SYNTAX_DIAGNOSTIC(V)                                                  \
   V(UnexpectedToken,           1, "unexpected token")                                  \
-  V(UnexpectedCharacter,       2, "character that is not part of Kura's syntax")      \
+  V(UnexpectedCharacter,       2, "character that is not part of Kura's syntax")       \
   V(UnterminatedString,        3, "string literal is not terminated")                  \
   V(InvalidEscape,             4, "unknown escape sequence in a string")               \
   V(UnterminatedRawIdent,      5, "backtick name is not terminated")                   \
@@ -39,28 +39,33 @@ namespace kura::syntax {
   V(MissingClosingDelimiter,  20, "unclosed delimiter")                                \
   V(DuplicateElse,            21, "'else' without a matching 'if'")                    \
   V(EmptyMatch,               22, "'match' without any arms")                          \
-  V(TooMuchNesting,           23, "expression is nested too deeply")                 \
-  V(BadInterpolation,         24, "string interpolation is malformed")                \
-  V(PlaceholderOutsideCall,   25, "'_' placeholder outside a call argument or pipe")  \
+  V(TooMuchNesting,           23, "expression is nested too deeply")                   \
+  V(BadInterpolation,         24, "string interpolation is malformed")                 \
+  V(PlaceholderOutsideCall,   25, "'_' placeholder outside a call argument or pipe")   \
   V(MixedPipes,               26, "'|>' and '<|' mixed without parentheses")           \
-  V(PositionalNotLast,        27, "positional argument followed by other arguments")  \
-  V(BadRecordUpdate,          28, "record update entry is malformed")                 \
-  V(WhenWithElse,             29, "'when' with an 'else'")                            \
-  V(BadForBinding,            30, "malformed 'for' binding")                          \
-  V(BadStaticAssert,          31, "malformed 'static-assert'")
+  V(PositionalNotLast,        27, "positional argument followed by other arguments")   \
+  V(BadRecordUpdate,          28, "record update entry is malformed")                  \
+  V(WhenWithElse,             29, "'when' with an 'else'")                             \
+  V(BadForBinding,            30, "malformed 'for' binding")                           \
+  V(BadStaticAssert,          31, "malformed 'static-assert'")                         \
+  V(StyleError,               32, "style error")
 // clang-format on
 
 enum class Severity : uint8_t {
-  kError,
-  kWarning,
   kNote,
+  kStyle,
+  kWarning,
+  kError,
 };
 
-enum class DiagnosticCode : uint16_t {
+// clang-format off
+enum DiagnosticCode : uint64_t {
 #define DEFINE_CODE(Name, Number, Summary) k##Name = Number,
   FOR_EACH_SYNTAX_DIAGNOSTIC(DEFINE_CODE)
 #undef DEFINE_CODE
+  kTotalNumberOfParserDiagnosticCodes,
 };
+// clang-format on
 
 // "E0007"
 auto ToString(DiagnosticCode code) -> std::string;
@@ -76,7 +81,7 @@ struct Label {
 
 struct Diagnostic {
   Severity severity = Severity::kError;
-  DiagnosticCode code = DiagnosticCode::kUnexpectedToken;
+  uint64_t code = 0;
   std::string message;
   // The span the message is about. Editors underline this.
   Span span;
@@ -125,7 +130,7 @@ class DiagnosticList {
       -> Diagnostic& {
     Diagnostic d{};
     d.severity = Severity::kError;
-    d.code = code;
+    d.code = static_cast<uint64_t>(code);
     d.message = std::move(message);
     d.span = span;
     d.span_label = std::move(span_label);

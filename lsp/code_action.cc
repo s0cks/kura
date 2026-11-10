@@ -80,7 +80,7 @@ auto GetCodeActions(const Document& doc, const Range& range) -> std::vector<Code
 
   const auto selection = syntax::Span(doc.ToOffset(range.start), doc.ToOffset(range.end));
   for (const auto& diag : doc.GetTree()->GetDiagnostics()) {
-    if (diag.code == syntax::DiagnosticCode::kFnWithoutParens)
+    if (diag.code == static_cast<uint64_t>(syntax::DiagnosticCode::kFnWithoutParens))
       AddEmptyParameterList(doc, diag, selection, actions);
   }
   return actions;

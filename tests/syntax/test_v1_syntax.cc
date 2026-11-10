@@ -8,10 +8,10 @@
 
 namespace kura::syntax::test {
 namespace {
-using C = DiagnosticCode;
+using C = uint64_t;
 
-auto Codes(const SyntaxTree& tree) -> std::vector<DiagnosticCode> {
-  std::vector<DiagnosticCode> codes{};
+auto Codes(const SyntaxTree& tree) -> std::vector<uint64_t> {
+  std::vector<uint64_t> codes{};
   for (const auto& d : tree.GetDiagnostics())
     codes.push_back(d.code);
   return codes;
@@ -32,7 +32,7 @@ auto Pat(const std::string& pattern) -> std::string {
   return Sexp(match->arms[0]->As<MatchArm>()->pattern);
 }
 
-auto Diagnose(const std::string& text) -> std::vector<DiagnosticCode> {
+auto Diagnose(const std::string& text) -> std::vector<uint64_t> {
   return Codes(*Tree(text));
 }
 }  // namespace
@@ -132,9 +132,9 @@ TEST(V1Syntax, WithoutAPlaceholderThePipedValueIsTheFirstArgument) {
 
 TEST(V1Syntax, APlaceholderAsWholeArgumentIsAPartialApplication) {
   EXPECT_EQ(Ok("add(_, 10)"), "(call add _ 10)");
-  EXPECT_EQ(Diagnose("let x = f(_ + 1)"), (std::vector<C>{C::kPlaceholderOutsideCall}));
-  EXPECT_EQ(Diagnose("let x = _"), (std::vector<C>{C::kPlaceholderOutsideCall}));
-  EXPECT_EQ(Diagnose("let x = [_]"), (std::vector<C>{C::kPlaceholderOutsideCall}));
+  EXPECT_EQ(Diagnose("let x = f(_ + 1)"), (std::vector<C>{DiagnosticCode::kPlaceholderOutsideCall}));
+  EXPECT_EQ(Diagnose("let x = _"), (std::vector<C>{DiagnosticCode::kPlaceholderOutsideCall}));
+  EXPECT_EQ(Diagnose("let x = [_]"), (std::vector<C>{DiagnosticCode::kPlaceholderOutsideCall}));
 }
 
 TEST(V1Syntax, BackwardPipeIsRightAssociative) {
@@ -143,8 +143,8 @@ TEST(V1Syntax, BackwardPipeIsRightAssociative) {
 }
 
 TEST(V1Syntax, MixingPipeDirectionsNeedsParentheses) {
-  EXPECT_EQ(Diagnose("let x = 1 |> f(_) <| 2"), (std::vector<C>{C::kMixedPipes}));
-  EXPECT_EQ(Diagnose("let x = f <| 1 |> g(_)"), (std::vector<C>{C::kMixedPipes}));
+  EXPECT_EQ(Diagnose("let x = 1 |> f(_) <| 2"), (std::vector<C>{DiagnosticCode::kMixedPipes}));
+  EXPECT_EQ(Diagnose("let x = f <| 1 |> g(_)"), (std::vector<C>{DiagnosticCode::kMixedPipes}));
   EXPECT_TRUE(Tree("let x = (1 |> f(_)) |> g(_)")->IsValid());
 }
 
@@ -206,8 +206,8 @@ TEST(V1Syntax, DirectiveArgumentsAreNeverPuns) {
 TEST(V1Syntax, PositionalElementArgumentsComeLast) {
   EXPECT_TRUE(Tree("fn v() => #text(fill: red, \"hi\")")->IsValid());
   EXPECT_TRUE(Tree("fn v() => #text(...style, fill: red, \"hi\")")->IsValid());
-  EXPECT_EQ(Diagnose("fn v() => #text(\"hi\", fill: red)"), (std::vector<C>{C::kPositionalNotLast}));
-  EXPECT_EQ(Diagnose("fn v() => #text(\"hi\", ...style)"), (std::vector<C>{C::kPositionalNotLast}));
+  EXPECT_EQ(Diagnose("fn v() => #text(\"hi\", fill: red)"), (std::vector<C>{DiagnosticCode::kPositionalNotLast}));
+  EXPECT_EQ(Diagnose("fn v() => #text(\"hi\", ...style)"), (std::vector<C>{DiagnosticCode::kPositionalNotLast}));
 }
 
 TEST(V1Syntax, SpreadKeepsItsPlaceSoTheLastEntryCanOverride) {
@@ -228,8 +228,7 @@ TEST(V1Syntax, StringsWithBracesBecomeTemplates) {
   EXPECT_EQ(Ok("\"\\{literal\\}\""), "\"{literal}\"");
   EXPECT_EQ(Ok("\"lone } brace\""), "\"lone } brace\"");
   // a string inside an interpolation, with braces of its own
-  EXPECT_EQ(Ok("\"x {f(\"y {z}\")} w\""),
-            "(template \"x \" (call f (template \"y \" z \"\")) \" w\")");
+  EXPECT_EQ(Ok("\"x {f(\"y {z}\")} w\""), "(template \"x \" (call f (template \"y \" z \"\")) \" w\")");
 }
 
 TEST(V1Syntax, InterpolatedExpressionsKeepTheirPlaceInTheFile) {
@@ -242,13 +241,13 @@ TEST(V1Syntax, InterpolatedExpressionsKeepTheirPlaceInTheFile) {
 }
 
 TEST(V1Syntax, InterpolationProblemsAreReportedWhereTheyAre) {
-  EXPECT_EQ(Diagnose("let s = \"{}\""), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("let s = \"{ }\""), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("let s = \"{a b}\""), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("let s = \"{a:.2}\""), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("let s = \"{a\n"), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("use \"a{b}.h\""), (std::vector<C>{C::kBadInterpolation}));
-  EXPECT_EQ(Diagnose("let x = match v { \"a{b}\" => 1 }"), (std::vector<C>{C::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let s = \"{}\""), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let s = \"{ }\""), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let s = \"{a b}\""), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let s = \"{a:.2}\""), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let s = \"{a\n"), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("use \"a{b}.h\""), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
+  EXPECT_EQ(Diagnose("let x = match v { \"a{b}\" => 1 }"), (std::vector<C>{DiagnosticCode::kBadInterpolation}));
   const auto tree = Tree("let s = \"{a b}\"");
   ASSERT_EQ(tree->GetDiagnostics().size(), 1U);
   EXPECT_EQ(tree->GetText(tree->GetDiagnostics().at(0).span), "b");
@@ -303,8 +302,8 @@ TEST(V1Syntax, ListsAreStillLists) {
   EXPECT_EQ(Ok("[1, 2, 3]"), "(seq 1 2 3)");
   EXPECT_EQ(Ok("[]"), "(seq)");
   EXPECT_EQ(Ok("[ x ]"), "(seq x)");
-  EXPECT_EQ(Diagnose("let x = [a for _, a in s, 2]"), (std::vector<C>{C::kUnexpectedToken}));
-  EXPECT_EQ(Diagnose("let x = [a for _, a in s fold t = 0 => t]"), (std::vector<C>{C::kUnexpectedToken}));
+  EXPECT_EQ(Diagnose("let x = [a for _, a in s, 2]"), (std::vector<C>{DiagnosticCode::kUnexpectedToken}));
+  EXPECT_EQ(Diagnose("let x = [a for _, a in s fold t = 0 => t]"), (std::vector<C>{DiagnosticCode::kUnexpectedToken}));
 }
 
 TEST(V1Syntax, LoopBindingsFollowGo) {
@@ -315,7 +314,7 @@ TEST(V1Syntax, LoopBindingsFollowGo) {
   EXPECT_EQ(Ok("for i, _ in xs => i"), "(for i, _ in xs => i)");
   EXPECT_EQ(Ok("for _ in xs => 1"), "(for _ in xs => 1)");
   EXPECT_EQ(Ok("for i in 0..10 => i"), "(for i in (.. 0 10) => i)");
-  EXPECT_EQ(Diagnose("let x = for a, b, c in xs => 1"), (std::vector<C>{C::kBadForBinding}));
+  EXPECT_EQ(Diagnose("let x = for a, b, c in xs => 1"), (std::vector<C>{DiagnosticCode::kBadForBinding}));
 }
 
 TEST(V1Syntax, AParenthesizedLoopGuardIsNotALambda) {
@@ -327,7 +326,7 @@ TEST(V1Syntax, AParenthesizedLoopGuardIsNotALambda) {
 TEST(V1Syntax, WhenIsAnIfWithoutAnElse) {
   EXPECT_EQ(Ok("when x > 5 { x }"), "(when (> x 5) (block 0 x))");
   EXPECT_EQ(Ok("when a { when b { c } }"), "(when a (block 0 (when b (block 0 c))))");
-  EXPECT_EQ(Diagnose("let x = when a { 1 } else { 2 }"), (std::vector<C>{C::kWhenWithElse}));
+  EXPECT_EQ(Diagnose("let x = when a { 1 } else { 2 }"), (std::vector<C>{DiagnosticCode::kWhenWithElse}));
 }
 
 TEST(V1Syntax, IsTakesAPattern) {
@@ -370,9 +369,9 @@ TEST(V1Syntax, RecordUpdateDoesNotGetInTheWayOfRecordsAndBlocks) {
   EXPECT_EQ(Ok("{ ...p, x: 0 }"), "(record ...p x:0)");
   EXPECT_EQ(Ok("{ x: 1 }"), "(record x:1)");
   EXPECT_EQ(Ok("{ a || b }"), "(block 0 (|| a b))");
-  EXPECT_EQ(Diagnose("let x = { p | }"), (std::vector<C>{C::kBadRecordUpdate}));
-  EXPECT_EQ(Diagnose("let x = { p | x }"), (std::vector<C>{C::kBadRecordUpdate}));
-  EXPECT_EQ(Diagnose("let x = { p | x = 1 }"), (std::vector<C>{C::kBadRecordUpdate}));
+  EXPECT_EQ(Diagnose("let x = { p | }"), (std::vector<C>{DiagnosticCode::kBadRecordUpdate}));
+  EXPECT_EQ(Diagnose("let x = { p | x }"), (std::vector<C>{DiagnosticCode::kBadRecordUpdate}));
+  EXPECT_EQ(Diagnose("let x = { p | x = 1 }"), (std::vector<C>{DiagnosticCode::kBadRecordUpdate}));
 }
 
 // ---- ?? and ?. --------------------------------------------------------------------------------
@@ -473,9 +472,8 @@ TEST(V1Syntax, AnUnspacedSubtractionOfADigitSuggestsTheSpaces) {
   const auto tree = Tree("let a = x-1");
   ASSERT_EQ(tree->GetDiagnostics().size(), 1U);
   const auto& d = tree->GetDiagnostics().at(0);
-  EXPECT_EQ(d.code, C::kBinaryMinusSpacing);
-  EXPECT_NE(RenderToString(tree->GetSource(), tree->GetDiagnostics()).find("did you mean `x - 1`"),
-            std::string::npos);
+  EXPECT_EQ(d.code, DiagnosticCode::kBinaryMinusSpacing);
+  EXPECT_NE(RenderToString(tree->GetSource(), tree->GetDiagnostics()).find("did you mean `x - 1`"), std::string::npos);
   // a kebab-case name with digits in it is still a name
   EXPECT_TRUE(Tree("let pos-2d-to-3d = 1\nlet a = pos-2d-to-3d")->IsValid());
 }

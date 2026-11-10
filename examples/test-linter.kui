@@ -1,0 +1,7 @@
+fn getTest() => "Hello World"
+
+fn getJSON() => "Hello World"
+
+type helloWorld = {
+  message: String,
+}

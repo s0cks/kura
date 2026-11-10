@@ -8,7 +8,13 @@
 namespace kura::syntax {
 auto ToString(const DiagnosticCode code) -> std::string {
   char buffer[8];
-  std::snprintf(buffer, sizeof(buffer), "E%04u", static_cast<unsigned>(code));
+  std::snprintf(buffer, sizeof(buffer), "K%04lu", code);
+  return buffer;
+}
+
+static inline auto CodeToString(const uint64_t code) -> std::string {
+  char buffer[8];
+  std::snprintf(buffer, sizeof(buffer), "K%04lu", code);
   return buffer;
 }
 
@@ -27,12 +33,15 @@ auto GetSummary(const DiagnosticCode code) -> std::string_view {
 auto ToString(const Severity severity) -> std::string_view {
   switch (severity) {
     case Severity::kError:
-      return "error";
+      return "ERROR";
     case Severity::kWarning:
-      return "warning";
+      return "WARNING";
     case Severity::kNote:
-      return "note";
+      return "NOTE";
+    case Severity::kStyle:
+      return "STYLE";
   }
+
   return "error";
 }
 
@@ -105,7 +114,7 @@ void Render(std::ostream& out, const SourceFile& source, const Diagnostic& d, co
   const auto gutter = std::string(Digits(last_line), ' ');
 
   const auto begin = source.GetPosition(d.span.begin);
-  out << paint(ColorOf(d.severity), std::string(ToString(d.severity)) + "[" + ToString(d.code) + "]");
+  out << paint(ColorOf(d.severity), std::string(ToString(d.severity)) + "[" + CodeToString(d.code) + "]");
   out << (options.color ? std::string(kBold) + ": " + d.message + kReset : ": " + d.message) << '\n';
   out << gutter << paint(kBlue, "--> ") << source.GetName() << ":" << begin << '\n';
   out << gutter << paint(kBlue, " |") << '\n';
