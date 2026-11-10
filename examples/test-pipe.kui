@@ -1,16 +1,16 @@
-fn add(a: Float, b: Float): Float => a + b
-fn sub(a: Float, b: Float): Float => a - b
-fn mul(a: Float, b: Float): Float => a * b
-fn div(a: Float, b: Float): Float => a / b
+fn add(a: Int, b: Int): Int => a + b
+fn sub(a: Int, b: Int): Int => a - b
+fn mul(a: Int, b: Int): Int => a * b
+fn div(a: Int, b: Int): Int => a / b
 
-fn pipe1(): Float => 10 |> add(10)
-fn pipe2(): Float => 10 |> add(_, 10)
-fn pipe3(): Float => 10 |> sub(2, _)
+fn pipe1(): Int => 10 |> add(10)
+fn pipe2(): Int => 10 |> add(_, 10)
+fn pipe3(): Int => 10 |> sub(2, _)
 
 let pipe5 = add(_, 2) >> sub(0, _)
 
-fn pipe6(): Float => pipe5(10)
+fn pipe6(): Int => pipe5(10) // sub(0, add(10, 2)) => sub(0, 12) => -12
 
 let pipe7 = add(2, _) << sub(_, 1)
 
-fn pipe8(): Float => pipe7(10)
+fn pipe8(): Int => pipe7(10) // add(2, sub(10, 1)) => add(2, 9) => 11

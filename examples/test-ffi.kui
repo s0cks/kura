@@ -21,7 +21,6 @@ type Rect = {
 }
 
 fn apply-print-rect(rect: Rect) =>
-  set button(fill: red)
   stdio.printf("%lf, %lf, %lf, %lf\n", rect.pos.x, rect.pos.y, rect.width, rect.height)
 
 fn print-rect(x: Float, y: Float, width: Float, height: Float) =>

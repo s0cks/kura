@@ -1,4 +1,4 @@
-fn init(): Content =>
+fn init(): Node =>
   #button(fill: 0) {
     #text()
   }

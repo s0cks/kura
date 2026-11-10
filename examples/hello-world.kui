@@ -9,27 +9,7 @@ fn view(count: Int, test: Bool): Node => {
          height: 1fr,
          padding: 10px,
          gap: 10px){
-    #block(direction: "row",
-           justify: "center",
-           height: 1fr,
-           fill: black,
-           gap: 32px,
-           padding: 20px){
-      #button(fill: red, shrink: 1, grow: 0){
-        #text(text)
-      }
-
-      #button(fill: blue){
-        #text("Close")
-      }
-
-      #button(fill: green, grow: 1){
-        #text("Close")
-      }
-
-      #button(fill: blue){
-        #text("Close")
-      }
-    }
+    "Hello World"
+    "Done"
   }
 }
