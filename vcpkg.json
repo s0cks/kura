@@ -8,6 +8,7 @@
     "glm",
     "libpng",
     "libjpeg-turbo",
-    "gtest"
+    "gtest",
+    "benchmark"
   ]
 }

@@ -9,6 +9,7 @@ add_library(kura-lsp-common STATIC
   keyword_completion.cc
   types.cc
   symbol.cc
+  diagnostic.cc
   completion_item.cc)
 target_link_libraries(kura-lsp-common
   PUBLIC jansson::jansson

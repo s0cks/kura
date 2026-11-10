@@ -154,10 +154,17 @@ struct Name {
   }
 };
 
-#define DEFINE_NODE(Name_)                \
-  static constexpr Kind kKind = k##Name_; \
-  Name_() :                               \
-    Node(kKind) {}
+#define DEFINE_NODE(Name_)                            \
+  static constexpr Kind kKind = k##Name_;             \
+  Name_() :                                           \
+    Node(kKind) {}                                    \
+  auto operator new(const size_t sz)->void*;          \
+  void operator delete(void* ptr) {}                  \
+  static inline auto New(const Span span) -> Name_* { \
+    Name_* value = new Name_();                       \
+    value->span = std::move(span);                    \
+    return value;                                     \
+  }
 
 namespace detail {
 inline void Visit(const NodeFn& fn, const Node* node) {
@@ -261,8 +268,8 @@ struct FnDecl : Node {
   DEFINE_NODE(FnDecl)
   std::vector<Node*> directives{};
   Name name{};
-  std::vector<Node*> params{};  // Param
-  Node* result = nullptr;       // optional
+  std::vector<Node*> params{};     // Param
+  Node* result = nullptr;          // optional
   std::vector<Node*> set_rules{};  // SetRule, before an unbraced body
   Node* body = nullptr;
 
@@ -604,9 +611,9 @@ struct MatchExpr : Node {
 // skips one (`for _, x in xs`). The element may be a pattern, `for _, { a, b } in xs`.
 struct ForExpr : Node {
   DEFINE_NODE(ForExpr)
-  Name first{};              // the index; `_` when it is skipped
-  Node* second = nullptr;    // optional: a pattern for the element
-  bool bracketed = false;    // `[ body for ... ]`; has no fold
+  Name first{};            // the index; `_` when it is skipped
+  Node* second = nullptr;  // optional: a pattern for the element
+  bool bracketed = false;  // `[ body for ... ]`; has no fold
   Node* iterable = nullptr;
   Node* guard = nullptr;  // optional
   bool has_fold = false;
@@ -903,31 +910,6 @@ inline auto Node::GetKindName() const -> const char* {
   }
   return "Unknown";
 }
-
-// Owns every node of a tree, so nodes can point at each other freely.
-class Arena {
- private:
-  std::vector<std::unique_ptr<Node>> nodes_{};
-
- public:
-  Arena() = default;
-  ~Arena() = default;
-  Arena(const Arena&) = delete;
-  Arena& operator=(const Arena&) = delete;
-
-  template <typename T>
-  auto New(const Span& span) -> T* {
-    auto node = std::make_unique<T>();
-    node->span = span;
-    auto* raw = node.get();
-    nodes_.push_back(std::move(node));
-    return raw;
-  }
-
-  auto size() const -> size_t {
-    return nodes_.size();
-  }
-};
 
 // The deepest node whose span touches `offset`; what an editor wants for
 // hover, go to definition and completion. Null when the offset is outside

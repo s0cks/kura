@@ -3,6 +3,7 @@
 #include "common.h"
 #include "frontend/syntax/ast.h"
 #include "frontend/syntax/diagnostic.h"
+#include "log.h"
 
 namespace kura::lsp {
 void CodeAction::operator>>(json_t* doc) const {
@@ -37,6 +38,50 @@ auto Overlaps(const syntax::Span& span, const syntax::Span& selection) -> bool {
   return span.Touches(selection.begin) || span.Touches(selection.end) || selection.Touches(span.begin);
 }
 
+static inline void AddElse(const Document& doc, const syntax::Diagnostic& diag, const syntax::Span& selection,
+                           std::vector<CodeAction>& actions) {
+  const auto* root = doc.GetRoot();
+  if (!root)
+    return;
+
+  const syntax::IfExpr* expr = nullptr;
+  root->ForEachChild([&](const syntax::Node* item) {
+    const auto* if_expr = item->As<syntax::IfExpr>();
+    log::info(std::format("node: {}", item->GetKindName()));
+    log::info(std::format("diag span: {}, {}", diag.span.begin, diag.span.end));
+    if (if_expr) {
+      log::info(std::format("expr span: {}, {}", if_expr->span.begin, if_expr->span.end));
+      if (if_expr->span.Touches(diag.span.begin - 1))
+        expr = item->As<syntax::IfExpr>();
+    }
+  });
+
+  if (!expr) {
+    log::info("no expr found");
+    return;
+  }
+
+  if (expr->else_branch) {
+    log::info("else branch exists");
+    return;
+  }
+
+  if (!Overlaps(syntax::Span(expr->span.begin, diag.span.end), selection)) {
+    log::info("no overlaps");
+    return;
+  }
+
+  actions.push_back(CodeAction{
+      .title = "Add an else block",
+      .isPreferred = true,
+      .uri = doc.GetUri(),
+      .edits = {TextEdit{
+          .range = doc.ToRange(diag.span),
+          .newText = "else { None }",
+      }},
+  });
+}
+
 // `fn name => ...` -> `fn name() => ...`
 void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, const syntax::Span& selection,
                            std::vector<CodeAction>& actions) {
@@ -51,6 +96,7 @@ void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, 
     if (decl && decl->span.Touches(diag.span.begin))
       fn = decl;
   });
+
   if (!fn || !fn->params.empty())
     return;
 
@@ -82,7 +128,10 @@ auto GetCodeActions(const Document& doc, const Range& range) -> std::vector<Code
   for (const auto& diag : doc.GetTree()->GetDiagnostics()) {
     if (diag.code == static_cast<uint64_t>(syntax::DiagnosticCode::kFnWithoutParens))
       AddEmptyParameterList(doc, diag, selection, actions);
+    else if (diag.code == syntax::DiagnosticCode::kIfWithoutElse)
+      AddElse(doc, diag, selection, actions);
   }
+
   return actions;
 }
 }  // namespace kura::lsp

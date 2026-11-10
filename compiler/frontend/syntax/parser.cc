@@ -4,24 +4,25 @@
 #include <cctype>
 
 #include "compiler/frontend/syntax/lexer.h"
+#include "frontend/syntax/ast.h"
 
 namespace kura::syntax {
 namespace {
 using K = Token;
 
 const auto kExpressionStart = K::Set({
-    K::kNumber, K::kString,   K::kTrue,  K::kFalse,      K::kNone,   K::kPxLit,  K::kPctLit, K::kFrLit,
+    K::kNumber,   K::kString, K::kTrue,       K::kFalse,  K::kNone,   K::kPxLit, K::kPctLit, K::kFrLit,
     K::kColorLit, K::kIdent,  K::kUpperIdent, K::kLBrack, K::kLBrace, K::kIf,    K::kMatch,  K::kFor,
-    K::kWhen,   K::kHash,     K::kDirective, K::kLParen, K::kMinus,  K::kBang,   K::kDotDot, K::kDotDotEq,
+    K::kWhen,     K::kHash,   K::kDirective,  K::kLParen, K::kMinus,  K::kBang,  K::kDotDot, K::kDotDotEq,
 });
 
 // Where parsing of a top level item can safely start again.
 const auto kItemStart = K::Set({K::kLet, K::kFn, K::kType, K::kUse, K::kExtern, K::kDirective, K::kStaticAssert});
 
 // What can begin a match arm. Arms may be separated by a comma or just by starting the next one.
-const auto kPatternStart = K::Set({K::kUnderscore, K::kIdent, K::kNone, K::kUpperIdent, K::kMinus, K::kNumber,
-                                   K::kString, K::kTrue, K::kFalse, K::kPxLit, K::kPctLit, K::kFrLit, K::kColorLit,
-                                   K::kLBrace, K::kDotDot, K::kDotDotEq});
+const auto kPatternStart =
+    K::Set({K::kUnderscore, K::kIdent, K::kNone, K::kUpperIdent, K::kMinus, K::kNumber, K::kString, K::kTrue, K::kFalse,
+            K::kPxLit, K::kPctLit, K::kFrLit, K::kColorLit, K::kLBrace, K::kDotDot, K::kDotDotEq});
 
 // What can stand as a child of a `#element { ... }` besides an element, a binding or a `set` rule.
 const auto kChildExpressionStart =
@@ -215,7 +216,7 @@ class TreeBuilder {
 
   template <typename T>
   auto New(const uint32_t begin) -> T* {
-    return tree_.arena_.template New<T>(SpanFrom(begin));
+    return T::New(SpanFrom(begin));
   }
 
   auto NewError(const uint32_t begin) -> Error* {
@@ -225,7 +226,7 @@ class TreeBuilder {
   // Stands in for something that should have been here and isn't. It sits
   // right after the last consumed token, which keeps it inside its parent.
   auto NewMissing() -> Error* {
-    return tree_.arena_.New<Error>(Span(prev_end_, prev_end_));
+    return Error::New(Span(prev_end_, prev_end_));
   }
 
   // ---- diagnostics ----------------------------------------------------------
@@ -503,7 +504,7 @@ class TreeBuilder {
   auto ParsePun(Name& name) -> Node* {
     const auto token = Next();
     name = MakeName(token.span, Text(token.span));
-    auto* ref = tree_.arena_.New<VarRef>(token.span);
+    auto* ref = VarRef::New(token.span);
     ref->name = name;
     return ref;
   }
@@ -518,7 +519,7 @@ class TreeBuilder {
   // lists two names.
   auto ParseUiArg(const bool allow_pun = true) -> Node* {
     const auto begin = Here();
-    auto* arg = tree_.arena_.New<Arg>(Span(begin, begin));
+    auto* arg = Arg::New(Span(begin, begin));
     if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
       const auto token = Next();
       Next();  // ':'
@@ -586,7 +587,7 @@ class TreeBuilder {
 
   auto ParseDirective() -> Node* {
     const auto token = Next();
-    auto* directive = tree_.arena_.New<Directive>(token.span);
+    auto* directive = Directive::New(token.span);
     directive->name =
         MakeName(Span(token.span.begin + 1, token.span.end), Text(Span(token.span.begin + 1, token.span.end)));
     if (Is(K::kLParen)) {
@@ -689,7 +690,7 @@ class TreeBuilder {
     auto* record = New<RecordType>(begin);
     ParseDelimited(K::kRBrace, open.span, [&] {
       const auto field_begin = Here();
-      auto* field = tree_.arena_.New<Field>(Span(field_begin, field_begin));
+      auto* field = Field::New(Span(field_begin, field_begin));
       field->name = ParseName("a field name");
       field->optional = Accept(K::kQMark);
       Expect(K::kColon);
@@ -730,7 +731,7 @@ class TreeBuilder {
   // ---- patterns -------------------------------------------------------------
 
   auto MakeUnit(const Token& token) -> Node* {
-    auto* unit = tree_.arena_.New<UnitLit>(token.span);
+    auto* unit = UnitLit::New(token.span);
     unit->text = Text(token.span);
     switch (token.kind) {
       case K::kPxLit:
@@ -753,20 +754,20 @@ class TreeBuilder {
     const auto token = Next();
     switch (token.kind) {
       case K::kNumber: {
-        auto* number = tree_.arena_.New<NumberLit>(token.span);
+        auto* number = NumberLit::New(token.span);
         number->text = Text(token.span);
         return number;
       }
       case K::kString: {
         if (HasInterpolation(source_.GetText(token.span)))
           ReportInterpolationNotAllowed(token, "in a pattern");
-        auto* string = tree_.arena_.New<StringLit>(token.span);
+        auto* string = StringLit::New(token.span);
         string->value = Unescape(source_.GetText(token.span));
         return string;
       }
       case K::kTrue:
       case K::kFalse: {
-        auto* boolean = tree_.arena_.New<BoolLit>(token.span);
+        auto* boolean = BoolLit::New(token.span);
         boolean->value = token.kind == K::kTrue;
         return boolean;
       }
@@ -823,7 +824,7 @@ class TreeBuilder {
         return;
       }
       const auto field_begin = Here();
-      auto* field = tree_.arena_.New<FieldPattern>(Span(field_begin, field_begin));
+      auto* field = FieldPattern::New(Span(field_begin, field_begin));
       field->name = ParseName("a field name");
       if (Accept(K::kColon))
         field->pattern = ParsePattern();
@@ -1110,7 +1111,7 @@ class TreeBuilder {
     ParseDelimited(K::kRParen, opener, [&] {
       if (Is(K::kUnderscore) && (PeekKind(1) == K::kComma || PeekKind(1) == K::kRParen)) {
         const auto token = Next();
-        args.push_back(tree_.arena_.New<Placeholder>(token.span));
+        args.push_back(Placeholder::New(token.span));
         return;
       }
       args.push_back(ParseExpression());
@@ -1254,8 +1255,7 @@ class TreeBuilder {
     if (ContainsPlaceholder(stage)) {
       node->stage = stage;
     } else if (const auto* call = stage->As<Call>();
-               call != nullptr && !call->optional &&
-               (IsNameChain(call->callee) || call->callee->Is<Paren>())) {
+               call != nullptr && !call->optional && (IsNameChain(call->callee) || call->callee->Is<Paren>())) {
       node->callee = call->callee;
       node->args = call->args;
     } else {
@@ -1265,8 +1265,7 @@ class TreeBuilder {
                  "the right side of `|>` must be a call, but `" + Text(stage->span) + "` has no argument list",
                  "add `()` here")
               .WithLabel(pipe.span, "this pipes the value on its left into a call")
-              .WithHelp("write `|> " + Text(stage->span) +
-                        "()`; the value on the left becomes the first argument");
+              .WithHelp("write `|> " + Text(stage->span) + "()`; the value on the left becomes the first argument");
         } else {
           Report(DiagnosticCode::kPipeTargetNotCall, stage->span,
                  "the right side of `|>` must be a call, found `" + Text(stage->span) + "`",
@@ -1347,7 +1346,7 @@ class TreeBuilder {
   auto ParseComprehensionTail(Node* element) -> ForExpr* {
     const auto begin = element->span.begin;
     Next();  // `for`
-    auto* node = tree_.arena_.New<ForExpr>(Span(begin, begin));
+    auto* node = ForExpr::New(Span(begin, begin));
     node->bracketed = true;
     node->body = element;
     ParseForHead(*node);
@@ -1406,7 +1405,7 @@ class TreeBuilder {
     auto* record = New<RecordLit>(begin);
     ParseDelimited(K::kRBrace, open.span, [&] {
       const auto entry_begin = Here();
-      auto* entry = tree_.arena_.New<Arg>(Span(entry_begin, entry_begin));
+      auto* entry = Arg::New(Span(entry_begin, entry_begin));
       if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
         const auto name = Next();
         Next();  // ':'
@@ -1447,7 +1446,7 @@ class TreeBuilder {
     auto* update = New<RecordUpdate>(begin);
     const auto base_begin = Here();
     const auto first = Next();
-    auto* ref = tree_.arena_.New<VarRef>(first.span);
+    auto* ref = VarRef::New(first.span);
     ref->name = MakeName(first.span, Text(first.span));
     Node* base = ref;
     while (Is(K::kDot)) {
@@ -1462,7 +1461,7 @@ class TreeBuilder {
     Expect(K::kBar);
     ParseDelimited(K::kRBrace, open.span, [&] {
       const auto entry_begin = Here();
-      auto* entry = tree_.arena_.New<UpdateEntry>(Span(entry_begin, entry_begin));
+      auto* entry = UpdateEntry::New(Span(entry_begin, entry_begin));
       entry->path.push_back(ParseName("a field name"));
       while (Accept(K::kDot))
         entry->path.push_back(ParseMemberName());
@@ -1532,7 +1531,7 @@ class TreeBuilder {
 
   auto ParseBinding(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* binding = tree_.arena_.New<Binding>(Span(begin, begin));
+    auto* binding = Binding::New(Span(begin, begin));
     binding->directives = std::move(directives);
     binding->is_let = Is(K::kLet);
     if (binding->is_let)
@@ -1599,7 +1598,8 @@ class TreeBuilder {
         }
       } else {
         ReportHere(DiagnosticCode::kUnexpectedToken,
-                   "expected a `let` binding, a `set` rule, an expression or `}`, found " + Found(Peek()), "not allowed here");
+                   "expected a `let` binding, a `set` rule, an expression or `}`, found " + Found(Peek()),
+                   "not allowed here");
         SkipUntil(K::Set({K::kRBrace, K::kLet}));
         if (index_ == before && !AtEof() && !Is(K::kRBrace) && !AtItemKeyword())
           Next();
@@ -1675,7 +1675,7 @@ class TreeBuilder {
         K::kRBrace, open.span,
         [&] {
           const auto arm_begin = Here();
-          auto* arm = tree_.arena_.New<MatchArm>(Span(arm_begin, arm_begin));
+          auto* arm = MatchArm::New(Span(arm_begin, arm_begin));
           arm->pattern = ParsePattern();
           if (Accept(K::kIf)) {
             FlagScope guard(in_guard_, true);
@@ -1707,8 +1707,7 @@ class TreeBuilder {
     if (Accept(K::kComma))
       node.second = ParsePattern();
     if (Is(K::kComma)) {
-      ReportHere(DiagnosticCode::kBadForBinding, "a `for` binds at most two names, found a third",
-                 "no third binding")
+      ReportHere(DiagnosticCode::kBadForBinding, "a `for` binds at most two names, found a third", "no third binding")
           .WithHelp("the first name is the index and the second is the element: `for i, x in xs`");
       SkipUntil(K::Set({K::kIn, K::kFatArrow}));
     }
@@ -1747,7 +1746,7 @@ class TreeBuilder {
     if (!guard.ok)
       return NewMissing();
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* element = tree_.arena_.New<UiElement>(Span(begin, begin));
+    auto* element = UiElement::New(Span(begin, begin));
     element->directives = std::move(directives);
     if (!Expect(K::kHash)) {
       element->span = SpanFrom(begin);
@@ -1803,10 +1802,10 @@ class TreeBuilder {
         // a string is a text node, `1fr` a spacer, and `when`, `if`, `for`, `match` and calls produce nodes
         element.children.push_back(ParseExpression());
       } else {
-        ReportHere(DiagnosticCode::kUnexpectedToken,
-                   "expected a child `#element`, a string, a `let` binding, a `set` rule or `}`, found " +
-                       Found(Peek()),
-                   "not allowed here")
+        ReportHere(
+            DiagnosticCode::kUnexpectedToken,
+            "expected a child `#element`, a string, a `let` binding, a `set` rule or `}`, found " + Found(Peek()),
+            "not allowed here")
             .WithLabel(open, "inside the children of this element")
             .WithHelp(
                 "children are `#elements`, strings (which become text), spacers like `1fr`, `when`/`if`/`for` "
@@ -1930,8 +1929,9 @@ class TreeBuilder {
       Report(DiagnosticCode::kBadInterpolation, Span(open, close), "this interpolation is empty",
              "nothing between the braces")
           .WithHelp("put an expression in the braces, like `{count}`, or write `\\{` for a literal brace");
-      return tree_.arena_.New<Error>(Span(open, close));
+      return Error::New(Span(open, close));
     }
+
     TreeBuilder inner(tree_, options_, lexed.tokens);
     inner.depth_ = depth_;
     inner.prev_end_ = inner_begin;
@@ -1952,11 +1952,12 @@ class TreeBuilder {
     const auto token = Next();
     const auto raw = source_.GetText(token.span);
     if (token.malformed || !HasInterpolation(raw)) {
-      auto* string = tree_.arena_.New<StringLit>(token.span);
+      auto* string = StringLit::New(token.span);
       string->value = Unescape(raw);
       return string;
     }
-    auto* tmpl = tree_.arena_.New<StringTemplate>(token.span);
+
+    auto* tmpl = StringTemplate::New(token.span);
     std::string text{};
     size_t at = 1;  // after the opening quote
     while (at < raw.size()) {
@@ -2010,8 +2011,8 @@ class TreeBuilder {
         rule->props.push_back(ParseUiArg());
       });
     } else {
-      ReportHere(DiagnosticCode::kUnexpectedToken,
-                 "expected `(` and the properties to set, found " + Found(Peek()), "expected `(` here")
+      ReportHere(DiagnosticCode::kUnexpectedToken, "expected `(` and the properties to set, found " + Found(Peek()),
+                 "expected `(` here")
           .WithHelp("a set rule looks like `set button(fill: black)`");
     }
     rule->span = SpanFrom(begin);
@@ -2046,7 +2047,7 @@ class TreeBuilder {
 
   auto ParseTypeDecl(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* decl = tree_.arena_.New<TypeDecl>(Span(begin, begin));
+    auto* decl = TypeDecl::New(Span(begin, begin));
     decl->directives = std::move(directives);
     Next();  // `type`
     if (Is(K::kUpperIdent)) {
@@ -2104,7 +2105,7 @@ class TreeBuilder {
         return;
       }
       const auto begin = Here();
-      auto* param = tree_.arena_.New<Param>(Span(begin, begin));
+      auto* param = Param::New(Span(begin, begin));
       param->name = ParseName("a parameter name");
       if (Expect(K::kColon))
         param->type = ParseTypeExpr();
@@ -2133,7 +2134,7 @@ class TreeBuilder {
 
   auto ParseFnDecl(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* decl = tree_.arena_.New<FnDecl>(Span(begin, begin));
+    auto* decl = FnDecl::New(Span(begin, begin));
     decl->directives = std::move(directives);
     const auto fn_token = Next();
     decl->name = ParseName("a function name");
@@ -2163,7 +2164,7 @@ class TreeBuilder {
 
   auto ParseExternDecl(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* decl = tree_.arena_.New<ExternDecl>(Span(begin, begin));
+    auto* decl = ExternDecl::New(Span(begin, begin));
     decl->directives = std::move(directives);
     const auto extern_token = Next();
     if (Is(K::kString)) {
@@ -2200,7 +2201,7 @@ class TreeBuilder {
 
   auto ParseUseDecl(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
-    auto* decl = tree_.arena_.New<UseDecl>(Span(begin, begin));
+    auto* decl = UseDecl::New(Span(begin, begin));
     decl->directives = std::move(directives);
     const auto use_token = Next();
     if (Is(K::kString)) {
@@ -2283,7 +2284,7 @@ class TreeBuilder {
     diagnostics_(tree.diagnostics_) {}
 
   void Run() {
-    auto* module = tree_.arena_.New<Module>(Span(0, source_.GetSize()));
+    auto* module = Module::New(Span(0, source_.GetSize()));
     while (!AtEof()) {
       const auto before = index_;
       if (IsCloser(PeekKind())) {

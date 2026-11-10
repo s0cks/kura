@@ -1,15 +1,28 @@
-fn init() => { message: "Hello World"  }
+type State = {
+  message?: String,
+}
+
+fn init(): State => { message: "Hello World"  }
 
 fn view(count: Int, test: Bool): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }
-  #block(direction: "column",
+  #block(direction: "row",
          fill: white,
          radius: 16px,
          width: 1fr,
          height: 1fr,
          padding: 10px,
          gap: 10px){
-    "Hello World"
-    "Done"
+    #button(fill: red, shrink: 0) {
+      "Hello World"
+    }
+
+    #button(fill: green, grow: 1) {
+      "test"
+    }
+
+    #button(fill: blue, shrink: 0) {
+      "test"
+    }
   }
 }

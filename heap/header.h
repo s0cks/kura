@@ -6,6 +6,68 @@
 #include "platform.h"
 
 namespace kura::heap {
+
+#define FOR_EACH_SYNTAX_NODE(V) \
+  V(Error)                      \
+  V(Module)                     \
+  V(Directive)                  \
+  V(Arg)                        \
+  V(Param)                      \
+  V(Field)                      \
+  V(TypeDecl)                   \
+  V(FnDecl)                     \
+  V(ExternDecl)                 \
+  V(UseDecl)                    \
+  V(Binding)                    \
+  V(NamedType)                  \
+  V(VariantType)                \
+  V(QualifiedType)              \
+  V(NoneType)                   \
+  V(RecordType)                 \
+  V(FunctionType)               \
+  V(UnionType)                  \
+  V(NumberLit)                  \
+  V(StringLit)                  \
+  V(BoolLit)                    \
+  V(NoneLit)                    \
+  V(UnitLit)                    \
+  V(VarRef)                     \
+  V(VariantRef)                 \
+  V(SeqLit)                     \
+  V(RecordLit)                  \
+  V(Block)                      \
+  V(IfExpr)                     \
+  V(MatchExpr)                  \
+  V(MatchArm)                   \
+  V(ForExpr)                    \
+  V(Lambda)                     \
+  V(UiElement)                  \
+  V(Paren)                      \
+  V(Unary)                      \
+  V(Binary)                     \
+  V(Member)                     \
+  V(Call)                       \
+  V(Pipe)                       \
+  V(WildcardPattern)            \
+  V(BindingPattern)             \
+  V(NonePattern)                \
+  V(VariantPattern)             \
+  V(LiteralPattern)             \
+  V(Placeholder)                \
+  V(StringTemplate)             \
+  V(RangeExpr)                  \
+  V(IsExpr)                     \
+  V(WhenExpr)                   \
+  V(Index)                      \
+  V(PipeBack)                   \
+  V(RecordUpdate)               \
+  V(UpdateEntry)                \
+  V(SetRule)                    \
+  V(StaticAssert)               \
+  V(RecordPattern)              \
+  V(FieldPattern)               \
+  V(RangePattern)
+
 // What a heap object is. Mirrors the runtime ABI's object kinds; the collector uses it to find an object's slots.
 enum class ObjKind : uint8_t {
   kInvalid = 0,
@@ -15,6 +77,11 @@ enum class ObjKind : uint8_t {
   kNode,
   kClosure,
   kBox,
+
+#define DEFINE_KIND(Name) k##Name,
+  FOR_EACH_SYNTAX_NODE(DEFINE_KIND)
+#undef DEFINE_KIND
+
   // A free block inside the tenured space. Never reachable from a Value.
   kFree = 0xFE,
 };

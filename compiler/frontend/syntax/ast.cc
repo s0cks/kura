@@ -1,6 +1,18 @@
 #include "compiler/frontend/syntax/ast.h"
 
+#include "heap/header.h"
+#include "heap/heap.h"
+
 namespace kura::syntax {
+#define DEFINE_NEW(Name)                                                                                            \
+  auto Name::operator new(const size_t sz) -> void* {                                                               \
+    return ::kura::heap::Heap::Current()->AllocateObject(kura::heap::Space::kModel, ::kura::heap::ObjKind::k##Name, \
+                                                         sz);                                                       \
+  }
+
+FOR_EACH_NODE(DEFINE_NEW)
+#undef DEFINE_NEW
+
 auto FindPathAt(const Node* root, const uint32_t offset) -> std::vector<const Node*> {
   std::vector<const Node*> path{};
   if (root == nullptr || !root->span.Touches(offset))

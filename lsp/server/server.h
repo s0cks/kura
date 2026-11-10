@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lsp/code_action.h"
+#include "lsp/diagnostic.h"
 #include "lsp/document.h"
 #include "lsp/error.h"
 #include "lsp/server/response.h"
@@ -52,30 +53,6 @@ class Server {
   ServerInfo info_{};
   ServerCapabilities caps_{};
 
-  void Send(const std::string rhs);
-  void Send(const json_t* doc);
-  void Send(const Response& resp);
-  void Send(const json_int_t req_id, const ResponseType& rhs);
-  void Send(const json_int_t req_id, const Error& err);
-  void Send(const json_int_t req_id, const std::vector<Symbol>& rhs);
-  void Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs);
-  void Send(const json_int_t req_id, const std::vector<CodeAction>& rhs);
-
-  inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
-    return Send(req_id, Error{
-                            .code = code,
-                            .message = std::string(message),
-                        });
-  }
-
-  inline void SendParseError(const json_int_t req_id, const std::string_view message = "No parsed document") {
-    return SendError(req_id, LSP_ERROR_PARSE, std::move(message));
-  }
-
-  inline void SendInternalError(const json_int_t req_id, const std::string_view message = "Internal error") {
-    return SendError(req_id, LSP_ERROR_INTERNAL_ERROR, std::move(message));
-  }
-
   void ProcessRawBytes(const char* data, size_t size);
   void DispatchJsonRpc(std::string_view json);
   void OffloadCompilerTask(json_t* params);
@@ -113,6 +90,31 @@ class Server {
   ~Server();
 
   void Start();
+
+  void Send(const std::string rhs);
+  void Send(const json_t* doc);
+  void Send(const Response& resp);
+  void Send(const json_int_t req_id, const ResponseType& rhs);
+  void Send(const json_int_t req_id, const Error& err);
+  void Send(const json_int_t req_id, const std::vector<Symbol>& rhs);
+  void Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs);
+  void Send(const json_int_t req_id, const std::vector<CodeAction>& rhs);
+  void Send(const URI& uri, const std::vector<Diagnostic>& diagnostics);
+
+  inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
+    return Send(req_id, Error{
+                            .code = code,
+                            .message = std::string(message),
+                        });
+  }
+
+  inline void SendParseError(const json_int_t req_id, const std::string_view message = "No parsed document") {
+    return SendError(req_id, LSP_ERROR_PARSE, std::move(message));
+  }
+
+  inline void SendInternalError(const json_int_t req_id, const std::string_view message = "Internal error") {
+    return SendError(req_id, LSP_ERROR_INTERNAL_ERROR, std::move(message));
+  }
 };
 }  // namespace kura::lsp
 

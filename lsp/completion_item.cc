@@ -6,19 +6,27 @@ namespace kura::lsp {
 void CompletionItem::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_object_set(doc, "kind", json_integer(kind));
+
   if (!label.empty())
     json_object_set(doc, "label", json_string(label.c_str()));
+
   if (!detail.empty())
     json_object_set(doc, "detail", json_string(detail.c_str()));
+
   json_object_set(doc, "preselect", json_boolean(preselect));
+
   if (!sort.empty())
     json_object_set(doc, "sortText", json_string(sort.c_str()));
+
   if (!filter.empty())
     json_object_set(doc, "filterText", json_string(filter.c_str()));
+
   if (insertTextFormat != kNoInsertTextFormat)
     json_object_set(doc, "insertTextFormat", json_integer(insertTextFormat));
+
   if (!insertText.empty())
     json_object_set(doc, "insertText", json_string(insertText.c_str()));
+
   if (textEdit) {
     json_t* edit_node = json_object();
     KASSERT(edit_node);

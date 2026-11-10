@@ -4,6 +4,7 @@
 #include <memory>
 #include <print>
 
+#include "heap/heap.h"
 #include "linter.h"
 
 static inline auto Slurp(const std::string& filename) -> std::optional<std::string> {
@@ -32,12 +33,18 @@ auto main(int argc, char** argv) -> int {
     return EXIT_FAILURE;
   }
 
+  heap::Heap::SetCurrent(new heap::Heap(heap::Heap::SmallOptions()));
+
   const auto tree = ParseTree(argv[1]);
   if (!tree)
     return EXIT_FAILURE;
 
   lint::Linter linter{};
   syntax::DiagnosticList diagnostics{};
+
+  for (const auto& diagnostic : tree->GetDiagnostics())
+    diagnostics.Add(diagnostic);
+
   linter.Apply(*tree.get(), diagnostics);
 
   syntax::Render(std::cout, tree->GetSource(), diagnostics, {.color = true, .tab_width = 2});

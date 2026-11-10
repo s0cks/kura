@@ -18,7 +18,6 @@ class SyntaxTree {
 
  private:
   std::shared_ptr<const SourceFile> source_;
-  Arena arena_{};
   Module* root_ = nullptr;
   std::vector<Token> tokens_{};
   std::vector<Span> comments_{};

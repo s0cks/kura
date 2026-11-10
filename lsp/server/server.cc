@@ -187,6 +187,32 @@ static inline void SerializeList(const json_int_t req_id, const std::vector<T>& 
   json_object_set_new(res, "result", result);
 }
 
+void Server::Send(const URI& uri, const std::vector<Diagnostic>& rhs) {
+  json_t* doc = json_object();
+  KASSERT(doc);
+  json_object_set(doc, "jsonrpc", json_string("2.0"));
+  json_object_set(doc, "method", json_string("textDocument/publishDiagnostics"));
+
+  json_t* params = json_object();
+  KASSERT(params);
+  {
+    json_object_set(params, "uri", json_string(uri.c_str()));
+
+    json_t* diagnostics = json_array();
+    KASSERT(diagnostics);
+    for (const auto& diagnostic : rhs) {
+      json_t* value = json_object();
+      KASSERT(value);
+      diagnostic >> value;
+      json_array_append(diagnostics, value);
+    }
+    json_object_set(params, "diagnostics", diagnostics);
+  }
+  json_object_set(doc, "params", params);
+
+  return Send(doc);
+}
+
 void Server::Send(const json_int_t req_id, const std::vector<CodeAction>& rhs) {
   JsonResponse res{};
   SerializeList(req_id, rhs, res);
@@ -232,7 +258,7 @@ void Server::IndexDocument(const URI& uri) {
   if (!doc)
     return;
 
-  Queue(new IndexDocumentTask(doc));
+  Queue(new IndexDocumentTask(this, doc));
 }
 
 void Server::HandleDidOpen(const Request& req) {

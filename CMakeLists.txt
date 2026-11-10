@@ -34,7 +34,7 @@ add_subdirectory(renderer)
 
 add_subdirectory(kurac)
 
-option(KURA_BUILD_DEBUGGER "Build kura-debugger (needs GTK4, EGL and epoxy)" OFF)
+option(KURA_BUILD_DEBUGGER "Build debugger (needs GTK4, EGL and epoxy)" OFF)
 if(KURA_BUILD_DEBUGGER)
   add_subdirectory(debugger)
 endif()
@@ -52,6 +52,11 @@ endif()
 option(KURA_BUILD_LINTER "Build kuralint" ON)
 if(KURA_BUILD_LINTER)
   add_subdirectory(kuralint)
+endif()
+
+option(KURA_BUILD_BENCHMARKS "Build benchmarks" ON)
+if(KURA_BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
 endif()
 
 option(KURA_BUILD_TESTS "Build the unit tests (run them with ctest)" ON)

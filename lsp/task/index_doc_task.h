@@ -6,19 +6,22 @@
 #include <uv.h>
 
 #include "frontend/syntax/parser.h"
+#include "lsp/diagnostic.h"
 #include "lsp/document.h"
 
 namespace kura::lsp {
-// Parses a snapshot of a document on the thread pool. The task owns a copy of
-// the text, so the document can keep changing while the parse runs.
+class Server;
 struct IndexDocumentTask {
+  Server* server;
   Document* doc;
   std::string name{};
   std::string text{};
   uint64_t version = 0;
   std::unique_ptr<syntax::SyntaxTree> tree;
+  std::vector<Diagnostic> diagnostics{};
 
-  explicit IndexDocumentTask(Document* d) :
+  explicit IndexDocumentTask(Server* s, Document* d) :
+    server(s),
     doc(d),
     name(d->GetUri()),
     text(d->GetContents()),

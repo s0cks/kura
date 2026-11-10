@@ -220,6 +220,15 @@ class Heap {
   // The runtime functions compiled code calls (kura_rt_*) take no heap argument; they use the current thread's heap.
   static auto Current() -> Heap*;
   static void SetCurrent(Heap* heap);
+
+  static inline auto SmallOptions() -> HeapOptions {
+    HeapOptions options{};
+    options.model_space_size = 64 * kKiB;
+    options.tenured_size = 256 * kKiB;
+    options.frame = {.chunk_size = 16 * kKiB, .max_size = 0};
+    options.tick = {.chunk_size = 16 * kKiB, .max_size = 0};
+    return options;
+  }
 };
 }  // namespace kura::heap
 

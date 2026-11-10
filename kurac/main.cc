@@ -34,6 +34,7 @@
 #include "common.h"
 #include "frontend/expr_printer.h"
 #include "frontend/parser.h"
+#include "heap/heap.h"
 #include "kura.h"
 #include "module.h"
 
@@ -197,6 +198,9 @@ auto main(int argc, char** argv) -> int {
   if (!compile)
     std::println("running kurac v{}", KURA_VERSION);
 
+  const auto heap = new heap::Heap(heap::Heap::SmallOptions());
+  KASSERT(heap);
+  heap::Heap::SetCurrent(heap);
   Type::Init();
 
   LocalScope* scope = LocalScope::New();

@@ -45,6 +45,7 @@ TEST_P(DiagnosticCodeTest, ReportsTheRightCodeOnTheRightText) {
   ASSERT_EQ(tree->GetDiagnostics().size(), 1U) << param.source << "\n"
                                                << RenderToString(tree->GetSource(), tree->GetDiagnostics());
   const auto& d = tree->GetDiagnostics().at(0);
+  Render(std::cout, tree->GetSource(), d);
   EXPECT_EQ(d.code, param.code);
   EXPECT_EQ(std::string(tree->GetText(d.span)), param.quoted);
 }

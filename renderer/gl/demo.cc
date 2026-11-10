@@ -17,6 +17,7 @@
 
 #include "backend/program.h"
 #include "backend/runtime_abi.h"
+#include "heap/heap.h"
 #include "renderer/gl/renderer.h"
 
 // TODO(@s0cks): move to common
@@ -77,11 +78,17 @@ void OnGlfwError(const int code, const char* message) {
 }  // namespace
 
 int main(const int argc, char** argv) {
+  using namespace kura;
+
   Options options{};
   if (!ParseOptions(argc, argv, &options)) {
     std::fprintf(stderr, "usage: kura-gl-demo <file.kui> [args...] [--function <name>] [--frames <n>] [--no-opt]\n");
     return EXIT_FAILURE;
   }
+
+  const auto heap = new heap::Heap(heap::Heap::SmallOptions());
+  KASSERT(heap);
+  heap::Heap::SetCurrent(heap);
 
   // compile before opening a window, so a program that doesn't compile fails without flashing one
   std::string error{};
