@@ -33,10 +33,6 @@ struct ConfigSource {
     if (!exists())
       return false;
 
-#ifdef KURA_DEBUG
-    std::cerr << "parsing formatter config: " << filename << std::endl;
-#endif  // KURA_DEBUG
-
     switch (kind) {
       case kJson:
         return ParseConfigJson(filename, rhs);

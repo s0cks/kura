@@ -1,0 +1,2 @@
+// error: a Seq has no negative positions
+fn f(xs: Seq<Int>): Int => xs[-1]

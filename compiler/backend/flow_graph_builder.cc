@@ -220,7 +220,7 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitCase(expr::CaseExpr* expr) -> VisitResult override {
-    return Walk(expr->GetPattern()) && Walk(expr->GetBody());
+    return Walk(expr->GetPattern()) && Walk(expr->GetGuard()) && Walk(expr->GetBody());
   }
 
   auto VisitMatch(expr::MatchExpr* expr) -> VisitResult override {
@@ -271,7 +271,10 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitListComprehension(expr::ListComprehensionExpr* expr) -> VisitResult override {
-    defs.insert(expr->GetLocal());
+    if (expr->GetLocal() != nullptr)
+      defs.insert(expr->GetLocal());
+    if (expr->GetIndex() != nullptr)
+      defs.insert(expr->GetIndex());
     return Walk(expr->GetIterable()) && Walk(expr->GetClause()) && Walk(expr->GetBody());
   }
 
@@ -302,6 +305,10 @@ class FreeLocals : public expr::ExprVisitor {
     return Walk(expr->GetInstance());
   }
 
+  auto VisitIndex(expr::IndexExpr* expr) -> VisitResult override {
+    return Walk(expr->GetObject()) && Walk(expr->GetIndex());
+  }
+
   auto VisitStoreProperty(expr::StorePropertyExpr* expr) -> VisitResult override {
     return Walk(expr->GetValue());
   }
@@ -323,6 +330,18 @@ class FreeLocals : public expr::ExprVisitor {
     return Walk(expr->GetPayload());
   }
 
+  auto VisitRangePattern(expr::RangePatternExpr*) -> VisitResult override {
+    return true;
+  }
+
+  auto VisitRecordPattern(expr::RecordPatternExpr* expr) -> VisitResult override {
+    for (const auto& field : expr->GetFields()) {
+      if (!Walk(field.pattern))
+        return false;
+    }
+    return true;
+  }
+
   auto VisitLambda(expr::LambdaExpr* expr) -> VisitResult override {
     FreeLocals inner{};
     for (const auto param : expr->GetParams())
@@ -340,7 +359,10 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitFold(expr::FoldExpr* expr) -> VisitResult override {
-    defs.insert(expr->GetBinding());
+    if (expr->GetBinding() != nullptr)
+      defs.insert(expr->GetBinding());
+    if (expr->GetIndex() != nullptr)
+      defs.insert(expr->GetIndex());
     defs.insert(expr->GetAccumulator());
     return Walk(expr->GetIterable()) && Walk(expr->GetInitial()) && Walk(expr->GetClause()) && Walk(expr->GetBody());
   }

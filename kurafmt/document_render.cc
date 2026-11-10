@@ -38,14 +38,18 @@ static inline bool Fits(NodePtr node, int max_width, int initial_col) {
             current_col += arg.text.size();
           } else if constexpr (std::is_same_v<T, Line>) {
             if (arg.hard) {
-              // A hard line cannot fit flat on a single line
               current_col = max_width + 1;
             } else if (mode == Mode::kFlat) {
-              current_col += 1;  // Renders as a single space
+              if (arg.soft)
+                current_col += 1;
             } else {
-              // Renders as a newline, meaning everything up to here fit
               current_col = max_width + 1;
             }
+          } else if constexpr (std::is_same_v<T, BreakIf>) {
+            stack.push_back({
+                mode,
+                mode == Mode::kFlat ? arg.when_flat : arg.when_break,
+            });
           } else if constexpr (std::is_same_v<T, Indent>) {
             stack.push_back({mode, arg.node});
           } else if constexpr (std::is_same_v<T, Concat>) {
@@ -53,7 +57,6 @@ static inline bool Fits(NodePtr node, int max_width, int initial_col) {
               stack.push_back({mode, *it});
             }
           } else if constexpr (std::is_same_v<T, Group>) {
-            // Nested groups inside a flat check inherit the flat context
             stack.push_back({mode, arg.node});
           }
         },
@@ -86,8 +89,10 @@ auto Render(NodePtr root, const int max_width) -> std::string {
             current_col += arg.text.size();
           } else if constexpr (std::is_same_v<T, Line>) {
             if (mode == Mode::kFlat && !arg.hard) {
-              out.append(" ");
-              current_col += 1;
+              if (arg.soft) {
+                out.append(" ");
+                current_col += 1;
+              }
             } else {
               out.append("\n");
               out.append(indent, ' ');
@@ -99,6 +104,12 @@ auto Render(NodePtr root, const int max_width) -> std::string {
                 mode,
                 arg.node,
             });
+          } else if constexpr (std::is_same_v<T, BreakIf>) {
+            stack.push_back({
+                indent,
+                mode,
+                (mode == Mode::kFlat) ? arg.when_flat : arg.when_break,
+            });
           } else if constexpr (std::is_same_v<T, Concat>) {
             for (auto it = arg.nodes.rbegin(); it != arg.nodes.rend(); ++it) {
               stack.push_back({
@@ -108,10 +119,7 @@ auto Render(NodePtr root, const int max_width) -> std::string {
               });
             }
           } else if constexpr (std::is_same_v<T, Group>) {
-            Mode next = mode;
-            if (mode == Mode::kFlat)
-              next = Fits(arg.node, max_width, current_col) ? Mode::kFlat : Mode::kBreak;
-
+            Mode next = Fits(arg.node, max_width, current_col) ? Mode::kFlat : Mode::kBreak;
             stack.push_back({
                 indent,
                 next,

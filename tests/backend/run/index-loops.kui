@@ -1,0 +1,28 @@
+// Like Go: `for i in xs` is the index, `for i, x in xs` is the index and the element, and `_` skips one.
+// run: indexes => [0, 1, 2]
+// run: index-and-element => [0, 11, 24]
+// run: element-only => [10, 11, 12]
+// run: index-skipped-element => [0, 1, 2]
+// run: guard-uses-index => [11, 12]
+// run: guard-and-body-use-both => [1, 4]
+// run: fold-index => 3
+// run: fold-index-and-element => 5
+// run: fold-element-only => 33
+// run: comprehension-index => [0, 1, 2]
+// run: comprehension-index-element => [10, 12, 14]
+// run: comprehension-guard => [11, 12]
+// run: nested => [[[0, 0], [0, 1]], [[1, 0], [1, 1]]]
+fn xs(): Seq<Int> => [10, 11, 12]
+fn indexes(): Seq<Int> => for i in xs() => i
+fn index-and-element(): Seq<Int> => for i, x in xs() => i * x
+fn element-only(): Seq<Int> => for _, x in xs() => x
+fn index-skipped-element(): Seq<Int> => for i, _ in xs() => i
+fn guard-uses-index(): Seq<Int> => for i, x in xs() if i > 0 => x
+fn guard-and-body-use-both(): Seq<Int> => for i, x in xs() if x > 10 => i * x - 10 * i
+fn fold-index(): Int => for i in xs() fold total = 0 => total + i
+fn fold-index-and-element(): Int => for i, x in xs() fold total = 0 => total + i * x - 10 * i
+fn fold-element-only(): Int => for _, x in xs() fold total = 0 => total + x
+fn comprehension-index(): Seq<Int> => [ i for i in xs() ]
+fn comprehension-index-element(): Seq<Int> => [ (i + 5) * 2 for i, x in xs() ]
+fn comprehension-guard(): Seq<Int> => [ x for i, x in xs() if i > 0 ]
+fn nested(): Seq<Seq<Seq<Int>>> => for i in [0, 1] => for j in [0, 1] => [i, j]

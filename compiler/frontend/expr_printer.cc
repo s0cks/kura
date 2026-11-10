@@ -78,6 +78,10 @@ auto ExprPrinter::VisitIf(IfExpr* expr) -> VisitResult {
 auto ExprPrinter::VisitCase(CaseExpr* expr) -> VisitResult {
   stream() << "(case ";
   PrintChild(expr->GetPattern());
+  if (expr->HasGuard()) {
+    stream() << " if ";
+    PrintChild(expr->GetGuard());
+  }
   stream() << " => ";
   PrintChild(expr->GetBody());
   stream() << ')';
@@ -127,7 +131,10 @@ auto ExprPrinter::VisitList(ListExpr* expr) -> VisitResult {
 }
 
 auto ExprPrinter::VisitListComprehension(ListComprehensionExpr* expr) -> VisitResult {
-  stream() << "(for " << expr->GetBinding() << " in ";
+  stream() << "(for ";
+  if (expr->GetIndex() != nullptr)
+    stream() << NameOf(expr->GetIndex()) << ", ";
+  stream() << expr->GetBinding() << " in ";
   PrintChild(expr->GetIterable());
   if (expr->HasClause()) {
     stream() << " if ";
@@ -140,7 +147,10 @@ auto ExprPrinter::VisitListComprehension(ListComprehensionExpr* expr) -> VisitRe
 }
 
 auto ExprPrinter::VisitFold(FoldExpr* expr) -> VisitResult {
-  stream() << "(fold " << NameOf(expr->GetBinding()) << " in ";
+  stream() << "(fold ";
+  if (expr->GetIndex() != nullptr)
+    stream() << NameOf(expr->GetIndex()) << ", ";
+  stream() << (expr->GetBinding() != nullptr ? NameOf(expr->GetBinding()) : std::string("_")) << " in ";
   PrintChild(expr->GetIterable());
   if (expr->HasClause()) {
     stream() << " if ";
@@ -193,6 +203,15 @@ auto ExprPrinter::VisitStoreProperty(StorePropertyExpr* expr) -> VisitResult {
   return true;
 }
 
+auto ExprPrinter::VisitIndex(IndexExpr* expr) -> VisitResult {
+  stream() << "(index ";
+  PrintChild(expr->GetObject());
+  stream() << ' ';
+  PrintChild(expr->GetIndex());
+  stream() << ')';
+  return true;
+}
+
 auto ExprPrinter::VisitGetProperty(GetPropertyExpr* expr) -> VisitResult {
   stream() << "(get ";
   PrintChild(expr->GetChildAt(0));
@@ -236,6 +255,27 @@ auto ExprPrinter::VisitLiteralPattern(LiteralPatternExpr* expr) -> VisitResult {
 
 auto ExprPrinter::VisitBindingPattern(BindingPatternExpr* expr) -> VisitResult {
   stream() << "(bind " << NameOf(expr->GetLocal()) << ')';
+  return true;
+}
+
+auto ExprPrinter::VisitRangePattern(RangePatternExpr* expr) -> VisitResult {
+  stream() << "(range-pattern ";
+  if (expr->HasBegin())
+    PrintChild(expr->GetBegin());
+  stream() << (expr->IsInclusive() ? "..=" : "..");
+  if (expr->HasEnd())
+    PrintChild(expr->GetEnd());
+  stream() << ')';
+  return true;
+}
+
+auto ExprPrinter::VisitRecordPattern(RecordPatternExpr* expr) -> VisitResult {
+  stream() << "(record-pattern";
+  for (const auto& field : expr->GetFields()) {
+    stream() << ' ' << field.property->GetPropertyName()->GetValue() << ": ";
+    PrintChild(field.pattern);
+  }
+  stream() << ')';
   return true;
 }
 

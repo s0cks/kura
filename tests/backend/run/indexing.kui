@@ -1,0 +1,33 @@
+// `s[i]`, and `?.[` and `?.(`. An index that is out of range panics when the program runs.
+// run: first => 10
+// run: last => 12
+// run: computed 1 => 11
+// run: computed 2 => 12
+// run: nested => 3
+// run: in-loop => 33
+// run: of-call => 11
+// run: optional-present => 11
+// run: optional-absent => None
+// run: optional-or => -1
+// run: optional-call-present => 8
+// run: optional-call-absent => None
+// run: optional-call-or => 0
+// panic: computed 3 => index 3 is out of range for a Seq of 3
+// panic: computed -1 => index -1 is out of range for a Seq of 3
+type Op = { run?: (Int) => Int }
+fn xs(): Seq<Int> => [10, 11, 12]
+fn first(): Int => xs()[0]
+fn last(): Int => xs()[2]
+fn computed(i: Int): Int => xs()[i]
+fn nested(): Int => [[1, 2], [3, 4]][1][0]
+fn in-loop(): Int => for i in xs() fold total = 0 => total + xs()[i]
+fn of-call(): Int => xs()[1]
+fn maybe(present: Bool): Seq<Int> | None => if present { xs() } else { None }
+fn optional-present(): Int | None => maybe(true)?.[1]
+fn optional-absent(): Int | None => maybe(false)?.[1]
+fn optional-or(): Int => maybe(false)?.[1] ?? -1
+fn add-five(x: Int): Int => x + 5
+fn op(present: Bool): Op => if present { { run: add-five } } else { {} }
+fn optional-call-present(): Int | None => op(true).run?.(3)
+fn optional-call-absent(): Int | None => op(false).run?.(3)
+fn optional-call-or(): Int => op(false).run?.(3) ?? 0

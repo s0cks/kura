@@ -252,6 +252,36 @@ auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, Tar
     return true;
   }
 
+  if (const auto range = pattern->AsRangePattern()) {
+    // `lo..hi` matches when `lo <= subject` and `subject < hi` (`<=` for `..=`); a missing end isn't tested
+    const auto test = [&](const BinaryOp op, expr::LiteralExpr* end) {
+      const auto bound = Bind(ConstantInstr::New(end->GetValue()));
+      const auto holds = Bind(BinaryOpInstr::New(op, subject, bound));
+      const auto next = owner_->NewTarget("range.next");
+      owner_->Terminate(BranchInstr::New(holds, next, fail, nullptr));
+      owner_->Enter(next);
+    };
+    if (range->HasBegin())
+      test(BinaryOp::kGreaterThanEqual, range->GetBegin());
+    if (range->HasEnd())
+      test(range->IsInclusive() ? BinaryOp::kLessThanEqual : BinaryOp::kLessThan, range->GetEnd());
+    return true;
+  }
+
+  if (const auto record = pattern->AsRecordPattern()) {
+    // every field is read from the subject and matched in turn; it is irrefutable when all of them are
+    auto all_irrefutable = true;
+    for (const auto& field : record->GetFields()) {
+      const auto value = Bind(LoadPropertyInstr::New(subject, field.property));
+      auto field_irrefutable = false;
+      if (!LowerPattern(field.pattern, value, fail, &field_irrefutable))
+        return false;
+      all_irrefutable = all_irrefutable && field_irrefutable;
+    }
+    *irrefutable = all_irrefutable;
+    return true;
+  }
+
   Fail("unsupported pattern");
   return false;
 }
@@ -274,6 +304,18 @@ auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
     bool irrefutable = false;
     if (!LowerPattern(c->GetPattern(), subject, fail, &irrefutable))
       return false;
+
+    // `pattern if guard =>`: when the guard doesn't hold the next arm is tried, even if the pattern can't fail
+    if (c->HasGuard()) {
+      const auto condition = Eval(c->GetGuard());
+      if (!condition)
+        return false;
+
+      const auto keep = owner_->NewTarget("guard.keep");
+      owner_->Terminate(BranchInstr::New(condition, keep, fail, nullptr));
+      owner_->Enter(keep);
+      irrefutable = false;
+    }
 
     Value* value = nullptr;
     if (!EvalArm(c->GetBody(), &value))
@@ -427,7 +469,10 @@ auto EffectVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) ->
   if (!BeginLoop(iterable, &loop))
     return false;
 
-  owner_->Define(expr->GetLocal(), loop.item->GetDefinition());
+  if (expr->GetLocal() != nullptr)
+    owner_->Define(expr->GetLocal(), loop.item->GetDefinition());
+  if (expr->GetIndex() != nullptr)
+    owner_->Define(expr->GetIndex(), loop.index);
 
   const auto append = [&]() -> bool {
     const auto value = Eval(expr->GetBody());
@@ -487,7 +532,10 @@ auto EffectVisitor::VisitFold(expr::FoldExpr* expr) -> VisitResult {
     Instruction::Link(loop.header, accumulator);
     Instruction::Link(accumulator, first);
   }
-  owner_->Define(expr->GetBinding(), loop.item->GetDefinition());
+  if (expr->GetBinding() != nullptr)
+    owner_->Define(expr->GetBinding(), loop.item->GetDefinition());
+  if (expr->GetIndex() != nullptr)
+    owner_->Define(expr->GetIndex(), loop.index);
   owner_->Define(expr->GetAccumulator(), accumulator);
 
   Value* next = nullptr;
@@ -604,6 +652,19 @@ auto EffectVisitor::VisitStoreLocal(expr::StoreLocalExpr* expr) -> VisitResult {
   return true;
 }
 
+auto EffectVisitor::VisitIndex(expr::IndexExpr* expr) -> VisitResult {
+  const auto object = Eval(expr->GetObject());
+  if (!object)
+    return false;
+
+  const auto index = Eval(expr->GetIndex());
+  if (!index)
+    return false;
+
+  ReturnDefinition(LoadIndexInstr::New(object, index));
+  return true;
+}
+
 auto EffectVisitor::VisitGetProperty(expr::GetPropertyExpr* expr) -> VisitResult {
   const auto instance = Eval(expr->GetInstance());
   if (!instance)
@@ -631,6 +692,14 @@ auto EffectVisitor::VisitBindingPattern(expr::BindingPatternExpr*) -> VisitResul
 }
 
 auto EffectVisitor::VisitVariantPattern(expr::VariantPatternExpr*) -> VisitResult {
+  return Fail("a pattern can only appear in a match");
+}
+
+auto EffectVisitor::VisitRangePattern(expr::RangePatternExpr*) -> VisitResult {
+  return Fail("a pattern can only appear in a match");
+}
+
+auto EffectVisitor::VisitRecordPattern(expr::RecordPatternExpr*) -> VisitResult {
   return Fail("a pattern can only appear in a match");
 }
 

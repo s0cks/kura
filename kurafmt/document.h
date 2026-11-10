@@ -20,7 +20,13 @@ struct Text {
 };
 
 struct Line {
+  bool soft = true;
   bool hard = false;
+};
+
+struct BreakIf {
+  NodePtr when_break;
+  NodePtr when_flat;
 };
 
 struct Indent {
@@ -37,7 +43,7 @@ struct Group {
 };
 
 struct Node {
-  std::variant<Nil, Text, Line, Indent, Concat, Group> value;
+  std::variant<Nil, Text, Line, BreakIf, Indent, Concat, Group> value;
 };
 
 static inline auto NewEmpty() -> NodePtr {
@@ -48,8 +54,20 @@ static inline auto NewText(const std::string_view text) -> NodePtr {
   return std::make_shared<Node>(Text{std::string(text)});
 }
 
-static inline auto NewLine(const bool hard = false) -> NodePtr {
-  return std::make_shared<Node>(Line{hard});
+static inline auto NewLine(const bool soft = true, const bool hard = false) -> NodePtr {
+  return std::make_shared<Node>(Line{soft, hard});
+}
+
+static inline auto NewSoftLine() -> NodePtr {
+  return NewLine(false);
+}
+
+static inline auto NewHardLine() -> NodePtr {
+  return NewLine(true, true);
+}
+
+static inline auto NewBreakIf(NodePtr broken, NodePtr flat) -> NodePtr {
+  return std::make_shared<Node>(BreakIf{broken, flat});
 }
 
 static inline auto NewIndent(const int amt, NodePtr value) -> NodePtr {
@@ -65,11 +83,6 @@ static inline auto NewConcat(const std::vector<NodePtr> values) -> NodePtr {
 
 static inline auto NewGroup(NodePtr node) -> NodePtr {
   return std::make_shared<Node>(Group{node});
-}
-
-static inline auto NewSoftLine() -> NodePtr {
-  struct SoftLine : Line {};  // Or update Line struct to track space-vs-empty fallback
-  return NewLine(false);
 }
 
 static inline auto Punctuate(NodePtr separator, const std::vector<NodePtr>& elements) -> NodePtr {

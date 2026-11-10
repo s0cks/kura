@@ -1,0 +1,106 @@
+// Match guards, range patterns and record patterns.
+// run: guard-small => "small"
+// run: guard-big => "big"
+// run: guard-middle => "middle"
+// run: guard-falls-through => "other"
+// run: guard-binds => 14
+// run: guard-uses-payload-small => "quiet"
+// run: guard-uses-payload-loud => "loud"
+// run: guard-on-wildcard-yes => 1
+// run: guard-on-wildcard-no => 2
+// run: guard-calls 4 => "even"
+// run: guard-calls 5 => "odd"
+// run: range 0 => "zero"
+// run: range 3 => "few"
+// run: range 10 => "some"
+// run: range 100 => "some"
+// run: range 101 => "many"
+// run: range -4 => "negative"
+// run: range -50 => "very negative"
+// run: range-open-end 7 => "seven or more"
+// run: range-open-end 6 => "less"
+// run: range-open-start 3 => "up to three"
+// run: range-open-start 4 => "more"
+// run: range-float 0.5 => "unit"
+// run: range-float 1.5 => "outside"
+// run: record-literal-field => "on the x axis"
+// run: record-other-field => "on the y axis"
+// run: record-bound => 7
+// run: record-nested => 3
+// run: record-ignores-other-fields => 2
+// run: record-in-variant => 12
+// run: record-in-variant-miss => 0
+// run: is-record-yes => true
+// run: is-record-no => false
+// run: is-range-yes => true
+// run: is-range-no => false
+// run: record-with-range => "low"
+type Point = { x: Int, y: Int }
+type Msg = Click(Point) | Tick | Level(Int)
+
+fn size-name(n: Int): String => match n {
+  v if v < 10 => "small"
+  v if v > 100 => "big"
+  10 => "ten"
+  _ => "middle"
+}
+fn guard-small(): String => size-name(3)
+fn guard-big(): String => size-name(200)
+fn guard-middle(): String => size-name(50)
+// the guard fails, so the later arms are still tried
+fn fall(n: Int): String => match n {
+  v if v > 100 => "huge"
+  v if v > 10 => "bigger"
+  _ => "other"
+}
+fn guard-falls-through(): String => fall(5)
+fn guard-binds(): Int => match 7 { v if v > 5 => v * 2, _ => 0 }
+fn volume(m: Msg): String => match m {
+  Level(v) if v > 5 => "loud"
+  Level(_) => "quiet"
+  _ => "none"
+}
+fn guard-uses-payload-small(): String => volume(Level(2))
+fn guard-uses-payload-loud(): String => volume(Level(9))
+fn wild(flag: Bool): Int => match 1 { _ if flag => 1, _ => 2 }
+fn guard-on-wildcard-yes(): Int => wild(true)
+fn guard-on-wildcard-no(): Int => wild(false)
+fn even-p(n: Int): Bool => n % 2 == 0
+fn guard-calls(n: Int): String => match n { v if even-p(v) => "even", _ => "odd" }
+
+fn range(n: Int): String => match n {
+  0 => "zero"
+  1..10 => "few"
+  10..=100 => "some"
+  101.. => "many"
+  -9..0 => "negative"
+  ..-9 => "very negative"
+  _ => "never"
+}
+fn range-open-end(n: Int): String => match n { 7.. => "seven or more", _ => "less" }
+fn range-open-start(n: Int): String => match n { ..=3 => "up to three", _ => "more" }
+fn range-float(f: Float): String => match f { 0.0..1.0 => "unit", _ => "outside" }
+
+fn axis(p: Point): String => match p {
+  Point { x, y: 0 } => "on the x axis"
+  Point { x: 0, y } => "on the y axis"
+  { x, y } => "elsewhere"
+}
+fn record-literal-field(): String => axis({ x: 4, y: 0 })
+fn record-other-field(): String => axis({ x: 0, y: 4 })
+fn record-bound(): Int => match { x: 3, y: 4 } { { x, y } => x + y }
+fn record-nested(): Int => match { p: { a: 1, b: 2 }, c: 0 } { { p: { a, b }, c } => a + b + c }
+fn record-ignores-other-fields(): Int => match { x: 2, y: 9, z: 9 } { { x } => x }
+fn press(m: Msg): Int => match m {
+  Click({ x, y }) => x * y
+  _ => 0
+}
+fn record-in-variant(): Int => press(Click({ x: 3, y: 4 }))
+fn record-in-variant-miss(): Int => press(Tick)
+fn is-origin(p: Point): Bool => p is { x: 0, y: 0 }
+fn is-record-yes(): Bool => is-origin({ x: 0, y: 0 })
+fn is-record-no(): Bool => is-origin({ x: 0, y: 1 })
+fn is-small(n: Int): Bool => n is 0..10
+fn is-range-yes(): Bool => is-small(3)
+fn is-range-no(): Bool => is-small(30)
+fn record-with-range(): String => match { x: 3, y: 50 } { { x: 0..10, y: 0..100 } => "low", _ => "high" }

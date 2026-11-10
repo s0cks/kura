@@ -277,18 +277,24 @@ These are decided by the parser from the tokens around them.
 
 The parser accepts all of the above. `ExprBuilder` turns this much into Expr IR:
 
-* puns (in records, element arguments and directives are never puns), `when`, strings as text children, `|>`
-  with `_`, `<|`, and loops over the elements (`for _, x in xs`, also as `[ ... for _, x in xs ]`);
-* `a ?? b`, which is `match a { Some(x) => x, _ => b }`, and `a?.b` on a member;
-* `x is pattern` for variant, `None` and literal patterns;
+* puns (in records and element arguments; directive arguments are never puns), `when`, strings as text
+  children, `|>` with `_`, `<|`;
+* loops over a Seq with the index, the element or both (`for i in xs`, `for _, x in xs`, `for i, x in xs`),
+  also as `[ ... for ... ]`, with a guard and with `fold`;
+* `s[i]`, `a?.b`, `a?.[i]` and `a?.(args)`; an index out of range panics when the program runs, and a
+  constant index that can't be in range is a compile error;
+* `a ?? b`, which is `match a { Some(x) => x, _ => b }`;
+* `add(_, 10)` as a function of its `_`s, and `f >> g` and `f << g` as functions of one argument, where each
+  operand is a stage as after a `|>`: `add(10) >> mul(2)` is `(x) => mul(add(x, 10), 2)`;
+* patterns: variants, `None`, literals, ranges (`0..10`, `0..=9`, `..5`, `7..`), records (`{ x, y: 0 }`, also
+  with a type name, which is only checked to exist, and nested), and guards (`pattern if guard =>`); they work
+  in `match` and after `is`;
 * `let { a, b: c, p: { x } } = value`, with `_` to skip a field; the names must be fields of the value;
 * record updates with every operator and nested paths; a field can be updated only once per update, because
   `x += 1` means `x: <the record>.x + 1`;
-* `static-assert` with a condition made of literals and of earlier `let`s that are themselves computable; it
-  is an error when the condition is false, or when it can't be computed while compiling;
+* `static-assert` with a condition made of literals and of earlier `let`s that are themselves computable;
 * everything that was part of v1 before. `%` now builds a modulus; it used to be built as `||`.
 
-It reports "valid v1 syntax but the Expr IR has no node for it yet" for the rest: `set` rules, record and range
-patterns, guards, ranges, indexing and slices, `>>` and `<<`, partial application with `_`, interpolation, loops
-with an index, `...rest` and type names in a destructuring `let`, `?.(` and `?.[`, and spacer and dynamic
-children.
+It reports "valid v1 syntax but the Expr IR has no node for it yet" for the rest: `set` rules, ranges outside
+patterns, slices, interpolation, `...rest` and type names in a destructuring `let`, `...rest` in a record
+pattern, and spacer and dynamic children.

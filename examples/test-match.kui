@@ -1,7 +1,7 @@
 fn init(msg: Number): String =>
   match msg {
-    10 => "This is 10",
-    -1 => "negative",
-    None => "none",
+    x if x > 10 => "This is 10",
+    x if x < 0 => "negative",
+    0 => "??",
     _ => "Hello World",
   }

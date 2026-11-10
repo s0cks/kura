@@ -38,11 +38,7 @@ auto main(int argc, char** argv) -> int {
   }
 
   fmt::Config config{};
-  if (!fmt::ParseConfig(config))
-    std::cerr << "failed to parse config" << std::endl;
-
-  std::cout << "config: " << config << std::endl;
-
+  fmt::ParseConfig(config);
   const auto tree = ParseTree(argv[1]);
   if (!tree)
     return EXIT_FAILURE;

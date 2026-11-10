@@ -41,7 +41,6 @@ auto ParseConfigYaml(const std::string_view data, Config& config) -> bool {
 
       case YAML_SCALAR_EVENT:
         current = std::string{reinterpret_cast<char*>(event.data.scalar.value)};
-        std::cerr << "last: " << last << "; current: " << current << std::endl;
         if (last.empty()) {
           last = current;
           break;

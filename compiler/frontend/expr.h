@@ -37,11 +37,14 @@ namespace kura::expr {
   V(LoadLocal)           \
   V(StoreLocal)          \
   V(GetProperty)         \
+  V(Index)               \
   V(StoreProperty)       \
   V(WildcardPattern)     \
   V(LiteralPattern)      \
   V(BindingPattern)      \
   V(VariantPattern)      \
+  V(RangePattern)        \
+  V(RecordPattern)       \
   V(Lambda)              \
   V(Fold)                \
   V(Variant)             \
@@ -370,6 +373,25 @@ class StorePropertyExpr : public TemplateExpr<1> {
  public:
   static inline auto New(Property* property, Expr* value) -> StorePropertyExpr* {
     return new StorePropertyExpr(property, value);
+  }
+};
+
+// `object[index]`: the element of a Seq. An index that is out of range panics when the program runs.
+class IndexExpr : public TemplateExpr<2> {
+ public:
+  IndexExpr(Expr* object, Expr* index) {
+    SetObject(object);
+    SetIndex(index);
+  }
+  ~IndexExpr() override = default;
+
+  HAS_NAMED_INPUT(Object, 0);
+  HAS_NAMED_INPUT(Index, 1);
+  DECLARE_EXPR_TYPE(Index);
+
+ public:
+  static inline auto New(Expr* object, Expr* index) -> Expr* {
+    return new IndexExpr(object, index);
   }
 };
 
@@ -747,21 +769,114 @@ class VariantPatternExpr : public TemplatePatternExpr<1> {
   }
 };
 
-class CaseExpr : public TemplateExpr<2> {
+// `0..10`, `0..=9`, `..0`, `100..`: matches a number between the ends. Either end can be left open.
+class RangePatternExpr : public TemplatePatternExpr<2> {
+ private:
+  bool inclusive_;
+
  public:
-  CaseExpr(PatternExpr* pattern, Expr* body) {
+  RangePatternExpr(LiteralExpr* begin, LiteralExpr* end, const bool inclusive) :
+    inclusive_(inclusive) {
+    SetBegin(begin);
+    SetEnd(end);
+  }
+  ~RangePatternExpr() override = default;
+
+  // whether the end itself matches
+  auto IsInclusive() const -> bool {
+    return inclusive_;
+  }
+
+  _HAS_NAMED_INPUT(Begin, LiteralExpr, 0);
+  _HAS_NAMED_INPUT(End, LiteralExpr, 1);
+  DECLARE_EXPR_TYPE(RangePattern);
+
+ public:
+  static inline auto New(LiteralExpr* begin, LiteralExpr* end, const bool inclusive) -> PatternExpr* {
+    return new RangePatternExpr(begin, end, inclusive);
+  }
+};
+
+// `{ x, y: 0 }`: matches a record whose fields match the patterns. Other fields are ignored.
+class RecordPatternExpr : public PatternExpr {
+ public:
+  struct Field {
+    Property* property;
+    PatternExpr* pattern;
+  };
+  using FieldList = std::vector<Field>;
+
+ private:
+  FieldList fields_;
+
+ public:
+  explicit RecordPatternExpr(FieldList fields) :
+    fields_(std::move(fields)) {}
+  ~RecordPatternExpr() override = default;
+
+  auto GetFields() const -> const FieldList& {
+    return fields_;
+  }
+
+  // the patterns of the fields are the children
+  auto GetNumberOfChildren() const -> uint64_t override {
+    return fields_.size();
+  }
+
+  auto GetChildAt(const uint64_t idx) const -> Expr* override {
+    return fields_[idx].pattern;
+  }
+
+  auto HasChildAt(const uint64_t idx) const -> bool override {
+    return idx < fields_.size() && fields_[idx].pattern != nullptr;
+  }
+
+  auto HasChildren() const -> bool override {
+    return !fields_.empty();
+  }
+
+  auto VisitChildren(ExprVisitor* vis) -> VisitResult override {
+    for (const auto& field : fields_) {
+      if (!field.pattern->Accept(vis))
+        return false;
+    }
+    return true;
+  }
+
+  auto VisitChildren(const std::function<VisitResult(Expr*)> vis) -> VisitResult override {
+    for (const auto& field : fields_) {
+      if (!vis(field.pattern))
+        return false;
+    }
+    return true;
+  }
+
+  DECLARE_EXPR_TYPE(RecordPattern);
+
+ public:
+  static inline auto New(FieldList fields) -> PatternExpr* {
+    return new RecordPatternExpr(std::move(fields));
+  }
+};
+
+// `pattern => body`, or `pattern if guard => body`: the arm is only taken when the guard holds.
+class CaseExpr : public TemplateExpr<3> {
+ public:
+  CaseExpr(PatternExpr* pattern, Expr* body, Expr* guard = nullptr) {
     SetPattern(pattern);
     SetBody(body);
+    SetGuard(guard);
   }
   ~CaseExpr() override = default;
 
   HAS_NAMED_TYPED_INPUT(Pattern, 0);
   HAS_NAMED_INPUT(Body, 1);
+  HAS_NAMED_INPUT(Guard, 2);
   DECLARE_EXPR_TYPE(Case);
 
  public:
-  static inline auto New(PatternExpr* pattern, Expr* body) -> Expr* {
-    return new CaseExpr(pattern, body);
+  static inline auto New(PatternExpr* pattern, Expr* body, Expr* guard = nullptr) -> Expr* {
+    return new CaseExpr(pattern, body, guard);
   }
 };
 
@@ -813,6 +928,7 @@ class ListExpr : public DynamicTemplateExpr {
 class ListComprehensionExpr : public TemplateExpr<3> {
  private:
   LocalVariable* local_;
+  LocalVariable* index_;
   std::string binding_{};
 
   inline void SetBinding(const std::string value) {
@@ -820,10 +936,12 @@ class ListComprehensionExpr : public TemplateExpr<3> {
   }
 
  public:
-  // `local` is the loop variable: it is visible to the clause and the body.
+  // `local` is the loop variable: it is visible to the clause and the body. It is null when the loop skips
+  // the element (`for i in xs`). `index`, when there is one, is the position of the element.
   ListComprehensionExpr(Expr* iterable, Expr* body, LocalVariable* local, const std::string binding,
-                        Expr* clause = nullptr) :
-    local_(local) {
+                        Expr* clause = nullptr, LocalVariable* index = nullptr) :
+    local_(local),
+    index_(index) {
     SetIterable(iterable);
     SetBinding(std::move(binding));
     SetBody(body);
@@ -833,6 +951,10 @@ class ListComprehensionExpr : public TemplateExpr<3> {
 
   auto GetLocal() const -> LocalVariable* {
     return local_;
+  }
+
+  auto GetIndex() const -> LocalVariable* {
+    return index_;
   }
 
   auto GetBinding() const -> const std::string& {
@@ -846,8 +968,8 @@ class ListComprehensionExpr : public TemplateExpr<3> {
 
  public:
   static inline auto New(Expr* iterable, Expr* body, LocalVariable* local, const std::string binding,
-                         Expr* clause = nullptr) -> Expr* {
-    return new ListComprehensionExpr(iterable, body, local, std::move(binding), clause);
+                         Expr* clause = nullptr, LocalVariable* index = nullptr) -> Expr* {
+    return new ListComprehensionExpr(iterable, body, local, std::move(binding), clause, index);
   }
 };
 
@@ -888,12 +1010,15 @@ class FoldExpr : public TemplateExpr<4> {
  private:
   LocalVariable* binding_;
   LocalVariable* accumulator_;
+  LocalVariable* index_;
 
  public:
+  // `binding` is null when the loop skips the element; `index`, when there is one, is its position.
   FoldExpr(Expr* iterable, LocalVariable* binding, LocalVariable* accumulator, Expr* initial, Expr* body,
-           Expr* clause = nullptr) :
+           Expr* clause = nullptr, LocalVariable* index = nullptr) :
     binding_(binding),
-    accumulator_(accumulator) {
+    accumulator_(accumulator),
+    index_(index) {
     SetIterable(iterable);
     SetInitial(initial);
     SetBody(body);
@@ -909,6 +1034,10 @@ class FoldExpr : public TemplateExpr<4> {
     return accumulator_;
   }
 
+  auto GetIndex() const -> LocalVariable* {
+    return index_;
+  }
+
   HAS_NAMED_INPUT(Iterable, 0);
   HAS_NAMED_INPUT(Initial, 1);
   HAS_NAMED_INPUT(Body, 2);
@@ -917,8 +1046,8 @@ class FoldExpr : public TemplateExpr<4> {
 
  public:
   static inline auto New(Expr* iterable, LocalVariable* binding, LocalVariable* accumulator, Expr* initial, Expr* body,
-                         Expr* clause = nullptr) -> Expr* {
-    return new FoldExpr(iterable, binding, accumulator, initial, body, clause);
+                         Expr* clause = nullptr, LocalVariable* index = nullptr) -> Expr* {
+    return new FoldExpr(iterable, binding, accumulator, initial, body, clause, index);
   }
 };
 

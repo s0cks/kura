@@ -1,0 +1,2 @@
+// error: an index must be an Int
+fn f(xs: Seq<Int>): Int => xs["a"]

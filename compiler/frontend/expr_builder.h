@@ -1,6 +1,7 @@
 #ifndef KURA_EXPR_BUILDER_H
 #define KURA_EXPR_BUILDER_H
 
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <optional>
@@ -138,6 +139,10 @@ class ExprBuilder {
   // The locals that hold the value of each enclosing `x |> stage-with-_`, innermost last. A `_` reads the
   // innermost one.
   std::vector<std::string> pipe_locals_{};
+  // The parameter that stands for each `_` of a partial application being built.
+  std::unordered_map<const syntax::Node*, std::string> placeholder_names_{};
+  // The call whose placeholders are being turned into parameters.
+  const syntax::Call* partial_ = nullptr;
   uint32_t pipe_count_ = 0;
 
   [[noreturn]] void Error(const syntax::Span& where, const std::string& message) const;
@@ -165,12 +170,25 @@ class ExprBuilder {
   auto BuildCall(Expr* target, ExprList args) -> Expr*;
   auto BuildPipe(const syntax::Pipe* pipe) -> Expr*;
   auto BuildStagedPipe(const syntax::Pipe* pipe) -> Expr*;
+  // `value |> callee(args)`: the call with the value in front of the arguments
+  auto PipeInto(Expr* value, const syntax::Node* callee, const std::vector<syntax::Node*>& args) -> Expr*;
+  // The stage of a pipe or of a composition applied to a value: `add(_, 1)`, `add(1)`, or a function.
+  auto ApplyStage(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
+  auto BuildStageWith(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
+  // `add(_, 10)` is a function of the missing arguments; `f >> g` and `f << g` are functions of one
+  auto BuildPartial(const syntax::Call* call) -> Expr*;
+  auto BuildCompose(const syntax::Binary* binary) -> Expr*;
   auto BuildWhen(const syntax::WhenExpr* when) -> Expr*;
   // A string among the children of an element is `#text("...")`.
   auto BuildImplicitText(const syntax::Node* value) -> Expr*;
   // `a ?? b`, `x is pattern`: matches on a value that is computed once
   auto BuildCoalesce(const syntax::Binary* binary) -> Expr*;
   auto BuildIs(const syntax::IsExpr* is) -> Expr*;
+  auto BuildIndex(const syntax::Index* index) -> Expr*;
+  // `a?.[i]` and `a?.(args)`: None when `a` is, otherwise the access or call on `a` without its None. The
+  // index or the arguments are only evaluated when `a` isn't None.
+  auto BuildOptionalChain(const syntax::Node* object, const syntax::Node* where,
+                          const std::function<Expr*(Expr* object)>& build) -> Expr*;
   // `let { a, b: c } = value` is a binding of the value followed by one binding per name
   auto BuildBindings(const syntax::Binding* binding) -> std::vector<StoreLocalExpr*>;
   void Destructure(const syntax::Node* pattern, const std::string& source, std::vector<StoreLocalExpr*>& out);

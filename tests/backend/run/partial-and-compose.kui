@@ -1,0 +1,44 @@
+// `add(_, 10)` is a function of the `_`s; `f >> g` and `f << g` compose stages as after a `|>`.
+// run: partial-first => 15
+// run: partial-second => 7
+// run: partial-both => 12
+// run: partial-twice => 30
+// run: partial-variant => Click(4)
+// run: partial-in-call => 14
+// run: partial-passed => [2, 3, 4]
+// run: compose-forward => 24
+// run: compose-backward => 22
+// run: compose-with-placeholder => 194
+// run: compose-chain => 36
+// run: compose-names => 21
+// run: compose-mixed-stages => 41
+// run: compose-then-pipe => 24
+// run: compose-stored => 24
+// run: back-with-partial => 210
+// run: pipe-still-works => 40
+type Msg = Click(Int) | Tick
+fn add(x: Int, y: Int): Int => x + y
+fn sub(x: Int, y: Int): Int => x - y
+fn mul(x: Int, y: Int): Int => x * y
+fn double(x: Int): Int => x * 2
+fn apply(f: (Int) => Int, x: Int): Int => f(x)
+
+fn partial-first(): Int => { let f = add(_, 10) f(5) }
+fn partial-second(): Int => { let f = sub(10, _) f(3) }
+fn partial-both(): Int => { let f = add(_, _) f(5, 7) }
+fn partial-twice(): Int => { let f = mul(_, 5) let g = add(_, 0) g(f(6)) }
+fn partial-variant(): Msg => { let f = Click(_) f(4) }
+fn partial-in-call(): Int => apply(add(_, 10), 4)
+fn partial-passed(): Seq<Int> => for _, x in [1, 2, 3] => apply(add(_, 1), x)
+
+// the value goes in front of the arguments: `add(10)` is `(x) => add(x, 10)`
+fn compose-forward(): Int => { let f = add(10) >> double() f(2) }
+fn compose-backward(): Int => { let f = add(10) << double() f(6) }
+fn compose-with-placeholder(): Int => { let f = add(1) >> sub(100, _) >> double() f(2) }
+fn compose-chain(): Int => { let f = add(1) >> double() >> mul(3) f(5) }
+fn compose-names(): Int => { let f = double >> double >> add(1) f(5) }
+fn compose-mixed-stages(): Int => { let f = double >> sub(_, 1) >> add(1) >> double() f(10) + 1 }
+fn compose-then-pipe(): Int => 2 |> (add(10) >> double())()
+fn compose-stored(): Int => { let f = add(1) >> double() 11 |> f() }
+fn back-with-partial(): Int => add(_, 10) <| 200
+fn pipe-still-works(): Int => 10 |> add(_, 10) |> double(_)

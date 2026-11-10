@@ -1,0 +1,2 @@
+// error: can't index
+fn f(n: Int): Int => n[0]

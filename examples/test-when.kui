@@ -1,0 +1,1 @@
+fn view(x: Int): Node => when x > 10 { #text("Hello World") }

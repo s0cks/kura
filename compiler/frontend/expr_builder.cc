@@ -592,17 +592,20 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return BuildPipe(node->As<syntax::Pipe>());
     case Node::kWhenExpr:
       return BuildWhen(node->As<syntax::WhenExpr>());
-    case Node::kPlaceholder:
-      // `x |> add(_, 1)` reads the piped value; anywhere else `_` is a partial application
+    case Node::kPlaceholder: {
+      // in `add(_, 1)` it is a parameter of the function that makes; in a pipe stage it is the piped value
+      if (const auto found = placeholder_names_.find(node); found != placeholder_names_.end())
+        return LoadName(node, found->second);
       if (pipe_locals_.empty())
-        Unsupported(node, "partial application with `_`");
+        Error(node, "`_` has no value here");
       return LoadName(node, pipe_locals_.back());
+    }
     case Node::kStringTemplate:
       Unsupported(node, "string interpolation");
     case Node::kRangeExpr:
       Unsupported(node, "a range");
     case Node::kIndex:
-      Unsupported(node, "indexing and slicing");
+      return BuildIndex(node->As<syntax::Index>());
     case Node::kIsExpr:
       return BuildIs(node->As<syntax::IsExpr>());
     case Node::kPipeBack:
@@ -617,6 +620,8 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
 auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
   if (binary->op == syntax::Binary::kCoalesce)
     return BuildCoalesce(binary);
+  if (binary->op == syntax::Binary::kCompose || binary->op == syntax::Binary::kComposeBack)
+    return BuildCompose(binary);
   BinaryOp op;
   switch (binary->op) {
     case syntax::Binary::kAdd:
@@ -662,7 +667,7 @@ auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
       break;  // handled above
     case syntax::Binary::kCompose:
     case syntax::Binary::kComposeBack:
-      Unsupported(binary, "function composition (`>>` and `<<`)");
+      break;  // handled above
   }
   return BinaryExpr::New(op, Build(binary->lhs), Build(binary->rhs));
 }
@@ -672,8 +677,11 @@ static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<No
 // `x |> add(_, 1)`: the value is computed once into a local, and every `_` in the stage reads it.
 auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage,
                                   const syntax::Span& where) -> Expr* {
+  return BuildStageWith(Build(value_node), stage, where);
+}
+
+auto ExprBuilder::BuildStageWith(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr* {
   LocalsScope pipe_scope(GetOwner());
-  const auto value = Build(value_node);
   // a name no program can write, so it can't clash with anything
   const auto name = "%pipe" + std::to_string(pipe_count_++);
   const auto store = StoreLocalExpr::New(DeclareLocal(where, name), value);
@@ -730,6 +738,44 @@ auto ExprBuilder::BuildCoalesce(const syntax::Binary* binary) -> Expr* {
   return static_cast<Expr*>(match);
 }
 
+auto ExprBuilder::BuildOptionalChain(const syntax::Node* object, const syntax::Node* where,
+                                     const std::function<Expr*(Expr* object)>& build) -> Expr* {
+  const auto match = MatchExpr::New(Build(object))->AsMatch();
+  {
+    LocalsScope arm_scope(GetOwner());
+    const auto name = "%optional" + std::to_string(pipe_count_++);
+    const auto pattern = VariantPatternExpr::New("Some", BindingPatternExpr::New(CreateLocal(where->span, name)));
+    match->AppendCase(CaseExpr::New(pattern, ToSeq(build(LoadName(object, name))))->AsCase());
+  }
+  match->SetWildcard(ToSeq(Literal(None::Get())));
+  return static_cast<Expr*>(match);
+}
+
+// `s[i]`. A constant index that can't be in range is an error here; any other is checked when the
+// program runs, where it panics.
+auto ExprBuilder::BuildIndex(const syntax::Index* ctx) -> Expr* {
+  if (ctx->index->Is<syntax::RangeExpr>())
+    Unsupported(ctx->index, "slicing");
+  if (ctx->optional) {
+    return BuildOptionalChain(ctx->object, ctx, [&](Expr* object) {
+      return IndexExpr::New(object, Build(ctx->index));
+    });
+  }
+  const auto object = Build(ctx->object);
+  const auto index = Build(ctx->index);
+  if (const auto constant = Fold(index); constant && constant->kind == Constant::kInt) {
+    if (constant->integer < 0) {
+      Error(ctx->index, "index " + std::to_string(constant->integer) +
+                            " is out of range: a Seq has no negative positions");
+    }
+    if (object->IsList() && static_cast<size_t>(constant->integer) >= object->AsList()->GetChildren().size()) {
+      Error(ctx->index, "index " + std::to_string(constant->integer) + " is out of range for a Seq of " +
+                            std::to_string(object->AsList()->GetChildren().size()));
+    }
+  }
+  return IndexExpr::New(object, index);
+}
+
 // `x is pattern` is `match x { pattern => true, _ => false }`
 auto ExprBuilder::BuildIs(const syntax::IsExpr* is) -> Expr* {
   const auto match = MatchExpr::New(Build(is->value))->AsMatch();
@@ -755,8 +801,11 @@ auto ExprBuilder::BuildPipe(const syntax::Pipe* pipe) -> Expr* {
   if (pipe->stage != nullptr)
     return BuildStagedPipe(pipe);
   // `x |> f(y)` is `f(x, y)`; the parser guarantees the right side is a call.
-  const auto lhs = Build(pipe->lhs);
-  const Node* callee = pipe->callee;
+  return PipeInto(Build(pipe->lhs), pipe->callee, pipe->args);
+}
+
+auto ExprBuilder::PipeInto(Expr* lhs, const syntax::Node* callee, const std::vector<syntax::Node*>& pipe_args)
+    -> Expr* {
 
   Expr* target = nullptr;
   if (const auto* paren = callee->As<syntax::Paren>()) {
@@ -772,7 +821,7 @@ auto ExprBuilder::BuildPipe(const syntax::Pipe* pipe) -> Expr* {
     std::reverse(members.begin(), members.end());
     if (head->Is<syntax::VariantRef>() && members.empty()) {
       // `payload |> Click()` is `Click(payload)`.
-      if (!pipe->args.empty())
+      if (!pipe_args.empty())
         Error(callee, "a piped variant takes no further arguments");
       return VariantExpr::New(head->As<syntax::VariantRef>()->name.text, lhs);
     }
@@ -792,7 +841,7 @@ auto ExprBuilder::BuildPipe(const syntax::Pipe* pipe) -> Expr* {
   }
 
   ExprList args{lhs};
-  for (const auto arg : BuildArgs(pipe->args))
+  for (const auto arg : BuildArgs(pipe_args))
     args.push_back(arg);
   return BuildCall(target, std::move(args));
 }
@@ -811,9 +860,92 @@ auto ExprBuilder::BuildMember(const syntax::Member* ctx) -> Expr* {
   return GetPropertyExpr::New(target, property, ctx->optional);
 }
 
+// `add(_, 10)` outside a pipe: a function of the arguments that are `_`, in order.
+static auto HasPlaceholderArg(const syntax::Call* call) -> bool {
+  for (const auto* arg : call->args) {
+    if (arg->Is<syntax::Placeholder>())
+      return true;
+  }
+  return false;
+}
+
+// `name`, `Name` or `name.member.member`, or a parenthesized expression: what can stand before the
+// arguments of a stage.
+static auto IsStageCallee(const syntax::Node* node) -> bool {
+  if (node->Is<syntax::Paren>() || node->Is<syntax::VarRef>() || node->Is<syntax::VariantRef>())
+    return true;
+  if (const auto* member = node->As<syntax::Member>())
+    return !member->optional && IsStageCallee(member->object) && !member->object->Is<syntax::Paren>();
+  return false;
+}
+
+auto ExprBuilder::BuildPartial(const syntax::Call* call) -> Expr* {
+  LocalsScope lambda_scope(GetOwner());
+  LambdaExpr::ParamList params{};
+  std::vector<const syntax::Node*> placeholders{};
+  for (const auto* arg : call->args) {
+    if (!arg->Is<syntax::Placeholder>())
+      continue;
+    const auto name = "%arg" + std::to_string(pipe_count_++);
+    params.push_back(CreateLocal(arg->span, name));
+    placeholder_names_[arg] = name;
+    placeholders.push_back(arg);
+  }
+  partial_ = call;
+  const auto body = BuildCallExpr(call);
+  partial_ = nullptr;
+  for (const auto* placeholder : placeholders)
+    placeholder_names_.erase(placeholder);
+  return LambdaExpr::New(std::move(params), ToSeq(body));
+}
+
+auto ExprBuilder::ApplyStage(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr* {
+  // `add(_, 1)`: the value goes where the `_` is
+  if (HasPlaceholder(stage))
+    return BuildStageWith(value, stage, where);
+  // `add(1)`: the value goes in front of the arguments, as in a pipe
+  if (const auto* call = stage->As<syntax::Call>(); call != nullptr && !call->optional && IsStageCallee(call->callee))
+    return PipeInto(value, call->callee, call->args);
+  // a function by itself: `double`, `Click`
+  if (const auto* variant = stage->As<syntax::VariantRef>())
+    return VariantExpr::New(variant->name.text, value);
+  return BuildCall(Build(stage), ExprList{value});
+}
+
+// `f >> g` is `(x) => g(f(x))` and `f << g` is `(x) => f(g(x))`. Each operand is a stage, as after a `|>`,
+// so `add(10) >> mul(2)` is `(x) => mul(add(x, 10), 2)`. A chain is applied in one function.
+auto ExprBuilder::BuildCompose(const syntax::Binary* binary) -> Expr* {
+  std::vector<const syntax::Node*> stages{};
+  const syntax::Node* node = binary;
+  while (const auto* chain = node->As<syntax::Binary>()) {
+    if (chain->op != binary->op)
+      break;
+    stages.push_back(chain->rhs);
+    node = chain->lhs;
+  }
+  stages.push_back(node);
+  // `stages` is last operand first; `>>` applies the first operand first, `<<` the last
+  if (binary->op == syntax::Binary::kCompose)
+    std::reverse(stages.begin(), stages.end());
+
+  LocalsScope lambda_scope(GetOwner());
+  const auto name = "%compose" + std::to_string(pipe_count_++);
+  const auto param = CreateLocal(binary->span, name);
+  Expr* value = LoadName(binary, name);
+  for (const auto* stage : stages)
+    value = ApplyStage(value, stage, binary->span);
+  return LambdaExpr::New(LambdaExpr::ParamList{param}, ToSeq(value));
+}
+
 auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
-  if (ctx->optional)
-    Unsupported(ctx, "an optional call (`?.(`)");
+  // `add(_, 10)` outside a pipe stage: a function waiting for the `_`
+  if (ctx != partial_ && pipe_locals_.empty() && HasPlaceholderArg(ctx))
+    return BuildPartial(ctx);
+  if (ctx->optional) {
+    return BuildOptionalChain(ctx->callee, ctx, [&](Expr* callee) {
+      return BuildCall(callee, BuildArgs(ctx->args));
+    });
+  }
   // `Click(payload)` constructs a variant rather than calling a function.
   if (const auto* variant = ctx->callee->As<syntax::VariantRef>()) {
     const auto& name = variant->name.text;
@@ -1259,10 +1391,36 @@ auto ExprBuilder::BuildPattern(const Node* node) -> PatternExpr* {
     const auto payload = variant->payload ? BuildPattern(variant->payload) : nullptr;
     return VariantPatternExpr::New(variant->name.text, payload);
   }
-  if (node->Is<syntax::RecordPattern>())
-    Unsupported(node, "a record pattern");
-  if (node->Is<syntax::RangePattern>())
-    Unsupported(node, "a range pattern");
+  if (const auto* range = node->As<syntax::RangePattern>()) {
+    const auto bound = [&](const Node* end) -> LiteralExpr* {
+      if (end == nullptr)
+        return nullptr;
+      return BuildLiteralPattern(end->As<syntax::LiteralPattern>())->AsLiteralPattern()->GetLiteral();
+    };
+    return RangePatternExpr::New(bound(range->begin), bound(range->end), range->inclusive);
+  }
+  if (const auto* record = node->As<syntax::RecordPattern>()) {
+    if (record->has_rest)
+      Unsupported(node, "`...rest` in a record pattern");
+    if (record->has_type) {
+      // the name must be a type of this module; the fields are matched by name, whatever the type
+      const auto& types = module_->types;
+      const auto declared = std::any_of(types.begin(), types.end(), [&](const auto* decl) {
+        return decl->GetName() == record->type_name.text;
+      });
+      if (!declared)
+        Error(record->type_name.span, "there is no type named `" + record->type_name.text + "`");
+    }
+    RecordPatternExpr::FieldList fields{};
+    for (const auto* field_node : record->fields) {
+      const auto* field = field_node->As<syntax::FieldPattern>();
+      // `{ x }` binds `x`
+      const auto pattern = field->pattern != nullptr ? BuildPattern(field->pattern)
+                                                     : BindingPatternExpr::New(CreateLocal(field->span, field->name.text));
+      fields.push_back({Property::FindOrCreate(String::New(field->name.text), Type::NoneType()), pattern});
+    }
+    return RecordPatternExpr::New(std::move(fields));
+  }
   Error(node, "invalid match pattern");
 }
 
@@ -1270,19 +1428,19 @@ auto ExprBuilder::BuildMatch(const syntax::MatchExpr* ctx) -> Expr* {
   const auto expr = MatchExpr::New(Build(ctx->scrutinee))->AsMatch();
   for (const auto* arm_node : ctx->arms) {
     const auto* arm = arm_node->As<syntax::MatchArm>();
-    if (arm->guard != nullptr)
-      Unsupported(arm->guard, "a match guard");
-    // Names bound by the pattern are visible in the arm body only.
+    // Names bound by the pattern are visible in the guard and the arm body only.
     LocalsScope arm_scope(GetOwner());
     const auto pattern = BuildPattern(arm->pattern);
+    Expr* guard = arm->guard != nullptr ? Build(arm->guard) : nullptr;
     const auto body = BuildSeq(arm->body);
-    if (pattern->IsWildcardPattern()) {
+    // a wildcard with a guard still has to be tried in its place
+    if (pattern->IsWildcardPattern() && guard == nullptr) {
       if (expr->HasWildcard())
         Error(arm, "match already has a wildcard arm");
       expr->SetWildcard(body);
       continue;
     }
-    expr->AppendCase(CaseExpr::New(pattern, body)->AsCase());
+    expr->AppendCase(CaseExpr::New(pattern, body, guard)->AsCase());
   }
   return static_cast<Expr*>(expr);
 }
@@ -1293,30 +1451,34 @@ auto ExprBuilder::BuildFor(const syntax::ForExpr* ctx) -> Expr* {
   // nor the accumulator is visible to it.
   Expr* initial = ctx->has_fold ? Build(ctx->initial) : nullptr;
 
-  // Like Go, `for i, x in xs` binds the index and the element, and a lone name is the index. The loops
-  // the IR has are over the elements, so those are the ones that can be built for now.
-  if (ctx->second == nullptr)
-    Unsupported(ctx, "a loop over the index; write `for _, x in xs` to loop over the elements");
-  if (ctx->first.text != "_")
-    Unsupported(ctx, "an index variable in a loop");
-  const auto* element = ctx->second->As<syntax::BindingPattern>();
-  if (element == nullptr)
-    Unsupported(ctx->second, "a pattern for the loop element");
+  // Like Go, `for i, x in xs` binds the index and the element, a lone name, `for i in xs`, is the index, and a
+  // `_` skips one of them.
+  const auto& index_name = ctx->first.text;
+  const auto has_index = index_name != "_";
+  const syntax::BindingPattern* element = nullptr;
+  if (ctx->second != nullptr && !ctx->second->Is<syntax::WildcardPattern>()) {
+    element = ctx->second->As<syntax::BindingPattern>();
+    if (element == nullptr)
+      Unsupported(ctx->second, "a pattern for the loop element");
+  }
 
-  // `item` is only visible to the guard and the body.
+  // the index and the element are only visible to the guard and the body
   LocalsScope loop_scope(GetOwner());
-  const auto& binding = element->name.text;
-  const auto binding_local = CreateLocal(ctx->span, binding);
+  const std::string binding = element != nullptr ? element->name.text : "_";
+  if (has_index && element != nullptr && index_name == binding)
+    Error(ctx, "the index and the element of this loop are both named '" + binding + "'");
+  const auto binding_local = element != nullptr ? CreateLocal(ctx->span, binding) : nullptr;
+  const auto index_local = has_index ? CreateLocal(ctx->span, index_name) : nullptr;
   Expr* guard = ctx->guard ? Build(ctx->guard) : nullptr;
 
   if (!ctx->has_fold)
-    return ListComprehensionExpr::New(iterable, Build(ctx->body), binding_local, binding, guard);
+    return ListComprehensionExpr::New(iterable, Build(ctx->body), binding_local, binding, guard, index_local);
 
   const auto& accumulator = ctx->accumulator.text;
-  if (accumulator == binding)
-    Error(ctx, "the fold accumulator and the loop variable are both named '" + binding + "'");
+  if (accumulator == binding || (has_index && accumulator == index_name))
+    Error(ctx, "the fold accumulator and the loop variable are both named '" + accumulator + "'");
   const auto accumulator_local = CreateLocal(ctx->span, accumulator);
-  return FoldExpr::New(iterable, binding_local, accumulator_local, initial, Build(ctx->body), guard);
+  return FoldExpr::New(iterable, binding_local, accumulator_local, initial, Build(ctx->body), guard, index_local);
 }
 
 // ╭────────────╮

@@ -1,0 +1,2 @@
+// error: there is no type named `Nope`
+fn f(p: { x: Int }): Int => match p { Nope { x } => x }
