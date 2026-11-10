@@ -54,6 +54,14 @@ auto OpName(const Binary::Op op) -> const char* {
       return "&&";
     case Binary::kOr:
       return "||";
+    case Binary::kMod:
+      return "%";
+    case Binary::kCoalesce:
+      return "??";
+    case Binary::kCompose:
+      return ">>";
+    case Binary::kComposeBack:
+      return "<<";
   }
   return "?";
 }
@@ -76,6 +84,8 @@ auto Details(const Node* node) -> std::string {
           return "named " + N(a->name);
         case Arg::kSpread:
           return "spread";
+        case Arg::kPun:
+          return "pun " + N(a->name);
         default:
           return "positional";
       }
@@ -105,6 +115,8 @@ auto Details(const Node* node) -> std::string {
     }
     case Node::kBinding: {
       const auto* b = node->As<Binding>();
+      if (b->pattern != nullptr)
+        return "let (destructure)";
       return std::string(b->is_let ? "let " : "set ") + N(b->name);
     }
     case Node::kNamedType:
@@ -129,7 +141,8 @@ auto Details(const Node* node) -> std::string {
       return N(node->As<VariantRef>()->name);
     case Node::kForExpr: {
       const auto* f = node->As<ForExpr>();
-      return N(f->binding) + (f->has_fold ? " fold " + N(f->accumulator) : "");
+      return N(f->first) + (f->second != nullptr ? ", ..." : "") + (f->has_fold ? " fold " + N(f->accumulator) : "") +
+             (f->bracketed ? " [comprehension]" : "");
     }
     case Node::kLambda: {
       const auto* l = node->As<Lambda>();
@@ -145,7 +158,44 @@ auto Details(const Node* node) -> std::string {
     case Node::kBinary:
       return OpName(node->As<Binary>()->op);
     case Node::kMember:
-      return N(node->As<Member>()->member);
+      return std::string(node->As<Member>()->optional ? "?." : ".") + N(node->As<Member>()->member);
+    case Node::kCall:
+      return node->As<Call>()->optional ? "optional" : "";
+    case Node::kIndex:
+      return node->As<Index>()->optional ? "optional" : "";
+    case Node::kRangeExpr: {
+      const auto* r = node->As<RangeExpr>();
+      return std::string(r->begin == nullptr ? "(no start) " : "") + (r->inclusive ? "..=" : "..") +
+             (r->end == nullptr ? " (no end)" : "");
+    }
+    case Node::kRangePattern: {
+      const auto* r = node->As<RangePattern>();
+      return std::string(r->begin == nullptr ? "(no start) " : "") + (r->inclusive ? "..=" : "..") +
+             (r->end == nullptr ? " (no end)" : "");
+    }
+    case Node::kStringTemplate: {
+      const auto* t = node->As<StringTemplate>();
+      std::string out{};
+      for (size_t idx = 0; idx < t->texts.size(); idx++)
+        out += (idx == 0 ? "" : " {} ") + Quote(t->texts[idx]);
+      return out;
+    }
+    case Node::kSetRule:
+      return N(node->As<SetRule>()->tag);
+    case Node::kUpdateEntry: {
+      const auto* e = node->As<UpdateEntry>();
+      std::string out{};
+      for (size_t idx = 0; idx < e->path.size(); idx++)
+        out += (idx == 0 ? "" : ".") + N(e->path[idx]);
+      static const char* kOps[] = {":", "+=", "-=", "*=", "/=", "%="};
+      return out + " " + kOps[e->op];
+    }
+    case Node::kRecordPattern: {
+      const auto* r = node->As<RecordPattern>();
+      return (r->has_type ? N(r->type_name) : std::string()) + (r->has_rest ? " ...rest" : "");
+    }
+    case Node::kFieldPattern:
+      return N(node->As<FieldPattern>()->name);
     case Node::kBindingPattern:
       return N(node->As<BindingPattern>()->name);
     case Node::kVariantPattern:

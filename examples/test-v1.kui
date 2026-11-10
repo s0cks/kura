@@ -2,6 +2,10 @@ type Position = {
   x: Number,
   y: Number,
   z?: Number,
+  test: Bool,
+  test2: Bool,
+  test3: Bool,
+  test4: Bool,
 }
 
 type Message = Click(Position) | Tick | Set(Number)
@@ -24,7 +28,7 @@ fn update(message: Message, count: Number): Number =>
   }
 
 fn sum(items: Seq<Number>): Number =>
-  for item in items if item > 0 fold total = 0 => total + item
+  for _, item in items if item > 0 fold total = 0 => total + item
 
 fn apply(op: (Number, Number) => Number, a: Number, b: Number): Number => op(a, b)
 fn add-one(x: Number): Number => apply((a, b) => a + b, x, 1)

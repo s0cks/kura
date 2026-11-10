@@ -1,0 +1,15 @@
+let p1 = { x: 10, y: 10 }
+let p2 = { p1 | x: p1.x + 1 }
+let p3 = { p1 | x: p1.x + 1, y: 0 }
+let p4 = { p1 | x += 1, y -= 2 }
+let p5 = { p1 | x *= 2, y /= 2, x %= 3 }
+let nested = { model | player.hp -= 1, player.pos.x += 3, score: 0 }
+let trailing = { p1 |
+  x += 1,
+}
+fn update(model: Model, message: Message): Model =>
+  match message {
+    Tick => { model | count += 1 }
+    Reset => { model | count: 0 }
+  }
+let spread = { ...p1, x: 0 }

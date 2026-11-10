@@ -3,7 +3,7 @@
 type Model = { items: Seq<String>, }
 
 fn view(model: Model): Node =>
-  for item in model.items => #fragment {
+  for _, item in model.items => #fragment {
     #text(item)
     #text("!")
   }

@@ -7,7 +7,7 @@ fn print(x: String) => stdio.printf("%s\n", x)
 
 fn apply-print-pos(pos: Position) => stdio.printf("%lf, %lf\n", pos.x, pos.y)
 
-fn print-pos(x: Float, y: Float) => apply-print-pos({ x: x, y: y })
+fn print-pos(x: Float, y: Float) => apply-print-pos({ x, y, })
 
 type Position = {
   x: Float,
@@ -21,6 +21,7 @@ type Rect = {
 }
 
 fn apply-print-rect(rect: Rect) =>
+  set button(fill: red)
   stdio.printf("%lf, %lf, %lf, %lf\n", rect.pos.x, rect.pos.y, rect.width, rect.height)
 
 fn print-rect(x: Float, y: Float, width: Float, height: Float) =>

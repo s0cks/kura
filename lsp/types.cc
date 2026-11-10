@@ -61,8 +61,23 @@ void Range::operator>>(json_t* doc) const {
 
 auto Range::operator<<(const json_t* doc) -> Range& {
   KASSERT(doc);
-  // TODO(@s0cks): implement
+  const auto* start_node = json_object_get(doc, "start");
+  if (start_node)
+    start << start_node;
+
+  const auto* end_node = json_object_get(doc, "end");
+  if (end_node)
+    end << end_node;
   return *this;
+}
+
+void TextEdit::operator>>(json_t* doc) const {
+  KASSERT(doc);
+  json_t* range_node = json_object();
+  KASSERT(range_node);
+  range >> range_node;
+  json_object_set_new(doc, "range", range_node);
+  json_object_set_new(doc, "newText", json_string(newText.c_str()));
 }
 
 void MarkupContent::operator>>(json_t* doc) const {

@@ -121,17 +121,19 @@ TEST(ParserExprTest, MatchPatterns) {
 }
 
 TEST(ParserExprTest, ForLoops) {
-  auto tree = Tree("let a = for n in xs if n > 1 fold acc = 0 => acc + n");
+  auto tree = Tree("let a = for _, n in xs if n > 1 fold acc = 0 => acc + n");
   ASSERT_TRUE(tree->IsValid());
   const auto* loop = tree->GetRoot()->items[0]->As<Binding>()->value->As<ForExpr>();
   ASSERT_NE(loop, nullptr);
-  EXPECT_EQ(loop->binding.text, "n");
+  EXPECT_EQ(loop->first.text, "_");
+  ASSERT_NE(loop->second, nullptr);
+  EXPECT_EQ(loop->second->As<BindingPattern>()->name.text, "n");
   EXPECT_NE(loop->guard, nullptr);
   EXPECT_TRUE(loop->has_fold);
   EXPECT_EQ(loop->accumulator.text, "acc");
   EXPECT_EQ(Sexp(loop->body), "(+ acc n)");
 
-  tree = Tree("let a = for n in xs => n * 2");
+  tree = Tree("let a = for _, n in xs => n * 2");
   ASSERT_TRUE(tree->IsValid());
   loop = tree->GetRoot()->items[0]->As<Binding>()->value->As<ForExpr>();
   EXPECT_EQ(loop->guard, nullptr);

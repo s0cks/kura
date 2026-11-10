@@ -22,4 +22,4 @@ fn use-curry(): Int => curry(1)(2)
 // run: lambda-global 1 => 12
 fn lambda-global(x: Int): Int => apply((a, b) => a + b + base, x, 1)
 // run: captured-loop 10 => [11, 12, 13]
-fn captured-loop(k: Int): Seq<Int> => for n in [1, 2, 3] => apply((a, b) => a + b, n, k)
+fn captured-loop(k: Int): Seq<Int> => for _, n in [1, 2, 3] => apply((a, b) => a + b, n, k)

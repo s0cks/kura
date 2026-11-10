@@ -1,0 +1,23 @@
+let exclusive = 0..10
+let inclusive = 0..=10
+let from-n = 3..
+let to-n = ..5
+let to-n-inclusive = ..=5
+let computed = start..end + 1
+let s1 = [0, 1, 2, 3]
+let head = s1[0]
+let init = s1[0..-1]
+let tail = s1[1..]
+let first-two = s1[..2]
+let all = s1[..]
+let chained = s1[1..][0]
+let each = for i in 0..10 => i
+let ranges-in-match = match n {
+  0 => "zero"
+  1..10 => "few"
+  10..=100 => "some"
+  -10..0 => "negative"
+  100.. => "many"
+  ..-10 => "very negative"
+  _ => "other"
+}

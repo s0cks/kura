@@ -1,0 +1,19 @@
+let width = 10
+let height = 4
+let style = { width: 10, fill: blue }
+
+// `{ x }` is a block; with a comma it is a record
+let block = { width }
+let punned = { width, }
+let mixed = { width, height: 5, height2 }
+let spread = { ...style, fill: red }
+
+fn view() =>
+  #block(width, height,) {
+    #button(width,)
+    #button(...style, fill: red)
+    #button(fill: red, ...style)
+    #text(fill: red, "Hello")
+    #text(label)
+    #text(width, "last")
+  }

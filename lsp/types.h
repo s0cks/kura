@@ -50,6 +50,13 @@ struct Range {
   }
 };
 
+struct TextEdit {
+  Range range;
+  std::string newText;
+
+  void operator>>(json_t* rhs) const;
+};
+
 struct MarkupContent {
   enum Kind {
     kPlainText,

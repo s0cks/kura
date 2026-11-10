@@ -12,48 +12,55 @@ struct PrintItem {
   NodePtr node;
 };
 
-static inline bool Fits(NodePtr node, int remaining) {
-  if (remaining < 0)
-    return false;
-
-  struct Visitor {
-    int& width;
-
-    bool operator()(Nil) {
-      return true;
-    }
-
-    bool operator()(Text t) {
-      width -= t.text.size();
-      return width >= 0;
-    }
-
-    bool operator()(Line l) {
-      if (l.hard)
-        return false;
-      width -= 1;
-      return width >= 0;
-    }
-
-    bool operator()(Indent i) {
-      return std::visit(*this, i.node->value);
-    }
-
-    bool operator()(Concat c) {
-      for (auto& d : c.nodes) {
-        if (!std::visit(*this, d->value))
-          return false;
-      }
-      return true;
-    }
-
-    bool operator()(Group g) {
-      return std::visit(*this, g.node->value);
-    }
+static inline bool Fits(NodePtr node, int max_width, int initial_col) {
+  struct FitsItem {
+    Mode mode;
+    NodePtr node;
   };
 
-  Visitor vis{remaining};
-  return std::visit(vis, node->value);
+  std::vector<FitsItem> stack = {{Mode::kFlat, node}};
+  int current_col = initial_col;
+
+  while (!stack.empty()) {
+    if (current_col > max_width) {
+      return false;
+    }
+
+    auto [mode, current_node] = stack.back();
+    stack.pop_back();
+
+    std::visit(
+        [&](auto&& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, Nil>) {
+            // No width contribution
+          } else if constexpr (std::is_same_v<T, Text>) {
+            current_col += arg.text.size();
+          } else if constexpr (std::is_same_v<T, Line>) {
+            if (arg.hard) {
+              // A hard line cannot fit flat on a single line
+              current_col = max_width + 1;
+            } else if (mode == Mode::kFlat) {
+              current_col += 1;  // Renders as a single space
+            } else {
+              // Renders as a newline, meaning everything up to here fit
+              current_col = max_width + 1;
+            }
+          } else if constexpr (std::is_same_v<T, Indent>) {
+            stack.push_back({mode, arg.node});
+          } else if constexpr (std::is_same_v<T, Concat>) {
+            for (auto it = arg.nodes.rbegin(); it != arg.nodes.rend(); ++it) {
+              stack.push_back({mode, *it});
+            }
+          } else if constexpr (std::is_same_v<T, Group>) {
+            // Nested groups inside a flat check inherit the flat context
+            stack.push_back({mode, arg.node});
+          }
+        },
+        current_node->value);
+  }
+
+  return current_col <= max_width;
 }
 
 auto Render(NodePtr root, const int max_width) -> std::string {
@@ -103,7 +110,8 @@ auto Render(NodePtr root, const int max_width) -> std::string {
           } else if constexpr (std::is_same_v<T, Group>) {
             Mode next = mode;
             if (mode == Mode::kFlat)
-              next = Fits(arg.node, max_width - current_col) ? Mode::kFlat : Mode::kBreak;
+              next = Fits(arg.node, max_width, current_col) ? Mode::kFlat : Mode::kBreak;
+
             stack.push_back({
                 indent,
                 next,

@@ -1,0 +1,3 @@
+// error: can't be computed while compiling
+fn f(n: Int): Int => n
+static-assert(f(1) == 1)

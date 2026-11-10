@@ -65,7 +65,21 @@ namespace kura::syntax {
   V(BindingPattern)      \
   V(NonePattern)         \
   V(VariantPattern)      \
-  V(LiteralPattern)
+  V(LiteralPattern)      \
+  V(Placeholder)         \
+  V(StringTemplate)      \
+  V(RangeExpr)           \
+  V(IsExpr)              \
+  V(WhenExpr)            \
+  V(Index)               \
+  V(PipeBack)            \
+  V(RecordUpdate)        \
+  V(UpdateEntry)         \
+  V(SetRule)             \
+  V(StaticAssert)        \
+  V(RecordPattern)       \
+  V(FieldPattern)        \
+  V(RangePattern)
 // clang-format on
 
 class Node;
@@ -178,13 +192,14 @@ struct Directive : Node {
   }
 };
 
-// An argument of a directive or of a `#element(...)`: `name: value`,
-// `...value` or just `value`.
+// An argument of a directive or of a `#element(...)`, or an entry of a record
+// literal: `name: value`, `...value`, just `value`, or a pun, `name,`, which
+// stands for `name: name` (the value is then a VarRef the parser made up).
 struct Arg : Node {
-  enum Form : uint8_t { kNamed, kSpread, kPositional };
+  enum Form : uint8_t { kNamed, kSpread, kPositional, kPun };
   DEFINE_NODE(Arg)
   Form form = kPositional;
-  Name name{};  // only for kNamed
+  Name name{};  // for kNamed and kPun
   Node* value = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
@@ -238,19 +253,24 @@ struct TypeDecl : Node {
   }
 };
 
-// `fn name(params): Result => body`
+// `fn name(params): Result => set rules... body`
+//
+// A body written without braces may start with any number of `set` rules and
+// ends with one expression; a `let` needs a braced body.
 struct FnDecl : Node {
   DEFINE_NODE(FnDecl)
   std::vector<Node*> directives{};
   Name name{};
   std::vector<Node*> params{};  // Param
   Node* result = nullptr;       // optional
+  std::vector<Node*> set_rules{};  // SetRule, before an unbraced body
   Node* body = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::VisitAll(fn, directives);
     detail::VisitAll(fn, params);
     detail::Visit(fn, result);
+    detail::VisitAll(fn, set_rules);
     detail::Visit(fn, body);
   }
 };
@@ -293,18 +313,48 @@ struct UseDecl : Node {
 
 // `let name: Type = value` (is_let) or `name = value`. Used both as a
 // top-level item and as a statement in a block or a `#element { ... }`.
+// `let { a, b: c, ...rest } = value` destructures: `pattern` is then a
+// RecordPattern and `name` is missing.
 struct Binding : Node {
   DEFINE_NODE(Binding)
   std::vector<Node*> directives{};
   bool is_let = true;
   Name name{};
+  Node* pattern = nullptr;     // optional, instead of `name`
   Node* annotation = nullptr;  // optional
   Node* value = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::VisitAll(fn, directives);
+    detail::Visit(fn, pattern);
     detail::Visit(fn, annotation);
     detail::Visit(fn, value);
+  }
+};
+
+// `set button(fill: black)`: default properties for the elements after it in
+// the enclosing scope. Allowed as an item, in a block, in the children of an
+// element and at the start of an unbraced function body.
+struct SetRule : Node {
+  DEFINE_NODE(SetRule)
+  Name tag{};
+  bool has_props = false;
+  std::vector<Node*> props{};  // Arg
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, props);
+  }
+};
+
+// `static-assert(condition, "message")`, checked at compile time.
+struct StaticAssert : Node {
+  DEFINE_NODE(StaticAssert)
+  Node* condition = nullptr;
+  Node* message = nullptr;  // optional; a StringLit or StringTemplate
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, condition);
+    detail::Visit(fn, message);
   }
 };
 
@@ -391,6 +441,19 @@ struct StringLit : Node {
   std::string value{};  // unescaped, without quotes
 };
 
+// `"x is {pos.x}"`: text with expressions in `{...}`. There is always one more
+// piece of text than there are expressions (the text may be empty):
+// texts[0] exprs[0] texts[1] ... exprs[n-1] texts[n].
+struct StringTemplate : Node {
+  DEFINE_NODE(StringTemplate)
+  std::vector<std::string> texts{};  // unescaped
+  std::vector<Node*> exprs{};
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, exprs);
+  }
+};
+
 struct BoolLit : Node {
   DEFINE_NODE(BoolLit)
   bool value = false;
@@ -441,10 +504,39 @@ struct RecordLit : Node {
   }
 };
 
+// One entry of a record update: `x: value`, `x += value` (also `-=` `*=` `/=`
+// `%=`), with a nested path like `pos.x` allowed on the left.
+struct UpdateEntry : Node {
+  enum Op : uint8_t { kSet, kAdd, kSub, kMul, kDiv, kMod };
+  DEFINE_NODE(UpdateEntry)
+  std::vector<Name> path{};
+  Op op = kSet;
+  Span op_span{};
+  Node* value = nullptr;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, value);
+  }
+};
+
+// `{ base | x: 1, y += 2 }`: a copy of `base` with some fields changed. Only
+// the listed fields change, which is what tells the compiler exactly which
+// parts of the model an `update` touched.
+struct RecordUpdate : Node {
+  DEFINE_NODE(RecordUpdate)
+  Node* base = nullptr;
+  std::vector<Node*> entries{};  // UpdateEntry
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, base);
+    detail::VisitAll(fn, entries);
+  }
+};
+
 // `{ let a = 1 a + 1 }`
 struct Block : Node {
   DEFINE_NODE(Block)
-  std::vector<Node*> statements{};  // Binding
+  std::vector<Node*> statements{};  // Binding, SetRule or StaticAssert
   Node* result = nullptr;           // optional
 
   void ForEachChild(const NodeFn& fn) const override {
@@ -466,14 +558,29 @@ struct IfExpr : Node {
   }
 };
 
-// `pattern => body`
+// `when condition { body }`: the body's value if the condition holds, and
+// None if it doesn't (an `if` whose `else` is implicitly None).
+struct WhenExpr : Node {
+  DEFINE_NODE(WhenExpr)
+  Node* condition = nullptr;
+  Node* body = nullptr;  // Block
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, condition);
+    detail::Visit(fn, body);
+  }
+};
+
+// `pattern => body`, or `pattern if guard => body`
 struct MatchArm : Node {
   DEFINE_NODE(MatchArm)
   Node* pattern = nullptr;
+  Node* guard = nullptr;  // optional
   Node* body = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, pattern);
+    detail::Visit(fn, guard);
     detail::Visit(fn, body);
   }
 };
@@ -489,10 +596,17 @@ struct MatchExpr : Node {
   }
 };
 
-// `for x in xs if guard fold acc = init => body`
+// `for x in xs if guard fold acc = init => body`, or in brackets, as a
+// comprehension: `[ body for x in xs if guard ]`.
+//
+// The bindings follow Go: with one name, `for i in xs`, the name is the
+// INDEX; with two, `for i, x in xs`, they are the index and the element. A `_`
+// skips one (`for _, x in xs`). The element may be a pattern, `for _, { a, b } in xs`.
 struct ForExpr : Node {
   DEFINE_NODE(ForExpr)
-  Name binding{};
+  Name first{};              // the index; `_` when it is skipped
+  Node* second = nullptr;    // optional: a pattern for the element
+  bool bracketed = false;    // `[ body for ... ]`; has no fold
   Node* iterable = nullptr;
   Node* guard = nullptr;  // optional
   bool has_fold = false;
@@ -501,6 +615,7 @@ struct ForExpr : Node {
   Node* body = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, second);
     detail::Visit(fn, iterable);
     detail::Visit(fn, guard);
     detail::Visit(fn, initial);
@@ -527,7 +642,10 @@ struct UiElement : Node {
   bool has_props = false;
   std::vector<Node*> props{};  // Arg
   bool has_children = false;
-  std::vector<Node*> children{};  // UiElement or Binding
+  // UiElement, Binding or SetRule, and expressions that stand for content: a
+  // string (a text node), a `10px`/`50%`/`1fr` spacer, `when`, `if`, `for`,
+  // `match`, or a call to a helper that returns a node.
+  std::vector<Node*> children{};
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::VisitAll(fn, directives);
@@ -559,7 +677,25 @@ struct Unary : Node {
 };
 
 struct Binary : Node {
-  enum Op : uint8_t { kAdd, kSub, kMul, kDiv, kLt, kLe, kGt, kGe, kEq, kNeq, kAnd, kOr, kMod };
+  // `??` is the default for a None; `>>` and `<<` compose functions.
+  enum Op : uint8_t {
+    kAdd,
+    kSub,
+    kMul,
+    kDiv,
+    kLt,
+    kLe,
+    kGt,
+    kGe,
+    kEq,
+    kNeq,
+    kAnd,
+    kOr,
+    kMod,
+    kCoalesce,
+    kCompose,
+    kComposeBack
+  };
   DEFINE_NODE(Binary)
   Op op = kAdd;
   Span op_span{};
@@ -572,21 +708,24 @@ struct Binary : Node {
   }
 };
 
-// `object.member`
+// `object.member`, or `object?.member` when `optional` (None if `object` is)
 struct Member : Node {
   DEFINE_NODE(Member)
   Node* object = nullptr;
   Name member{};
+  bool optional = false;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, object);
   }
 };
 
-// `callee(args)`
+// `callee(args)`, or `callee?.(args)` when `optional`. An argument may be a
+// Placeholder: `add(_, 10)` is a function still waiting for its first argument.
 struct Call : Node {
   DEFINE_NODE(Call)
   Node* callee = nullptr;
+  bool optional = false;
   std::vector<Node*> args{};
 
   void ForEachChild(const NodeFn& fn) const override {
@@ -595,17 +734,83 @@ struct Call : Node {
   }
 };
 
-// `lhs |> callee(args)`: the value on the left becomes the first argument
+// `lhs |> stage`. Two forms:
+//  - a call without any `_`, `x |> f(y)`: the value becomes the first
+//    argument, so it is `f(x, y)`. `callee` and `args` hold the call.
+//  - a stage with `_` in it, `x |> add(_, 10)` or `x |> _ + 1`: every `_` is the
+//    value. `stage` holds the whole expression, and `callee` is null.
 struct Pipe : Node {
   DEFINE_NODE(Pipe)
   Node* lhs = nullptr;
   Node* callee = nullptr;  // VarRef, VariantRef, Member chain, or Paren
   std::vector<Node*> args{};
+  Node* stage = nullptr;  // set instead of callee/args when the stage uses `_`
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, lhs);
     detail::Visit(fn, callee);
     detail::VisitAll(fn, args);
+    detail::Visit(fn, stage);
+  }
+};
+
+// `f <| x`: apply the function on the left to the value on the right.
+// Right associative, so `f <| g <| x` is `f(g(x))`.
+struct PipeBack : Node {
+  DEFINE_NODE(PipeBack)
+  Node* function = nullptr;
+  Node* argument = nullptr;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, function);
+    detail::Visit(fn, argument);
+  }
+};
+
+// `_` in an expression: the value of the enclosing `|>`, or the missing
+// argument of a partial application.
+struct Placeholder : Node {
+  DEFINE_NODE(Placeholder)
+};
+
+// `a..b`, `a..=b`, `a..`, `..b`: a range of integers. `..` leaves out the
+// end, `..=` includes it; a missing side is open.
+struct RangeExpr : Node {
+  DEFINE_NODE(RangeExpr)
+  Node* begin = nullptr;  // optional
+  Node* end = nullptr;    // optional
+  bool inclusive = false;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, begin);
+    detail::Visit(fn, end);
+  }
+};
+
+// `value is pattern`: whether the value has that shape, and (in an `if`) a
+// way to use what it matched.
+struct IsExpr : Node {
+  DEFINE_NODE(IsExpr)
+  Node* value = nullptr;
+  Node* pattern = nullptr;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, value);
+    detail::Visit(fn, pattern);
+  }
+};
+
+// `object[index]`, or `object?.[index]` when `optional`. The index may be a
+// RangeExpr, which makes it a slice: `s[1..3]`, `s[0..-1]`.
+struct Index : Node {
+  DEFINE_NODE(Index)
+  Node* object = nullptr;
+  Node* index = nullptr;
+  bool optional = false;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, object);
+    detail::Visit(fn, index);
   }
 };
 
@@ -643,6 +848,46 @@ struct LiteralPattern : Node {
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, literal);
+  }
+};
+
+// `Point { x, y: 0, ...rest }` or `{ x, y }`: a record with some of its fields
+// matched. A field with no `:` binds a name of its own name (a pun).
+struct RecordPattern : Node {
+  DEFINE_NODE(RecordPattern)
+  bool has_type = false;
+  Name type_name{};
+  std::vector<Node*> fields{};  // FieldPattern
+  bool has_rest = false;        // `...rest`, or a bare `...`
+  Name rest{};                  // missing for a bare `...`
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, fields);
+  }
+};
+
+// `name` or `name: pattern` inside a RecordPattern
+struct FieldPattern : Node {
+  DEFINE_NODE(FieldPattern)
+  Name name{};
+  Node* pattern = nullptr;  // null for a pun
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, pattern);
+  }
+};
+
+// `0..10`, `0..=9`, `..0`, `100..`: a range of numbers or units; each end is a
+// LiteralPattern.
+struct RangePattern : Node {
+  DEFINE_NODE(RangePattern)
+  Node* begin = nullptr;  // optional
+  Node* end = nullptr;    // optional
+  bool inclusive = false;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, begin);
+    detail::Visit(fn, end);
   }
 };
 

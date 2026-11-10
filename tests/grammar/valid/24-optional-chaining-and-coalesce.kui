@@ -1,0 +1,10 @@
+let pos = None
+let name = pos ?? "Hello World"
+let x = e?.pos?.x
+let called = f?.(1, 2)
+let indexed = xs?.[0]
+let deep = a?.b?.[0]?.c?.(1)
+let defaulted = e?.pos?.x ?? 0.0
+let right-assoc = a ?? b ?? c
+let loose = a ?? b || c
+let in-range = 0..n ?? 10

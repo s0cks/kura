@@ -1,0 +1,2 @@
+// error: x
+fn f(): Int => { let { x } = { a: 1 } x }

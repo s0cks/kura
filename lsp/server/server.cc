@@ -30,6 +30,7 @@ Server::Server(uv_loop_t* loop) :
   caps_.hoverProvider = true;
   caps_.documentSymbolProvider = true;
   caps_.referencesProvider = true;
+  caps_.codeActionProvider = true;
   caps_.completionProvider.triggerCharacters = {
       ".", "=>", ":", "fn", "type",
   };
@@ -181,9 +182,15 @@ static inline void SerializeList(const json_int_t req_id, const std::vector<T>& 
   for (const auto& symbol : items) {
     json_t* sym = json_object();
     symbol >> sym;
-    json_array_append(result, sym);
+    json_array_append_new(result, sym);
   }
-  json_object_set(res, "result", result);
+  json_object_set_new(res, "result", result);
+}
+
+void Server::Send(const json_int_t req_id, const std::vector<CodeAction>& rhs) {
+  JsonResponse res{};
+  SerializeList(req_id, rhs, res);
+  Send(res);
 }
 
 void Server::Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs) {
@@ -220,6 +227,14 @@ void Server::DispatchJsonRpc(std::string_view json_msg) {
   (*handler)(req);
 }
 
+void Server::IndexDocument(const URI& uri) {
+  auto* doc = docs_.Get(uri);
+  if (!doc)
+    return;
+
+  Queue(new IndexDocumentTask(doc));
+}
+
 void Server::HandleDidOpen(const Request& req) {
   json_t* doc = json_object_get(req.params, "textDocument");
   if (!doc)
@@ -229,10 +244,7 @@ void Server::HandleDidOpen(const Request& req) {
   textDocument << doc;
   docs_.Update(textDocument.uri, std::move(textDocument.text));
   log::info(std::format("didOpen: {}", textDocument.uri));
-
-  IndexDocumentTask* ctx = new IndexDocumentTask();
-  ctx->doc = docs_.Get(textDocument.uri);
-  Queue(ctx);
+  IndexDocument(textDocument.uri);
 }
 
 void Server::HandleDidSave(const Request& req) {
@@ -257,6 +269,18 @@ void Server::HandleDidChange(const Request& req) {
   TextDocument textDocument{};
   textDocument << doc;
   log::info(std::format("didChange: {}", textDocument.uri));
+
+  // The server asks for full syncs, so the last change is the whole new text.
+  const auto count = json_array_size(contentChanges);
+  if (count == 0)
+    return;
+
+  const json_t* text_node = json_object_get(json_array_get(contentChanges, count - 1), "text");
+  if (!json_is_string(text_node))
+    return;
+
+  docs_.Update(textDocument.uri, std::string(json_string_value(text_node)));
+  IndexDocument(textDocument.uri);
 }
 
 void Server::HandleDidClose(const Request& req) {
@@ -289,7 +313,14 @@ void Server::HandleHover(const Request& req) {
 }
 
 void Server::HandleCodeAction(const Request& req) {
-  // TODO(@s0cks): implement
+  CodeActionParams params{};
+  params << req.params;
+
+  auto* doc = docs_.Get(params.textDocument.uri);
+  if (!doc)
+    return SendInternalError(req.id, std::format("document {} not indexed", params.textDocument.uri));
+
+  return Send(req.id, GetCodeActions(*doc, params.range));
 }
 
 void Server::HandleCodeActionResolve(const Request& req) {

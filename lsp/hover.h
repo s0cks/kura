@@ -59,8 +59,8 @@ class hover_info_stream {
   inline auto operator<<(const syntax::FnDecl& fn) -> hover_info_stream& {
     heading(fn.name);
     line();
-    stream() << "Parameters:\n";
     if (!fn.params.empty()) {
+      stream() << "Parameters:\n";
       for (const auto& param : fn.params) {
         const auto& p = param->As<syntax::Param>();
         const auto& name = p->name.text;
@@ -69,7 +69,9 @@ class hover_info_stream {
       }
     }
     linebreak();
-    stream() << "Return Type: " << fn.result->GetKindName() << "\n";
+
+    if (fn.result)
+      stream() << "Return Type: " << fn.result->GetKindName() << "\n";
     return *this;
   }
 
@@ -90,15 +92,35 @@ class hover_info_stream {
   inline auto operator<<(const syntax::TypeDecl& rhs) -> hover_info_stream& {
     heading(rhs.name);
     line();
-    stream() << "Properties:\n";
-    if (const auto* type = rhs.type->As<syntax::RecordType>()) {
+    stream() << rhs.type->GetKindName() << "\n";
+    if (const auto* type = rhs.type->As<syntax::NamedType>()) {
+      stream() << "Args:";
+      linebreak();
+      for (const auto& arg : type->args) {
+        stream() << " - " << arg->GetKindName();
+        linebreak();
+      }
+    } else if (const auto* type = rhs.type->As<syntax::VariantType>()) {
+    } else if (const auto* type = rhs.type->As<syntax::UnionType>()) {
+      stream() << "Types:";
+      linebreak();
+      for (const auto& member : type->members) {
+        stream() << " - " << member->GetKindName();
+        linebreak();
+      }
+      linebreak();
+    } else if (const auto* type = rhs.type->As<syntax::RecordType>()) {
+      stream() << "Properties:";
+      linebreak();
       for (const auto& f : type->fields) {
         const auto* field = f->As<syntax::Field>();
         stream() << " - " << field->name.text << " ";
         if (const auto* namedType = field->type->As<syntax::NamedType>())
           stream() << namedType->name.text;
-        stream() << "\n";
+
+        linebreak();
       }
+      linebreak();
     }
 
     return *this;
@@ -107,23 +129,26 @@ class hover_info_stream {
   inline auto operator<<(const syntax::UiElement& rhs) -> hover_info_stream& {
     heading(rhs.tag.text);
     line();
-    stream() << "Properties:\n";
-    for (const auto& prop : rhs.props) {
-      const auto& a = prop->As<syntax::Arg>();
-      stream() << " - " << a->name.text << " ";
-      if (const auto& str = a->value->As<syntax::StringLit>()) {
-        stream() << str->value << " (StringLit)";
-      } else if (const auto& b = a->value->As<syntax::BoolLit>()) {
-        stream() << (b->value ? "true" : "false") << " (BoolLit)";
-      } else if (const auto& n = a->value->As<syntax::NumberLit>()) {
-        stream() << n->text << " (NumberLit)";
-      } else if (const auto& u = a->value->As<syntax::UnitLit>()) {
-        stream() << u->text << " (UnitLit)";
-      } else if (const auto& n = a->value->As<syntax::NoneLit>()) {
-        stream() << "None" << " (NoneLit)";
-      }
 
-      linebreak();
+    if (rhs.has_props) {
+      stream() << "Properties:\n";
+      for (const auto& prop : rhs.props) {
+        const auto& a = prop->As<syntax::Arg>();
+        stream() << " - " << a->name.text << " ";
+        if (const auto& str = a->value->As<syntax::StringLit>()) {
+          stream() << str->value << " (StringLit)";
+        } else if (const auto& b = a->value->As<syntax::BoolLit>()) {
+          stream() << (b->value ? "true" : "false") << " (BoolLit)";
+        } else if (const auto& n = a->value->As<syntax::NumberLit>()) {
+          stream() << n->text << " (NumberLit)";
+        } else if (const auto& u = a->value->As<syntax::UnitLit>()) {
+          stream() << u->text << " (UnitLit)";
+        } else if (const auto& n = a->value->As<syntax::NoneLit>()) {
+          stream() << "None" << " (NoneLit)";
+        }
+
+        linebreak();
+      }
     }
 
     return *this;

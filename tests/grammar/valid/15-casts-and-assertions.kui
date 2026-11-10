@@ -1,0 +1,11 @@
+// a cast is a call to the type's name
+let x = 10
+let y = Float(x)
+let z = UInt8(x + 1)
+let w = x |> Float()
+
+// checked while compiling; the message is optional
+static-assert(1 < 2, "one is less than two")
+static-assert(x == 10)
+fn checked(n: Int): Int =>
+  { static-assert(true, "inside a block") n + 1 }

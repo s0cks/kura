@@ -17,6 +17,9 @@ Identifiers and record properties use **kebab-case**:
 fn get-text(item-count: Int): String => ...
 ```
 
+A hyphen continues a name only when the part after it isn't just digits: `pos-2d-to-3d` is one name,
+but `x-1` is `x` minus `1`, and the compiler asks for spaces (`x - 1`).
+
 Type names (`Message`, `Seq`, `Optional`) are capitalized. `None` is always spelled with a
 capital N.
 
@@ -80,6 +83,10 @@ fn pos(): Position => { x: 1, y: 2 }   // record
 fn sum(): Int => { let a = 1  a + 2 }  // block
 ```
 
+`{ x }` is a block that returns `x`. With a comma, `{ x, }` is a record with one **pun**: it means
+`{ x: x }`. Element arguments pun the same way: `#button(width,)` is `#button(width: width)`. Positional
+arguments come last.
+
 ## Records
 
 Records are covered in [Primitives](/kura/reference/primitives/#records). A few
@@ -90,6 +97,15 @@ let p2 = { ...p1, y: 20 }            // spread: later fields win
 let p3 = p1 + { z: 30 }              // combine two records
 ```
 
+A record can be copied with some fields changed. Only the listed fields change, and a path reaches into
+nested records:
+
+```kura
+let p4 = { p1 | x: 5 }               // x is 5
+let p5 = { p1 | x += 1, y -= 2 }     // x: p1.x + 1, y: p1.y - 2
+let m2 = { model | player.hp -= 1 }  // a nested field
+```
+
 Spread (`...`) is written inside a record literal. `+` between records produces a new record
 with the fields of both.
 
@@ -98,13 +114,51 @@ with the fields of both.
 ```kura
 let items = [ 1, 2, 3 ]
 let all = items + [ 4, 5 ]    // a new Seq: [ 1, 2, 3, 4, 5 ]
+let first = items[0]
+let init = items[0..-1]       // a slice: [ 1, 2 ]
 ```
+
+## Ranges
+
+`a..b` leaves out `b`, `a..=b` includes it, and either end can be left open: `3..`, `..5`.
+They are used for slices and in patterns (`0..10 => ...`).
+
+## Strings
+
+A `{` in a string interpolates one expression; `\{` and `\}` are literal braces.
+
+```kura
+#text("{pos.x}, {pos.y}")
+```
+
+## Optional values
+
+`a ?? b` is `b` when `a` is `None`. `a?.b` is `None` when `a` is, and otherwise `a.b`; the same goes for
+calls and indexes, `f?.(x)` and `xs?.[0]`.
+
+```kura
+let x = entity?.pos?.x ?? 0.0
+```
+
+## Casts and assertions
+
+A type's name converts: `Float(x)`. A conversion that loses information traps.
+`static-assert(cond, "message")` checks a condition while compiling.
+
+## `is`
+
+`value is pattern` tests the shape of a value with the same patterns as `match`:
+`x is Float`, `m is Click(_)`. In the condition of an `if`, put a record pattern in parentheses:
+`if (p is Point { x, y }) { ... }`.
 
 ## Operators
 
 | Operator                              | Meaning               |
 | ------------------------------------- | --------------------- |
-| `+` `-` `*` `/`                       | Arithmetic            |
+| `+` `-` `*` `/` `%`                   | Arithmetic            |
+| `??`                                  | Default for `None`    |
+| `..` `..=`                            | Ranges                |
+| `>>` `<<` `<\|`                       | Composition and application |
 | `==` `!=` `<` `<=` `>` `>=`           | Comparison            |
 | `&&` `\|\|` `!`                       | Boolean logic         |
 | `\|>`                                 | [Pipe](/kura/reference/control-flow/) |

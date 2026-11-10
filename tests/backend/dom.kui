@@ -3,7 +3,7 @@
 type Model = { count: Int, label: String, }
 type Message = Tick | Reset
 
-fn rows(items: Seq<String>) => for item in items => #fragment { #text(item) #text("!") }
+fn rows(items: Seq<String>) => for _, item in items => #fragment { #text(item) #text("!") }
 
 fn view(model: Model): Node =>
   #surface(fill: blue, radius: 2px + 2px, padding: 8px, direction: "column", gap: 4px) {

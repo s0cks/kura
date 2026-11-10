@@ -1,5 +1,6 @@
 #include "frontend/expr_builder.h"
 
+#include <algorithm>
 #include <cctype>
 #include <optional>
 #include <sstream>
@@ -175,6 +176,8 @@ auto ExprBuilder::BuildModule() -> Module* {
   for (const auto* item : items) {
     Pending next{item, {}, {}, nullptr, nullptr, nullptr, nullptr, false, false, nullptr};
     if (const auto* fn = item->As<syntax::FnDecl>()) {
+      if (!fn->set_rules.empty())
+        Unsupported(fn->set_rules.front(), "a `set` rule");
       next.where = fn->name.span;
       next.name = fn->name.text;
       next.directives = &fn->directives;
@@ -222,7 +225,12 @@ auto ExprBuilder::BuildModule() -> Module* {
     if (const auto* type = item->As<syntax::TypeDecl>()) {
       m->AddType(BuildTypeDecl(type));
     } else if (const auto* binding = item->As<syntax::Binding>()) {
-      m->AddBinding(BuildBinding(binding));
+      for (const auto store : BuildBindings(binding))
+        m->AddBinding(store);
+    } else if (item->Is<syntax::SetRule>()) {
+      Unsupported(item, "a `set` rule");
+    } else if (const auto* assertion = item->As<syntax::StaticAssert>()) {
+      BuildStaticAssert(assertion);
     } else if (item->Is<syntax::Error>()) {
       Error(item, "syntax error");  // can't happen: the tree was checked to be valid
     }
@@ -448,6 +456,7 @@ auto ExprBuilder::BuildDirectives(const std::vector<Node*>& directives) -> Direc
       std::string name = "value";
       switch (arg->form) {
         case syntax::Arg::kNamed:
+        case syntax::Arg::kPun:
           name = arg->name.text;
           break;
         case syntax::Arg::kPositional:
@@ -581,12 +590,33 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return BuildCallExpr(node->As<syntax::Call>());
     case Node::kPipe:
       return BuildPipe(node->As<syntax::Pipe>());
+    case Node::kWhenExpr:
+      return BuildWhen(node->As<syntax::WhenExpr>());
+    case Node::kPlaceholder:
+      // `x |> add(_, 1)` reads the piped value; anywhere else `_` is a partial application
+      if (pipe_locals_.empty())
+        Unsupported(node, "partial application with `_`");
+      return LoadName(node, pipe_locals_.back());
+    case Node::kStringTemplate:
+      Unsupported(node, "string interpolation");
+    case Node::kRangeExpr:
+      Unsupported(node, "a range");
+    case Node::kIndex:
+      Unsupported(node, "indexing and slicing");
+    case Node::kIsExpr:
+      return BuildIs(node->As<syntax::IsExpr>());
+    case Node::kPipeBack:
+      return BuildPipeBack(node->As<syntax::PipeBack>());
+    case Node::kRecordUpdate:
+      return BuildRecordUpdate(node->As<syntax::RecordUpdate>());
     default:
       Error(node, "failed to build expression");
   }
 }
 
 auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
+  if (binary->op == syntax::Binary::kCoalesce)
+    return BuildCoalesce(binary);
   BinaryOp op;
   switch (binary->op) {
     case syntax::Binary::kAdd:
@@ -622,14 +652,108 @@ auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
     case syntax::Binary::kAnd:
       op = BinaryOp::kBinaryAnd;
       break;
-    default:
+    case syntax::Binary::kOr:
       op = BinaryOp::kBinaryOr;
       break;
+    case syntax::Binary::kMod:
+      op = BinaryOp::kModulus;
+      break;
+    case syntax::Binary::kCoalesce:
+      break;  // handled above
+    case syntax::Binary::kCompose:
+    case syntax::Binary::kComposeBack:
+      Unsupported(binary, "function composition (`>>` and `<<`)");
   }
   return BinaryExpr::New(op, Build(binary->lhs), Build(binary->rhs));
 }
 
+static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind>;
+
+// `x |> add(_, 1)`: the value is computed once into a local, and every `_` in the stage reads it.
+auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage,
+                                  const syntax::Span& where) -> Expr* {
+  LocalsScope pipe_scope(GetOwner());
+  const auto value = Build(value_node);
+  // a name no program can write, so it can't clash with anything
+  const auto name = "%pipe" + std::to_string(pipe_count_++);
+  const auto store = StoreLocalExpr::New(DeclareLocal(where, name), value);
+  pipe_locals_.push_back(name);
+  const auto built = Build(stage);
+  pipe_locals_.pop_back();
+  return SeqExpr::New(ExprList{store, built});
+}
+
+auto ExprBuilder::BuildStagedPipe(const syntax::Pipe* pipe) -> Expr* {
+  return BuildPipedStage(pipe->lhs, pipe->stage, pipe->span);
+}
+
+static auto HasPlaceholder(const syntax::Node* root) -> bool {
+  std::vector<const syntax::Node*> stack{root};
+  while (!stack.empty()) {
+    const auto* node = stack.back();
+    stack.pop_back();
+    if (node->Is<syntax::Placeholder>())
+      return true;
+    node->ForEachChild([&](const syntax::Node* child) {
+      stack.push_back(child);
+    });
+  }
+  return false;
+}
+
+// `f <| x` is `f(x)`; when `f` has a `_`, as in `add(_, 10) <| 200`, the `_` is where `x` goes.
+auto ExprBuilder::BuildPipeBack(const syntax::PipeBack* back) -> Expr* {
+  if (HasPlaceholder(back->function))
+    return BuildPipedStage(back->argument, back->function, back->span);
+  if (const auto* variant = back->function->As<syntax::VariantRef>())
+    return VariantExpr::New(variant->name.text, Build(back->argument));
+  const auto target = Build(back->function);
+  return BuildCall(target, ExprList{Build(back->argument)});
+}
+
+auto ExprBuilder::BuildWhen(const syntax::WhenExpr* when) -> Expr* {
+  // `when c { a }` is `if c { a } else { None }`
+  return IfExpr::New(Build(when->condition), BuildSeq(when->body), ToSeq(Literal(None::Get())));
+}
+
+// `a ?? b` is `match a { Some(x) => x, _ => b }`: `a` is computed once, `b` only when `a` is None, and the
+// result is `a` without its None.
+auto ExprBuilder::BuildCoalesce(const syntax::Binary* binary) -> Expr* {
+  const auto match = MatchExpr::New(Build(binary->lhs))->AsMatch();
+  {
+    LocalsScope arm_scope(GetOwner());
+    const auto name = "%coalesce" + std::to_string(pipe_count_++);
+    const auto pattern = VariantPatternExpr::New("Some", BindingPatternExpr::New(CreateLocal(binary->span, name)));
+    match->AppendCase(CaseExpr::New(pattern, ToSeq(LoadName(binary->lhs, name)))->AsCase());
+  }
+  match->SetWildcard(BuildSeq(binary->rhs));
+  return static_cast<Expr*>(match);
+}
+
+// `x is pattern` is `match x { pattern => true, _ => false }`
+auto ExprBuilder::BuildIs(const syntax::IsExpr* is) -> Expr* {
+  const auto match = MatchExpr::New(Build(is->value))->AsMatch();
+  LocalsScope arm_scope(GetOwner());
+  const auto pattern = BuildPattern(is->pattern);
+  if (!pattern->IsWildcardPattern())
+    match->AppendCase(CaseExpr::New(pattern, ToSeq(Literal(Bool::True())))->AsCase());
+  match->SetWildcard(ToSeq(Literal(pattern->IsWildcardPattern() ? Bool::True() : Bool::False())));
+  return static_cast<Expr*>(match);
+}
+
+auto ExprBuilder::BuildImplicitText(const syntax::Node* value) -> Expr* {
+  const auto kind = ParseNodeExprKind("text");
+  if (!kind)
+    Error(value, "there is no `#text` element to make this string into");
+  const auto property = Property::FindOrCreate(String::New("value"), Type::NoneType());
+  NodeExpr::PropertyList properties{};
+  properties.push_back(StorePropertyExpr::New(property, Build(value)));
+  return static_cast<Expr*>(NodeExpr::New(*kind, std::move(properties))->AsNode());
+}
+
 auto ExprBuilder::BuildPipe(const syntax::Pipe* pipe) -> Expr* {
+  if (pipe->stage != nullptr)
+    return BuildStagedPipe(pipe);
   // `x |> f(y)` is `f(x, y)`; the parser guarantees the right side is a call.
   const auto lhs = Build(pipe->lhs);
   const Node* callee = pipe->callee;
@@ -683,10 +807,13 @@ auto ExprBuilder::BuildMember(const syntax::Member* ctx) -> Expr* {
   }
   const auto target = Build(ctx->object);
   const auto property = Property::FindOrCreate(String::New(member), Type::NoneType());
-  return GetPropertyExpr::New(target, property);
+  // `a?.b` is None when `a` is
+  return GetPropertyExpr::New(target, property, ctx->optional);
 }
 
 auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
+  if (ctx->optional)
+    Unsupported(ctx, "an optional call (`?.(`)");
   // `Click(payload)` constructs a variant rather than calling a function.
   if (const auto* variant = ctx->callee->As<syntax::VariantRef>()) {
     const auto& name = variant->name.text;
@@ -742,7 +869,8 @@ auto ExprBuilder::BuildRecord(const syntax::RecordLit* ctx) -> Expr* {
   ExprList entries{};
   for (const auto* entry_node : ctx->entries) {
     const auto* entry = entry_node->As<syntax::Arg>();
-    if (entry->form == syntax::Arg::kNamed) {
+    if (entry->form == syntax::Arg::kNamed || entry->form == syntax::Arg::kPun) {
+      // a pun, `{ width, }`, has the name's own value as its value
       const auto property = Property::FindOrCreate(String::New(entry->name.text), Type::NoneType());
       entries.push_back(StorePropertyExpr::New(property, Build(entry->value)));
     } else if (entry->form == syntax::Arg::kSpread) {
@@ -761,24 +889,330 @@ auto ExprBuilder::BuildBinding(const syntax::Binding* binding) -> StoreLocalExpr
   if (binding->is_let) {
     // Evaluate the value first: `let x = x + 1` refers to the previous `x`.
     const auto value = Build(binding->value);
-    store = StoreLocalExpr::New(DeclareLocal(binding->name.span, binding->name.text), value);
+    const auto local = DeclareLocal(binding->name.span, binding->name.text);
+    store = StoreLocalExpr::New(local, value);
     store->SetAnnotation(BuildType(binding->annotation));
+    // a value the compiler can compute can be used by a `static-assert`
+    if (const auto constant = Fold(value))
+      constants_[local] = *constant;
   } else {
     const auto& name = binding->name.text;
     if (!GetScope()->GetLocalRecursive(name))
       Error(binding->name.span, "cannot redefine '" + name + "': it is not defined");
     const auto value = Build(binding->value);
-    store = StoreLocalExpr::New(DeclareLocal(binding->name.span, name), value);
+    const auto local = DeclareLocal(binding->name.span, name);
+    store = StoreLocalExpr::New(local, value);
+    if (const auto constant = Fold(value))
+      constants_[local] = *constant;
   }
   store->SetDirectives(BuildDirectives(binding->directives));
   return store;
 }
 
+// `let { a, b: c } = value` evaluates the value once into a local, then binds each name to a field of it.
+// A name that isn't a field of the value is an error where the field is read.
+auto ExprBuilder::BuildBindings(const syntax::Binding* binding) -> std::vector<StoreLocalExpr*> {
+  if (binding->pattern == nullptr)
+    return {BuildBinding(binding)};
+  std::vector<StoreLocalExpr*> stores{};
+  const auto value = Build(binding->value);
+  const auto name = "%destructure" + std::to_string(pipe_count_++);
+  const auto source = StoreLocalExpr::New(DeclareLocal(binding->pattern->span, name), value);
+  source->SetAnnotation(BuildType(binding->annotation));
+  source->SetDirectives(BuildDirectives(binding->directives));
+  stores.push_back(source);
+  Destructure(binding->pattern, name, stores);
+  return stores;
+}
+
+void ExprBuilder::Destructure(const syntax::Node* pattern, const std::string& source,
+                              std::vector<StoreLocalExpr*>& out) {
+  const auto* record = pattern->As<syntax::RecordPattern>();
+  if (record == nullptr)
+    Unsupported(pattern, "a pattern that can fail in a `let`");
+  if (record->has_type)
+    Unsupported(pattern, "a type name in a destructuring `let`");
+  if (record->has_rest)
+    Unsupported(pattern, "`...rest` in a destructuring `let`");
+  for (const auto* field_node : record->fields) {
+    const auto* field = field_node->As<syntax::FieldPattern>();
+    const auto property = Property::FindOrCreate(String::New(field->name.text), Type::NoneType());
+    const auto load = GetPropertyExpr::New(LoadName(field, source), property);
+    if (field->pattern == nullptr) {
+      out.push_back(StoreLocalExpr::New(DeclareLocal(field->name.span, field->name.text), load));
+    } else if (const auto* binding = field->pattern->As<syntax::BindingPattern>()) {
+      out.push_back(StoreLocalExpr::New(DeclareLocal(binding->name.span, binding->name.text), load));
+    } else if (field->pattern->Is<syntax::WildcardPattern>()) {
+      continue;
+    } else if (field->pattern->Is<syntax::RecordPattern>()) {
+      const auto nested = "%destructure" + std::to_string(pipe_count_++);
+      out.push_back(StoreLocalExpr::New(DeclareLocal(field->span, nested), load));
+      Destructure(field->pattern, nested, out);
+    } else {
+      Unsupported(field->pattern, "a pattern that can fail in a `let`");
+    }
+  }
+}
+
+// ╭────────────────╮
+// │ Record updates │
+// ╰────────────────╯
+static auto UpdateOp(const syntax::UpdateEntry::Op op) -> BinaryOp {
+  switch (op) {
+    case syntax::UpdateEntry::kAdd:
+      return BinaryOp::kAdd;
+    case syntax::UpdateEntry::kSub:
+      return BinaryOp::kSubtract;
+    case syntax::UpdateEntry::kMul:
+      return BinaryOp::kMultiply;
+    case syntax::UpdateEntry::kDiv:
+      return BinaryOp::kDivide;
+    default:
+      return BinaryOp::kModulus;
+  }
+}
+
+auto ExprBuilder::BuildRecordUpdate(const syntax::RecordUpdate* update) -> Expr* {
+  std::vector<const syntax::UpdateEntry*> entries{};
+  for (const auto* entry : update->entries)
+    entries.push_back(entry->As<syntax::UpdateEntry>());
+  return BuildUpdateLevel(update->base, {}, entries);
+}
+
+// The record at `base.prefix`, copied with the fields the entries name. Entries with a longer path update a
+// record inside, so they become an update of that field's record.
+auto ExprBuilder::BuildUpdateLevel(const syntax::Node* base, const std::vector<std::string>& prefix,
+                                   const std::vector<const syntax::UpdateEntry*>& entries) -> Expr* {
+  const auto depth = prefix.size();
+  const auto property_of = [](const std::string& name) {
+    return Property::FindOrCreate(String::New(name), Type::NoneType());
+  };
+  // built each time it is needed: an Expr can't have two parents
+  const auto load_current = [&]() -> Expr* {
+    auto* current = Build(base);
+    for (const auto& name : prefix)
+      current = GetPropertyExpr::New(current, property_of(name));
+    return current;
+  };
+
+  ExprList items{};
+  items.push_back(SpreadExpr::New(load_current()));
+  std::vector<std::string> order{};
+  for (const auto* entry : entries) {
+    const auto& name = entry->path[depth].text;
+    if (std::find(order.begin(), order.end(), name) == order.end())
+      order.push_back(name);
+  }
+  for (const auto& name : order) {
+    const syntax::UpdateEntry* leaf = nullptr;
+    std::vector<const syntax::UpdateEntry*> deeper{};
+    for (const auto* entry : entries) {
+      if (entry->path[depth].text != name)
+        continue;
+      if (entry->path.size() == depth + 1) {
+        // `x += 1` means `x: <the record>.x + 1`, so two entries for one field can't both be applied
+        if (leaf != nullptr)
+          Error(entry, "`" + name + "` is updated twice in one record update");
+        leaf = entry;
+      } else {
+        deeper.push_back(entry);
+      }
+    }
+    if (leaf != nullptr && !deeper.empty())
+      Error(leaf, "`" + name + "` is updated as a whole and also by a field inside it");
+    const auto property = property_of(name);
+    Expr* value = nullptr;
+    if (leaf != nullptr) {
+      if (leaf->op == syntax::UpdateEntry::kSet) {
+        value = Build(leaf->value);
+      } else {
+        // `x += v` is `x: <the record>.x + v`
+        value = BinaryExpr::New(UpdateOp(leaf->op), GetPropertyExpr::New(load_current(), property),
+                                Build(leaf->value));
+      }
+    } else {
+      auto next = prefix;
+      next.push_back(name);
+      value = BuildUpdateLevel(base, next, deeper);
+    }
+    items.push_back(StorePropertyExpr::New(property, value));
+  }
+  return RecordExpr::NewOrdered(std::move(items));
+}
+
+// ╭────────────────╮
+// │ static-assert  │
+// ╰────────────────╯
+auto ExprBuilder::Fold(Expr* expr) const -> std::optional<Constant> {
+  if (expr == nullptr)
+    return std::nullopt;
+  Constant result{};
+  if (expr->IsLiteral()) {
+    auto* value = expr->AsLiteral()->GetValue();
+    if (const auto* b = dynamic_cast<Bool*>(value)) {
+      result.kind = Constant::kBool;
+      result.boolean = b->GetValue();
+    } else if (const auto* i = dynamic_cast<Int*>(value)) {
+      result.kind = Constant::kInt;
+      result.integer = i->GetValue();
+    } else if (const auto* f = dynamic_cast<Float*>(value)) {
+      result.kind = Constant::kFloat;
+      result.real = f->GetValue();
+    } else if (const auto* str = dynamic_cast<String*>(value)) {
+      result.kind = Constant::kString;
+      result.text = str->GetValue();
+    } else {
+      return std::nullopt;
+    }
+    return result;
+  }
+  if (expr->IsLoadLocal()) {
+    const auto found = constants_.find(expr->AsLoadLocal()->GetLocal());
+    if (found == constants_.end())
+      return std::nullopt;
+    return found->second;
+  }
+  const auto numeric = [](const Constant& c) {
+    return c.kind == Constant::kInt || c.kind == Constant::kFloat;
+  };
+  const auto as_real = [](const Constant& c) {
+    return c.kind == Constant::kInt ? static_cast<double>(c.integer) : c.real;
+  };
+  if (expr->IsUnary()) {
+    const auto* unary = expr->AsUnary();
+    const auto operand = Fold(unary->GetValue());
+    if (!operand)
+      return std::nullopt;
+    if (unary->IsBang() && operand->kind == Constant::kBool) {
+      result.boolean = !operand->boolean;
+      return result;
+    }
+    if (unary->IsMinus() && numeric(*operand)) {
+      result = *operand;
+      result.integer = -result.integer;
+      result.real = -result.real;
+      return result;
+    }
+    if (unary->IsPlus() && numeric(*operand))
+      return operand;
+    return std::nullopt;
+  }
+  if (expr->IsBinary()) {
+    const auto* binary = expr->AsBinary();
+    const auto lhs = Fold(binary->GetLeft());
+    const auto rhs = Fold(binary->GetRight());
+    if (!lhs || !rhs)
+      return std::nullopt;
+    if (lhs->kind == Constant::kBool && rhs->kind == Constant::kBool) {
+      result.kind = Constant::kBool;
+      if (binary->IsBinaryAnd())
+        result.boolean = lhs->boolean && rhs->boolean;
+      else if (binary->IsBinaryOr())
+        result.boolean = lhs->boolean || rhs->boolean;
+      else if (binary->IsEq())
+        result.boolean = lhs->boolean == rhs->boolean;
+      else if (binary->IsNeq())
+        result.boolean = lhs->boolean != rhs->boolean;
+      else
+        return std::nullopt;
+      return result;
+    }
+    if (lhs->kind == Constant::kString && rhs->kind == Constant::kString) {
+      result.kind = Constant::kBool;
+      if (binary->IsEq())
+        result.boolean = lhs->text == rhs->text;
+      else if (binary->IsNeq())
+        result.boolean = lhs->text != rhs->text;
+      else
+        return std::nullopt;
+      return result;
+    }
+    if (!numeric(*lhs) || !numeric(*rhs))
+      return std::nullopt;
+    const auto both_int = lhs->kind == Constant::kInt && rhs->kind == Constant::kInt;
+    const auto l = as_real(*lhs);
+    const auto r = as_real(*rhs);
+    const auto compare = [&](const bool value) {
+      result.kind = Constant::kBool;
+      result.boolean = value;
+      return result;
+    };
+    if (binary->IsEq())
+      return compare(both_int ? lhs->integer == rhs->integer : l == r);
+    if (binary->IsNeq())
+      return compare(both_int ? lhs->integer != rhs->integer : l != r);
+    if (binary->IsLessThan())
+      return compare(both_int ? lhs->integer < rhs->integer : l < r);
+    if (binary->IsLessThanEqual())
+      return compare(both_int ? lhs->integer <= rhs->integer : l <= r);
+    if (binary->IsGreaterThan())
+      return compare(both_int ? lhs->integer > rhs->integer : l > r);
+    if (binary->IsGreaterThanEqual())
+      return compare(both_int ? lhs->integer >= rhs->integer : l >= r);
+    if (both_int) {
+      result.kind = Constant::kInt;
+      if (binary->IsAdd())
+        result.integer = lhs->integer + rhs->integer;
+      else if (binary->IsSubtract())
+        result.integer = lhs->integer - rhs->integer;
+      else if (binary->IsMultiply())
+        result.integer = lhs->integer * rhs->integer;
+      else if (binary->IsDivide() && rhs->integer != 0)
+        result.integer = lhs->integer / rhs->integer;
+      else if (binary->IsModulus() && rhs->integer != 0)
+        result.integer = lhs->integer % rhs->integer;
+      else
+        return std::nullopt;
+      return result;
+    }
+    result.kind = Constant::kFloat;
+    if (binary->IsAdd())
+      result.real = l + r;
+    else if (binary->IsSubtract())
+      result.real = l - r;
+    else if (binary->IsMultiply())
+      result.real = l * r;
+    else if (binary->IsDivide() && r != 0.0)
+      result.real = l / r;
+    else
+      return std::nullopt;
+    return result;
+  }
+  return std::nullopt;
+}
+
+// Checked while compiling: the condition must be something the compiler can compute from literals and
+// from the `let`s before it that are themselves computable.
+void ExprBuilder::BuildStaticAssert(const syntax::StaticAssert* assertion) {
+  const auto condition = Fold(Build(assertion->condition));
+  if (!condition) {
+    Error(assertion->condition,
+          "this `static-assert` condition can't be computed while compiling: it uses something that is only "
+          "known when the program runs");
+  }
+  if (condition->kind != Constant::kBool)
+    Error(assertion->condition, "the condition of a `static-assert` must be a Bool");
+  if (condition->boolean)
+    return;
+  std::string message = "static assertion failed";
+  if (const auto* text = assertion->message ? assertion->message->As<syntax::StringLit>() : nullptr)
+    message += ": " + text->value;
+  Error(assertion, message);
+}
+
 auto ExprBuilder::BuildBlock(const syntax::Block* block) -> SeqExpr* {
   LocalsScope block_scope(GetOwner());
   ExprList body{};
-  for (const auto* stmt : block->statements)
-    body.push_back(BuildBinding(stmt->As<syntax::Binding>()));
+  for (const auto* stmt : block->statements) {
+    if (const auto* binding = stmt->As<syntax::Binding>()) {
+      for (const auto store : BuildBindings(binding))
+        body.push_back(store);
+    } else if (stmt->Is<syntax::SetRule>()) {
+      Unsupported(stmt, "a `set` rule");
+    } else {
+      BuildStaticAssert(stmt->As<syntax::StaticAssert>());
+    }
+  }
   // A block with no final expression has the value None.
   body.push_back(block->result ? Build(block->result) : Literal(None::Get()));
   return SeqExpr::New(std::move(body));
@@ -825,6 +1259,10 @@ auto ExprBuilder::BuildPattern(const Node* node) -> PatternExpr* {
     const auto payload = variant->payload ? BuildPattern(variant->payload) : nullptr;
     return VariantPatternExpr::New(variant->name.text, payload);
   }
+  if (node->Is<syntax::RecordPattern>())
+    Unsupported(node, "a record pattern");
+  if (node->Is<syntax::RangePattern>())
+    Unsupported(node, "a range pattern");
   Error(node, "invalid match pattern");
 }
 
@@ -832,6 +1270,8 @@ auto ExprBuilder::BuildMatch(const syntax::MatchExpr* ctx) -> Expr* {
   const auto expr = MatchExpr::New(Build(ctx->scrutinee))->AsMatch();
   for (const auto* arm_node : ctx->arms) {
     const auto* arm = arm_node->As<syntax::MatchArm>();
+    if (arm->guard != nullptr)
+      Unsupported(arm->guard, "a match guard");
     // Names bound by the pattern are visible in the arm body only.
     LocalsScope arm_scope(GetOwner());
     const auto pattern = BuildPattern(arm->pattern);
@@ -853,9 +1293,19 @@ auto ExprBuilder::BuildFor(const syntax::ForExpr* ctx) -> Expr* {
   // nor the accumulator is visible to it.
   Expr* initial = ctx->has_fold ? Build(ctx->initial) : nullptr;
 
+  // Like Go, `for i, x in xs` binds the index and the element, and a lone name is the index. The loops
+  // the IR has are over the elements, so those are the ones that can be built for now.
+  if (ctx->second == nullptr)
+    Unsupported(ctx, "a loop over the index; write `for _, x in xs` to loop over the elements");
+  if (ctx->first.text != "_")
+    Unsupported(ctx, "an index variable in a loop");
+  const auto* element = ctx->second->As<syntax::BindingPattern>();
+  if (element == nullptr)
+    Unsupported(ctx->second, "a pattern for the loop element");
+
   // `item` is only visible to the guard and the body.
   LocalsScope loop_scope(GetOwner());
-  const auto& binding = ctx->binding.text;
+  const auto& binding = element->name.text;
   const auto binding_local = CreateLocal(ctx->span, binding);
   Expr* guard = ctx->guard ? Build(ctx->guard) : nullptr;
 
@@ -900,7 +1350,8 @@ auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
   for (const auto* arg_node : ctx->props) {
     const auto* arg = arg_node->As<syntax::Arg>();
     switch (arg->form) {
-      case syntax::Arg::kNamed: {
+      case syntax::Arg::kNamed:
+      case syntax::Arg::kPun: {
         const auto property = Property::FindOrCreate(String::New(arg->name.text), Type::NoneType());
         properties.push_back(StorePropertyExpr::New(property, Build(arg->value)));
         break;
@@ -930,7 +1381,14 @@ auto ExprBuilder::BuildUiChildren(NodeExpr* node, const syntax::UiElement* ctx) 
     if (const auto* element = child->As<syntax::UiElement>()) {
       node->Append(BuildUi(element));
     } else if (const auto* binding = child->As<syntax::Binding>()) {
-      node->Append(BuildBinding(binding));
+      for (const auto store : BuildBindings(binding))
+        node->Append(store);
+    } else if (child->Is<syntax::StringLit>()) {
+      node->Append(BuildImplicitText(child));
+    } else if (child->Is<syntax::SetRule>()) {
+      Unsupported(child, "a `set` rule");
+    } else {
+      Unsupported(child, "this kind of child (strings with `{...}`, spacers, `when`, `if`, `for`, `match` and calls)");
     }
   }
 }

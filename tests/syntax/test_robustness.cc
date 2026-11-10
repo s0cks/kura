@@ -26,7 +26,7 @@ auto ListFiles(const std::string& dir) -> std::vector<std::string> {
   if (auto* d = opendir(dir.c_str()); d != nullptr) {
     while (const auto* entry = readdir(d)) {
       const std::string name = entry->d_name;
-      if (name.size() > 5 && name.substr(name.size() - 5) == ".kura")
+      if (name.size() > 4 && name.substr(name.size() - 4) == ".kui")
         files.push_back(dir + "/" + name);
     }
     closedir(d);

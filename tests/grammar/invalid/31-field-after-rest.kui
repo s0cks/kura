@@ -1,0 +1,1 @@
+let { a, ...rest, b } = r

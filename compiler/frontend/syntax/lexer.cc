@@ -1,5 +1,6 @@
 #include "compiler/frontend/syntax/lexer.h"
 
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 
@@ -52,15 +53,20 @@ class Lexer {
   const std::string& text_;
   DiagnosticList& diagnostics_;
   LexResult result_{};
+  uint32_t begin_ = 0;
+  uint32_t end_ = 0;
   uint32_t pos_ = 0;
+  // Scanning a string inside an interpolation: if it is never closed, the interpolation is what is wrong
+  // (`"total: {1 + 2"`), so the string doesn't report it itself.
+  bool nested_ = false;
 
   auto Peek(const uint32_t offset = 0) const -> char {
     const auto idx = pos_ + offset;
-    return idx < text_.size() ? text_[idx] : '\0';
+    return idx < end_ ? text_[idx] : '\0';
   }
 
   auto AtEnd() const -> bool {
-    return pos_ >= text_.size();
+    return pos_ >= end_;
   }
 
   void Emit(const Token::Kind kind, const uint32_t begin, const bool malformed = false) {
@@ -85,12 +91,12 @@ class Lexer {
       len = 3;
     else if (c >= 0xC0)
       len = 2;
-    return std::min<uint32_t>(len, static_cast<uint32_t>(text_.size()) - pos_);
+    return std::min<uint32_t>(len, end_ - pos_);
   }
 
   // The `-` at pos_ is a binary minus when whitespace is on both sides of it.
   auto IsBinaryMinus() const -> bool {
-    return pos_ > 0 && IsSpace(text_[pos_ - 1]) && IsSpace(Peek(1));
+    return pos_ > begin_ && IsSpace(text_[pos_ - 1]) && IsSpace(Peek(1));
   }
 
   void LexNumber() {
@@ -119,13 +125,25 @@ class Lexer {
     Emit(Token::kNumber, begin);
   }
 
+  // True when the name part after the `-` at pos_ is nothing but digits: `x-1`, `n-20`.
+  auto DigitsOnlyAfterHyphen() const -> bool {
+    uint32_t len = 0;
+    while (IsIdentChar(Peek(1 + len))) {
+      if (!IsDigit(Peek(1 + len)))
+        return false;
+      len++;
+    }
+    return len > 0;
+  }
+
   void LexIdent() {
     const auto begin = pos_;
     const auto upper = IsUpper(Peek());
     while (IsIdentChar(Peek()))
       pos_++;
-    // kebab-case: a `-` continues the name only when a name character follows.
-    while (!upper && Peek() == '-' && IsIdentChar(Peek(1))) {
+    // kebab-case: a `-` continues the name only when a name character follows, and what follows isn't just
+    // digits. `x-1` is `x` minus `1` (the parser then asks for spaces); `pos-2d-to-3d` is one name.
+    while (!upper && Peek() == '-' && IsIdentChar(Peek(1)) && !DigitsOnlyAfterHyphen()) {
       pos_++;
       while (IsIdentChar(Peek()))
         pos_++;
@@ -160,37 +178,90 @@ class Lexer {
     Emit(Token::kDirective, begin);
   }
 
-  void LexString() {
-    const auto begin = pos_;
-    auto malformed = false;
-    pos_++;  // opening quote
+  // Scans the rest of a string whose opening quote is already consumed, up to and including the closing
+  // quote. A `{` starts an interpolation, which is scanned through to its matching `}` (strings nested in it
+  // are scanned the same way, so `"a {f("b")} c"` is one token). Returns false when the string was cut
+  // short at the end of the line; the problem has been reported by then.
+  auto ScanStringBody(const uint32_t begin, bool& malformed) -> bool {
     while (true) {
       const auto c = Peek();
       if (AtEnd() || c == '\n' || c == '\r') {
         malformed = true;
-        Error(DiagnosticCode::kUnterminatedString, Span(begin, begin + 1), "this string is never closed",
-              "string starts here")
-            .WithHelp("add a closing `\"` before the end of the line; strings can't span lines");
-        break;
+        if (!nested_) {
+          Error(DiagnosticCode::kUnterminatedString, Span(begin, begin + 1), "this string is never closed",
+                "string starts here")
+              .WithHelp("add a closing `\"` before the end of the line; strings can't span lines");
+        }
+        return false;
       }
       if (c == '"') {
         pos_++;
-        break;
+        return true;
+      }
+      if (c == '{') {
+        if (!ScanInterpolation(malformed))
+          return false;
+        continue;
       }
       if (c == '\\') {
         const auto next = Peek(1);
-        if (next == 'n' || next == 't' || next == '"' || next == '\\') {
+        if (next == 'n' || next == 't' || next == '"' || next == '\\' || next == '{' || next == '}') {
           pos_ += 2;
           continue;
         }
         const auto len = (AtEnd() || Peek(1) == '\0' || next == '\n' || next == '\r') ? 1U : 2U;
         Error(DiagnosticCode::kInvalidEscape, Span(pos_, pos_ + len), "unknown escape sequence", "not a valid escape")
-            .WithHelp("the escapes are `\\n`, `\\t`, `\\\"` and `\\\\`");
+            .WithHelp("the escapes are `\\n`, `\\t`, `\\\"`, `\\\\`, `\\{` and `\\}`");
         pos_ += len;
         continue;
       }
       pos_++;
     }
+  }
+
+  // pos_ is at the `{` of an interpolation. Leaves it after the matching `}`.
+  auto ScanInterpolation(bool& malformed) -> bool {
+    const auto open = pos_;
+    pos_++;  // '{'
+    uint32_t depth = 1;
+    while (depth > 0) {
+      const auto c = Peek();
+      if (AtEnd() || c == '\n' || c == '\r') {
+        malformed = true;
+        Error(DiagnosticCode::kBadInterpolation, Span(open, open + 1), "this `{` in a string is never closed",
+              "interpolation starts here")
+            .WithHelp("close it with `}`; to write a literal brace in a string, use `\\{`");
+        return false;
+      }
+      if (c == '"') {
+        const auto nested = pos_;
+        pos_++;
+        const auto outer = nested_;
+        nested_ = true;
+        const auto closed = ScanStringBody(nested, malformed);
+        nested_ = outer;
+        if (!closed) {
+          Error(DiagnosticCode::kBadInterpolation, Span(open, open + 1), "this `{` in a string is never closed",
+                "interpolation starts here")
+              .WithHelp("close it with `}`; to write a literal brace in a string, use `\\{`");
+          return false;
+        }
+        continue;
+      }
+      if (c == '{')
+        depth++;
+      else if (c == '}')
+        depth--;
+      pos_++;
+    }
+    return true;
+  }
+
+  void LexString() {
+    const auto begin = pos_;
+    auto malformed = false;
+    pos_++;  // opening quote
+    ScanStringBody(begin, malformed);
     Emit(Token::kString, begin, malformed);
   }
 
@@ -218,6 +289,10 @@ class Lexer {
 
   void LexMinus() {
     const auto begin = pos_;
+    if (Peek(1) == '=' && Peek(2) != '=') {
+      pos_ += 2;
+      return Emit(Token::kMinusEq, begin);
+    }
     const auto binary = IsBinaryMinus();
     pos_++;
     Emit(binary ? Token::kBinMinus : Token::kMinus, begin);
@@ -237,11 +312,11 @@ class Lexer {
     };
     switch (c) {
       case '+':
-        return one(Token::kPlus);
+        return n == '=' ? two(Token::kPlusEq) : one(Token::kPlus);
       case '*':
-        return one(Token::kStar);
+        return n == '=' ? two(Token::kStarEq) : one(Token::kStar);
       case '/':
-        return one(Token::kSlash);
+        return n == '=' ? two(Token::kSlashEq) : one(Token::kSlash);
       case '|':
         if (n == '>')
           return two(Token::kPipe);
@@ -261,6 +336,8 @@ class Lexer {
       case '!':
         return n == '=' ? two(Token::kNeq) : one(Token::kBang);
       case '<':
+        if (n == '|')
+          return two(Token::kPipeBack);
         return n == '=' ? two(Token::kLe) : one(Token::kLt);
       case '>':
         return n == '=' ? two(Token::kGe) : one(Token::kGt);
@@ -269,12 +346,22 @@ class Lexer {
           pos_ += 3;
           return Emit(Token::kSpread, begin);
         }
+        if (n == '.' && Peek(2) == '=') {
+          pos_ += 3;
+          return Emit(Token::kDotDotEq, begin);
+        }
+        if (n == '.')
+          return two(Token::kDotDot);
         return one(Token::kDot);
       case ',':
         return one(Token::kComma);
       case ':':
         return one(Token::kColon);
       case '?':
+        if (n == '?')
+          return two(Token::kQQ);
+        if (n == '.')
+          return two(Token::kQDot);
         return one(Token::kQMark);
       case '#':
         return one(Token::kHash);
@@ -291,7 +378,7 @@ class Lexer {
       case ']':
         return one(Token::kRBrack);
       case '%':
-        return one(Token::kPercent);
+        return n == '=' ? two(Token::kPercentEq) : one(Token::kPercent);
       default:
         break;
     }
@@ -304,13 +391,16 @@ class Lexer {
   }
 
  public:
-  Lexer(const SourceFile& source, DiagnosticList& diagnostics) :
+  Lexer(const SourceFile& source, const uint32_t begin, const uint32_t end, DiagnosticList& diagnostics) :
     source_(source),
     text_(source.GetText()),
-    diagnostics_(diagnostics) {}
+    diagnostics_(diagnostics),
+    begin_(begin),
+    end_(std::min<uint32_t>(end, static_cast<uint32_t>(source.GetText().size()))),
+    pos_(begin) {}
 
   auto Run() -> LexResult {
-    result_.tokens.reserve(text_.size() / 3 + 1);
+    result_.tokens.reserve((end_ - begin_) / 3 + 1);
     while (!AtEnd()) {
       const auto c = Peek();
       if (IsSpace(c)) {
@@ -343,6 +433,11 @@ class Lexer {
 }  // namespace
 
 auto Lex(const SourceFile& source, DiagnosticList& diagnostics) -> LexResult {
-  return Lexer(source, diagnostics).Run();
+  return Lexer(source, 0, static_cast<uint32_t>(source.GetText().size()), diagnostics).Run();
+}
+
+auto LexRange(const SourceFile& source, const uint32_t begin, const uint32_t end, DiagnosticList& diagnostics)
+    -> LexResult {
+  return Lexer(source, begin, end, diagnostics).Run();
 }
 }  // namespace kura::syntax

@@ -1,0 +1,23 @@
+fn add(x: Int, y: Int): Int => x + y
+fn mul(x: Int, y: Int): Int => x * y
+
+// `_` is where the piped value goes; without one it becomes the first argument
+let pipe = 10 |> add(_, 10) |> mul(2, _)
+let classic = 10 |> add(10) |> mul(2)
+let anywhere = 10 |> _ + 1
+let twice = 4 |> mul(_, _)
+let member = 10 |> math.sqrt(_) |> math.floor()
+
+// `<|` applies the function on its left
+let back = add(_, 10) <| 200
+let chain = f <| g <| 1
+
+// `>>` and `<<` compose
+let inc-then-double = add(_, 1) >> mul(_, 2)
+let double-then-inc = add(_, 1) << mul(_, 2)
+let long-chain = f >> g >> h
+
+// mixing the two directions needs parentheses
+let mixed = (1 |> add(_, 1)) |> f(_)
+let nested-closer: Seq<Seq<Int>> = []
+let guarded = match x { n if (n > 1 || n < 0) => 1, _ => 2 }

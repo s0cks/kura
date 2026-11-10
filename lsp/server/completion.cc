@@ -1,7 +1,7 @@
 #include "lsp/server/completion.h"
 
-#include "frontend/syntax/source.h"
 #include "lsp/completion_item.h"
+#include "lsp/keyword_completion.h"
 #include "lsp/server/server.h"
 
 namespace kura::lsp {
@@ -24,26 +24,6 @@ void Server::HandleCompletion(const Request& req) {
   if (!doc)
     return SendInternalError(req.id, std::format("document {} not indexed", params.textDocument.uri));
 
-  const auto offset = doc->GetTree()->GetSource().GetOffset(syntax::Position{
-      .line = static_cast<uint32_t>(params.position.line),
-      .column = static_cast<uint32_t>(params.position.character),
-  });
-
-  std::vector<CompletionItem> items{};
-
-  const auto& text = doc->GetTree()->GetText(syntax::Span(offset - 1, offset + 1));
-  log::info(std::format("text: {}", text));
-
-  if (doc->GetTree()->GetText(syntax::Span(offset - 1, offset + 1)) == "fn") {
-    items.push_back(CompletionItem{
-        .kind = CompletionItem::kSnippet,
-        .label = "fn",
-        .detail = "Function signature definition",
-        .insertText = "fn ${1:name}(${2:args}): ${3:returnType} => \n\t$0\n",
-        .insertTextFormat = CompletionItem::kSnippetFormat,
-    });
-  }
-
-  return Send(req.id, items);
+  return Send(req.id, GetDeclarationCompletions(*doc, doc->ToOffset(params.position)));
 }
 }  // namespace kura::lsp

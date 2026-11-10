@@ -17,4 +17,4 @@ fn add-base(x: Number): Number => x + base
 fn lambda-global(x: Number): Number => apply((a, b) => a + b + base, x, 1)
 
 fn capture-loop-var(numbers: Seq<Number>, k: Number): Seq<Number> =>
-  for n in numbers => apply((a, b) => a + b, n, k)
+  for _, n in numbers => apply((a, b) => a + b, n, k)

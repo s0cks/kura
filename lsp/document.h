@@ -19,10 +19,13 @@ class Document {
   URI uri_;
   std::string contents_{};
   std::unique_ptr<syntax::SyntaxTree> tree_{};
+  // Counts every change to `contents_`. `tree_version_` is the version the
+  // tree was parsed from, so a tree older than the text can be told apart.
+  uint64_t version_ = 0;
+  uint64_t tree_version_ = 0;
+  std::shared_ptr<const syntax::SourceFile> source_{};
 
-  inline void Update(std::string content) {
-    contents_ = std::move(content);
-  }
+  void Update(std::string content);
 
  public:
   Document(const URI uri, std::string content);
@@ -42,6 +45,35 @@ class Document {
     return tree_;
   }
 
+  auto GetTree() const -> const std::unique_ptr<syntax::SyntaxTree>& {
+    return tree_;
+  }
+
+  auto GetVersion() const -> uint64_t {
+    return version_;
+  }
+
+  auto GetTreeVersion() const -> uint64_t {
+    return tree_version_;
+  }
+
+  // True when the tree was parsed from the text as it is now. Indexing runs on
+  // a worker thread, so right after an edit the tree is still the old one.
+  auto IsTreeCurrent() const -> bool {
+    return tree_ && tree_version_ == version_;
+  }
+
+  // The current text with its line table. Unlike the tree's source, this one
+  // is never behind the text.
+  auto GetSource() const -> const syntax::SourceFile& {
+    return *source_;
+  }
+
+  // LSP columns are UTF-16 code units; the source is indexed by byte.
+  auto ToOffset(const Position& rhs) const -> uint32_t;
+  auto ToPosition(uint32_t offset) const -> Position;
+  auto ToRange(const syntax::Span& span) const -> Range;
+
   auto GetRoot() const -> const syntax::Module* {
     if (!tree_)
       return nullptr;
@@ -57,8 +89,9 @@ class Document {
     return syntax::FindNodeAt(tree_->GetRoot(), offset);
   }
 
-  void SetSyntaxTree(std::unique_ptr<syntax::SyntaxTree>&& rhs) {
+  void SetSyntaxTree(std::unique_ptr<syntax::SyntaxTree>&& rhs, const uint64_t version) {
     tree_ = std::move(rhs);
+    tree_version_ = version;
   }
 
   void GetSymbols(std::vector<Symbol>& rhs) const;

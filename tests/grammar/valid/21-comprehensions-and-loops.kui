@@ -1,0 +1,19 @@
+let s1 = [10, 11, 12]
+let plus-one = [ x + 1 for _, x in s1 ]
+let big = [ x for _, x in s1 if x > 10 ]
+let with-index = [ i * x for i, x in s1 ]
+let indexes = [ i for i in s1 ]
+let multi-line = [
+  x + 1
+  for _, x in s1
+]
+let records = [ { id: i, value: x } for i, x in s1 ]
+let nested = [ [ y for _, y in row ] for _, row in rows ]
+let destructured = [ x + y for _, { x, y } in points ]
+
+// the same bindings in a loop
+let doubled = for _, n in numbers => n * 2
+let by-index = for i in numbers => i
+let both = for i, n in numbers => i + n
+let total = for _, n in numbers if n > 1 fold acc = 0 => acc + n
+let piped = for _, n in numbers if (n > 1) => n

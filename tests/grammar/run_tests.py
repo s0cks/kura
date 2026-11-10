@@ -30,7 +30,7 @@ def parse(path):
 
 failures = 0
 for expect_ok, folder in ((True, "valid"), (False, "invalid")):
-    for path in sorted((root / folder).glob("*.kura")):
+    for path in sorted((root / folder).glob("*.kui")):
         status, diagnostics = parse(path)
         if status not in (0, 1):
             print(f"FAIL  {folder}/{path.name} (the dump tool failed: {status})")

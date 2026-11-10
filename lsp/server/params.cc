@@ -20,7 +20,13 @@ auto TextDocumentPositionParams::operator<<(const json_t* doc) -> TextDocumentPo
 
 auto CodeActionParams::operator<<(const json_t* doc) -> CodeActionParams& {
   KASSERT(doc);
-  // TODO(@s0cks): implement
+  json_t* textDocument_node = json_object_get(doc, "textDocument");
+  if (textDocument_node)
+    textDocument << textDocument_node;
+
+  const json_t* range_node = json_object_get(doc, "range");
+  if (range_node)
+    range << range_node;
   return *this;
 }
 }  // namespace kura::lsp

@@ -2,6 +2,7 @@
 #define KURA_LSP_COMPLETION_ITEM_H
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,9 @@ struct CompletionItem {
   std::string filter{};
   std::string insertText{};
   InsertTextFormat insertTextFormat = kNoInsertTextFormat;
+  // When set, the client replaces this range with `newText` instead of
+  // inserting `insertText` at its own idea of the word under the cursor.
+  std::optional<TextEdit> textEdit{};
 
   void operator>>(json_t* doc) const;
 };

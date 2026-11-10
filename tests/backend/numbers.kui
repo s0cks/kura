@@ -16,5 +16,5 @@ fn ratio(a: Px, b: Px): Float => a / b
 fn same-unit(a: Px, b: Px): Bool => a + b > a - b
 fn percent(a: Pct): Pct => a * 2.0
 
-fn counter(items: Seq<String>): Int => for item in items fold n = 0 => n + 1
+fn counter(items: Seq<String>): Int => for _, item in items fold n = 0 => n + 1
 fn mixed-branches(a: Bool): Number => if a { 1 } else { 1.5 }

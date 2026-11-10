@@ -1,0 +1,30 @@
+let x = 10
+let maybe-big = when x > 5 { x }
+let nested-when = when x > 1 { when x > 2 { x } }
+fn shout(on: Bool): String => when on { "!" } ?? ""
+
+// `is` takes the same patterns as `match`
+let is-float = x is Float
+let is-none = entry is None
+let is-click = message is Click(_)
+let is-origin = p is Point { x: 0, y: 0 }
+let in-and = x is Int && y is Int
+let branch = if x is Some(value) { value } else { 0 }
+let wrapped = if (p is Point { x, y }) { x + y } else { 0 }
+
+let guarded = match x {
+  n if n > 10 => "Done"
+  n if n < 10 => "Hello World"
+  _ => None
+}
+let guard-with-call = match x {
+  n if is-even(n) => 1,
+  n if (n > 5) => 2,
+  _ => 3,
+}
+let arms-without-commas = match x {
+  1 => "one"
+  2 => "two"
+  _ => "many"
+}
+let arms-with-commas = match x { 1 => "one", 2 => "two", _ => "many", }

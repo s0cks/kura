@@ -1,1 +1,1 @@
-let a = for n in xs n
+let a = for _, n in xs n

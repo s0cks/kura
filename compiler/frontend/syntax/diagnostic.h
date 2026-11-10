@@ -39,7 +39,15 @@ namespace kura::syntax {
   V(MissingClosingDelimiter,  20, "unclosed delimiter")                                \
   V(DuplicateElse,            21, "'else' without a matching 'if'")                    \
   V(EmptyMatch,               22, "'match' without any arms")                          \
-  V(TooMuchNesting,           23, "expression is nested too deeply")
+  V(TooMuchNesting,           23, "expression is nested too deeply")                 \
+  V(BadInterpolation,         24, "string interpolation is malformed")                \
+  V(PlaceholderOutsideCall,   25, "'_' placeholder outside a call argument or pipe")  \
+  V(MixedPipes,               26, "'|>' and '<|' mixed without parentheses")           \
+  V(PositionalNotLast,        27, "positional argument followed by other arguments")  \
+  V(BadRecordUpdate,          28, "record update entry is malformed")                 \
+  V(WhenWithElse,             29, "'when' with an 'else'")                            \
+  V(BadForBinding,            30, "malformed 'for' binding")                          \
+  V(BadStaticAssert,          31, "malformed 'static-assert'")
 // clang-format on
 
 enum class Severity : uint8_t {

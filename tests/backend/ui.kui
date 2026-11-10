@@ -1,6 +1,6 @@
 type Message = Tick | Inc
 
-fn labels(items: Seq<String>) => for item in items => #text(item)
+fn labels(items: Seq<String>) => for _, item in items => #text(item)
 
 fn maybe(show: Bool) => if show { #text("shown") } else { None }
 

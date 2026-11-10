@@ -7,15 +7,16 @@
 
 namespace kura::lsp {
 void IndexDocumentTask::DoWork(IndexDocumentTask* ctx) {
-  log::info(std::format("indexing {}", ctx->doc->GetUri()));
-  const auto& name = ctx->doc->GetUri();
-  const auto& text = ctx->doc->GetContents();
-  ctx->tree = syntax::ParseText(name, text);
+  log::info(std::format("indexing {}", ctx->name));
+  ctx->tree = syntax::ParseText(ctx->name, ctx->text);
 }
 
 void IndexDocumentTask::OnFinished(IndexDocumentTask* ctx, int status) {
-  if (ctx->tree)
-    ctx->doc->SetSyntaxTree(std::move(ctx->tree));
-  log::info(std::format("{} indexed", ctx->doc->GetUri()));
+  // Runs on the loop thread. Parses can finish out of order, so only a tree
+  // newer than the one the document already has is kept.
+  if (ctx->tree && ctx->version > ctx->doc->GetTreeVersion())
+    ctx->doc->SetSyntaxTree(std::move(ctx->tree), ctx->version);
+  log::info(std::format("{} indexed", ctx->name));
+  delete ctx;
 }
 }  // namespace kura::lsp

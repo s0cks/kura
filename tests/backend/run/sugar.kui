@@ -1,0 +1,96 @@
+// Syntax that is lowered onto existing nodes: `??`, `?.`, `is`, destructuring `let`, record updates, `<|`
+// and `static-assert`.
+// run: coalesce-some => 5
+// run: coalesce-none => 7
+// run: coalesce-lazy => 3
+// run: coalesce-chain => 9
+// run: safe-absent => None
+// run: safe-present => 4
+// run: safe-or-absent => -1
+// run: safe-or-present => 4
+// run: is-none-yes => true
+// run: is-none-no => false
+// run: is-click-yes => true
+// run: is-click-no => false
+// run: is-tick-yes => true
+// run: is-literal => true
+// run: is-and => false
+// run: destructure => 12
+// run: destructure-pun => 21
+// run: destructure-nested => 6
+// run: destructure-ignored => 2
+// run: update => { x: 100, y: 7 }
+// run: update-compound => { x: 11, y: 16 }
+// run: update-nested => 2812
+// run: update-keeps-base => { x: 1, y: 2 }
+// run: back-call => 12
+// run: back-placeholder => 210
+// run: back-chain => 44
+// run: pipe-placeholder => 40
+type Box = { value: Int, next?: Int }
+type Msg = Click(Int) | Tick
+
+static-assert(1 < 2, "one is less than two")
+let ten = 10
+static-assert(ten * 2 == 20, "a `let` of a constant is a constant")
+static-assert(!(ten > 20) && (ten >= 10 || false))
+
+fn orDefault(m: Int | None): Int => m ?? 7
+fn coalesce-some(): Int => orDefault(5)
+fn coalesce-none(): Int => orDefault(None)
+fn boom(): Int => 1 / 0
+// the right side only runs when the left is None
+fn coalesce-lazy(): Int => 3 ?? boom()
+fn coalesce-chain(): Int => { let a: Int | None = None let b: Int | None = None b ?? a ?? 9 }
+
+fn box(): Box => { value: 1 }
+fn safe-absent(): Int | None => box()?.next
+fn safe-present(): Int | None => { let b: Box = { value: 1, next: 4 } b?.next }
+fn safe-or-absent(): Int => box()?.next ?? -1
+fn safe-or-present(): Int => { let b: Box = { value: 1, next: 4 } b?.next ?? -1 }
+
+fn none-p(m: Int | None): Bool => m is None
+fn click-p(m: Msg): Bool => m is Click(_)
+fn tick-p(m: Msg): Bool => m is Tick
+fn is-none-yes(): Bool => none-p(None)
+fn is-none-no(): Bool => none-p(3)
+fn is-click-yes(): Bool => click-p(Click(1))
+fn is-click-no(): Bool => click-p(Tick)
+fn is-tick-yes(): Bool => tick-p(Tick)
+fn is-literal(): Bool => 3 is 3
+fn both(n: Int, m: Msg): Bool => n is 3 && m is Click(_)
+fn is-and(): Bool => both(3, Tick)
+
+fn destructure(): Int => {
+  let r = { a: 1, b: 2 }
+  let { a, b: c } = r
+  a * 10 + c
+}
+fn destructure-pun(): Int => {
+  let { x, y } = { x: 2, y: 1 }
+  x * 10 + y
+}
+fn destructure-nested(): Int => {
+  let { p: { x, y }, z } = { p: { x: 1, y: 2 }, z: 3 }
+  x + y + z
+}
+fn destructure-ignored(): Int => {
+  let { a: _, b } = { a: 1, b: 2 }
+  b
+}
+
+fn update(): { x: Int, y: Int } => { let p = { x: 1, y: 7 } { p | x: 100 } }
+fn update-compound(): { x: Int, y: Int } => { let p = { x: 1, y: 8 } { p | x += 10, y *= 2 } }
+fn update-nested(): Int => {
+  let m = { player: { hp: 3, pos: { x: 5, y: 1 } }, score: 1 }
+  let n = { m | player.hp -= 1, player.pos.x += 3, score += 1 }
+  n.player.hp * 1000 + n.player.pos.x * 100 + n.player.pos.y * 10 + n.score
+}
+fn update-keeps-base(): { x: Int, y: Int } => { let p = { x: 1, y: 2 } let q = { p | x: 9 } p }
+
+fn add(x: Int, y: Int): Int => x + y
+fn double(x: Int): Int => x * 2
+fn back-call(): Int => double <| 6
+fn back-placeholder(): Int => add(_, 10) <| 200
+fn back-chain(): Int => double <| double <| 11
+fn pipe-placeholder(): Int => 10 |> add(_, 10) |> double(_)

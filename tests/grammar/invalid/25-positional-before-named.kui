@@ -1,0 +1,1 @@
+fn view() => #button("label", fill: red)

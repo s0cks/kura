@@ -81,6 +81,14 @@ fn nested(m: Optional<Message>): Int =>
   }
 ```
 
+## `when`
+
+`when` is an `if` whose `else` is `None`, which is what a view wants for content that is only sometimes there:
+
+```kura
+when model.loaded { #text("Ready") }   // a Node, or None
+```
+
 ## Collection Expressions
 
 Kura eliminates traditional imperative loops (`while`, `for(i=0;...)`) in favor of unified collection expressions.
@@ -95,7 +103,29 @@ Elements that evaluate to `false` in the guard block are omitted from processing
 
 ```kura
 fn sum(items: Seq<Number>): Number =>
-  for item in items if item > 0 fold total = 0 => total + item
+  for _, item in items if item > 0 fold total = 0 => total + item
+```
+
+### Loop bindings
+
+The bindings of a loop follow Go. With one name, the name is the **index**; with two, they are the index
+and the element; `_` skips one:
+
+```kura
+for i in items => i               // the indexes
+for i, item in items => i * item  // the index and the element
+for _, item in items => item      // only the elements
+```
+
+The element may be destructured: `for _, { x, y } in points => x + y`.
+
+### Comprehensions
+
+Between square brackets, a loop without `fold` reads as a Seq comprehension, with the body in front:
+
+```kura
+let plus-one = [ x + 1 for _, x in items ]
+let big = [ x for _, x in items if x > 10 ]
 ```
 
 ### Fold Reductions
@@ -104,7 +134,7 @@ To aggregate state across a sequence, attach a `fold` block to the loop expressi
 
 ```kura
 fn sum(items: Seq<Number>): Number =>
-  for item in items if item > 0 fold total = 0 => total + item
+  for _, item in items if item > 0 fold total = 0 => total + item
 
 ```
 

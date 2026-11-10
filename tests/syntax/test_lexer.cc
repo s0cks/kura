@@ -10,9 +10,17 @@ using Kinds_t = std::vector<Token::Kind>;
 TEST(LexerTest, KebabCaseNamesAreOneToken) {
   EXPECT_EQ(Kinds("a-b"), (Kinds_t{K::kIdent, K::kEof}));
   EXPECT_EQ(Kinds("on-click-handler"), (Kinds_t{K::kIdent, K::kEof}));
-  // a digit or an uppercase letter continues the name too
-  EXPECT_EQ(Kinds("x-1"), (Kinds_t{K::kIdent, K::kEof}));
+  // an uppercase letter continues the name too, and so does a digit when a letter comes with it
   EXPECT_EQ(Kinds("x-Y"), (Kinds_t{K::kIdent, K::kEof}));
+  EXPECT_EQ(Kinds("pos-2d-to-3d"), (Kinds_t{K::kIdent, K::kEof}));
+  EXPECT_EQ(Kinds("x-1a"), (Kinds_t{K::kIdent, K::kEof}));
+}
+
+TEST(LexerTest, ADashBeforeOnlyDigitsIsASubtraction) {
+  // `x-1` is `x` minus `1`, not one name; the parser then asks for spaces around the `-`
+  EXPECT_EQ(Kinds("x-1"), (Kinds_t{K::kIdent, K::kMinus, K::kNumber, K::kEof}));
+  EXPECT_EQ(Kinds("count-20"), (Kinds_t{K::kIdent, K::kMinus, K::kNumber, K::kEof}));
+  EXPECT_EQ(Kinds("a-b-1"), (Kinds_t{K::kIdent, K::kMinus, K::kNumber, K::kEof}));
 }
 
 TEST(LexerTest, BinaryMinusNeedsSpaceOnBothSides) {
@@ -141,5 +149,71 @@ TEST(LexerTest, TokensCoverTheirTextAndEndWithOneEof) {
     EXPECT_GT(token.span.length(), 0U);
     last_end = token.span.end;
   }
+}
+
+TEST(LexerTest, RangesCoalesceOptionalChainingAndCompoundAssignment) {
+  EXPECT_EQ(Kinds(".. ..= ... ?? ?. <| += -= *= /= %="),
+            (Kinds_t{K::kDotDot, K::kDotDotEq, K::kSpread, K::kQQ, K::kQDot, K::kPipeBack, K::kPlusEq, K::kMinusEq,
+                     K::kStarEq, K::kSlashEq, K::kPercentEq, K::kEof}));
+  // `0..10` is a range, not the start of a decimal number
+  EXPECT_EQ(Kinds("0..10"), (Kinds_t{K::kNumber, K::kDotDot, K::kNumber, K::kEof}));
+  EXPECT_EQ(Kinds("0..=10"), (Kinds_t{K::kNumber, K::kDotDotEq, K::kNumber, K::kEof}));
+  EXPECT_EQ(Kinds("0.5..1.5"), (Kinds_t{K::kNumber, K::kDotDot, K::kNumber, K::kEof}));
+  // an optional field is still `name?:`
+  EXPECT_EQ(Kinds("z?: Float"), (Kinds_t{K::kIdent, K::kQMark, K::kColon, K::kUpperIdent, K::kEof}));
+  EXPECT_EQ(Kinds("a?.b ?? c"), (Kinds_t{K::kIdent, K::kQDot, K::kIdent, K::kQQ, K::kIdent, K::kEof}));
+  // `<|` and `|>` don't get in the way of unions and comparisons
+  EXPECT_EQ(Kinds("a <= b"), (Kinds_t{K::kIdent, K::kLe, K::kIdent, K::kEof}));
+  EXPECT_EQ(Kinds("x -= 1"), (Kinds_t{K::kIdent, K::kMinusEq, K::kNumber, K::kEof}));
+  EXPECT_EQ(Kinds("x == -1"), (Kinds_t{K::kIdent, K::kEq, K::kMinus, K::kNumber, K::kEof}));
+  // `>>` and `<<` stay two tokens each: the parser joins them where an operator is expected
+  EXPECT_EQ(Kinds("<<"), (Kinds_t{K::kLt, K::kLt, K::kEof}));
+}
+
+TEST(LexerTest, NewKeywords) {
+  EXPECT_EQ(Kinds("when is static-assert"), (Kinds_t{K::kWhen, K::kIs, K::kStaticAssert, K::kEof}));
+  // only the whole word is the keyword
+  EXPECT_EQ(Kinds("is-large set-x when-ready static-assertion"),
+            (Kinds_t{K::kIdent, K::kIdent, K::kIdent, K::kIdent, K::kEof}));
+}
+
+TEST(LexerTest, InterpolatedStringsAreOneToken) {
+  const auto count = [](const std::string& text) {
+    DiagnosticList diagnostics{};
+    const SourceFile source("t", text);
+    const auto result = Lex(source, diagnostics);
+    EXPECT_TRUE(diagnostics.empty()) << text;
+    return result.tokens.size();
+  };
+  EXPECT_EQ(count("\"a {b} c\""), 2U);
+  EXPECT_EQ(count("\"{pos.x}, {pos.y}\""), 2U);
+  // a string inside an interpolation, with its own braces and quotes
+  EXPECT_EQ(count("\"a {f(\"x}\")} b\""), 2U);
+  EXPECT_EQ(count("\"a {g(\"{h}\")} b\" 1"), 3U);
+  // escaped braces
+  EXPECT_EQ(count("\"\\{ not an interpolation \\}\""), 2U);
+  // a lone `}` is plain text
+  EXPECT_EQ(count("\"a } b\""), 2U);
+}
+
+TEST(LexerTest, AnUnclosedInterpolationIsReportedOnce) {
+  DiagnosticList diagnostics{};
+  const SourceFile source("t", "let s = \"a {b c\nlet t = 1");
+  const auto result = Lex(source, diagnostics);
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.at(0).code, DiagnosticCode::kBadInterpolation);
+  EXPECT_EQ(diagnostics.at(0).span, Span(11, 12));
+  EXPECT_EQ(result.tokens[4].kind, K::kLet);
+}
+
+TEST(LexerTest, LexRangeKeepsOffsetsInTheWholeFile) {
+  DiagnosticList diagnostics{};
+  const SourceFile source("t", "xx { a + b } yy");
+  const auto result = LexRange(source, 4, 11, diagnostics);
+  ASSERT_EQ(result.tokens.size(), 4U);
+  EXPECT_EQ(result.tokens[0].span, Span(5, 6));
+  EXPECT_EQ(result.tokens[1].kind, K::kPlus);
+  EXPECT_EQ(result.tokens[2].span, Span(9, 10));
+  EXPECT_EQ(result.tokens.back().kind, K::kEof);
 }
 }  // namespace kura::syntax::test

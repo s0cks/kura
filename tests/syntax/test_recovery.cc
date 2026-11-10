@@ -66,12 +66,20 @@ INSTANTIATE_TEST_SUITE_P(
                     CodeCase{"let x = {}\nx.y = 1", C::kAssignToProperty, "x.y ="},
                     CodeCase{"let x = { a: 1, 2 }", C::kBadRecordEntry, "2"},
                     CodeCase{"let x = a |> f", C::kPipeTargetNotCall, "f"},
-                    CodeCase{"let x = for n in xs n", C::kForWithoutArrow, "n"},
+                    CodeCase{"let x = for _, n in xs n", C::kForWithoutArrow, "n"},
                     CodeCase{"use math", C::kUseWithoutHeader, "math"},
                     CodeCase{"=> 1", C::kExpectedItem, "=>"},
                     CodeCase{"let x = (1", C::kMissingClosingDelimiter, "1"},
                     CodeCase{"let x = else", C::kDuplicateElse, "else"},
-                    CodeCase{"let x = match y { }", C::kEmptyMatch, "match"}));
+                    CodeCase{"let x = match y { }", C::kEmptyMatch, "match"},
+                    CodeCase{"let x = \"{}\"", C::kBadInterpolation, "{}"},
+                    CodeCase{"let x = _", C::kPlaceholderOutsideCall, "_"},
+                    CodeCase{"let x = 1 |> f(_) <| 2", C::kMixedPipes, "<|"},
+                    CodeCase{"fn f() => #b(\"a\", x: 1)", C::kPositionalNotLast, "x: 1"},
+                    CodeCase{"let x = { p | }", C::kBadRecordUpdate, "{ p | }"},
+                    CodeCase{"let x = when y { 1 } else { 2 }", C::kWhenWithElse, "else"},
+                    CodeCase{"let x = for a, b, c in xs => 1", C::kBadForBinding, ","},
+                    CodeCase{"static-assert(true, 3)", C::kBadStaticAssert, "3"}));
 
 TEST(RecoveryTest, ABrokenDeclarationDoesNotHideTheNextOne) {
   const auto tree = Tree("let a =\nfn good() => 1\ntype T = A\n");

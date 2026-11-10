@@ -6,6 +6,7 @@
 #include <uv.h>
 #include <vector>
 
+#include "lsp/code_action.h"
 #include "lsp/document.h"
 #include "lsp/error.h"
 #include "lsp/server/response.h"
@@ -58,6 +59,7 @@ class Server {
   void Send(const json_int_t req_id, const Error& err);
   void Send(const json_int_t req_id, const std::vector<Symbol>& rhs);
   void Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs);
+  void Send(const json_int_t req_id, const std::vector<CodeAction>& rhs);
 
   inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
     return Send(req_id, Error{
@@ -77,6 +79,7 @@ class Server {
   void ProcessRawBytes(const char* data, size_t size);
   void DispatchJsonRpc(std::string_view json);
   void OffloadCompilerTask(json_t* params);
+  void IndexDocument(const URI& uri);
 
   void HandleInitialize(const Request& request);
   void HandleInitialized(const Request& request);

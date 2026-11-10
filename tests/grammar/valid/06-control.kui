@@ -5,10 +5,10 @@ fn describe(message: Message): String =>
     Click(position) => "clicked",
     Tick => "tick",
   }
-let doubled = for n in numbers => n * 2
-let big = for n in numbers if n > 10 => n
-let total = for item in items fold sum = 0 => sum + item.price
-let both = for n in numbers if n > 1 fold acc = 0 => acc + n
+let doubled = for _, n in numbers => n * 2
+let big = for _, n in numbers if n > 10 => n
+let total = for _, item in items fold sum = 0 => sum + item.price
+let both = for _, n in numbers if n > 1 fold acc = 0 => acc + n
 let rec-in-if = if a { { x: 1, } } else { { x: 2, } }
 fn patterns(m: Message): Number =>
   match m {

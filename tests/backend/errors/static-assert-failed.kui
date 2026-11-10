@@ -1,0 +1,3 @@
+// error: static assertion failed: ten is not eleven
+let ten = 10
+static-assert(ten == 11, "ten is not eleven")

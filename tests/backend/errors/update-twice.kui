@@ -1,0 +1,2 @@
+// error: is updated twice in one record update
+fn f(): { x: Int } => { let p = { x: 1 } { p | x: 2, x += 1 } }

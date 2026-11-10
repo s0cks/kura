@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -134,6 +135,10 @@ class ExprBuilder {
   std::unordered_set<std::string> pure_headers_{};
   std::unordered_map<std::string, std::unordered_set<std::string>> pure_names_{};
   Module* module_ = nullptr;
+  // The locals that hold the value of each enclosing `x |> stage-with-_`, innermost last. A `_` reads the
+  // innermost one.
+  std::vector<std::string> pipe_locals_{};
+  uint32_t pipe_count_ = 0;
 
   [[noreturn]] void Error(const syntax::Span& where, const std::string& message) const;
   [[noreturn]] void Error(const syntax::Node* where, const std::string& message) const;
@@ -159,6 +164,36 @@ class ExprBuilder {
   auto BuildUnit(const syntax::UnitLit* unit, const bool negate) const -> Object*;
   auto BuildCall(Expr* target, ExprList args) -> Expr*;
   auto BuildPipe(const syntax::Pipe* pipe) -> Expr*;
+  auto BuildStagedPipe(const syntax::Pipe* pipe) -> Expr*;
+  auto BuildWhen(const syntax::WhenExpr* when) -> Expr*;
+  // A string among the children of an element is `#text("...")`.
+  auto BuildImplicitText(const syntax::Node* value) -> Expr*;
+  // `a ?? b`, `x is pattern`: matches on a value that is computed once
+  auto BuildCoalesce(const syntax::Binary* binary) -> Expr*;
+  auto BuildIs(const syntax::IsExpr* is) -> Expr*;
+  // `let { a, b: c } = value` is a binding of the value followed by one binding per name
+  auto BuildBindings(const syntax::Binding* binding) -> std::vector<StoreLocalExpr*>;
+  void Destructure(const syntax::Node* pattern, const std::string& source, std::vector<StoreLocalExpr*>& out);
+  // `{ p | x: 1, pos.y += 2 }` is a record that spreads `p` and sets the listed fields
+  auto BuildRecordUpdate(const syntax::RecordUpdate* update) -> Expr*;
+  auto BuildUpdateLevel(const syntax::Node* base, const std::vector<std::string>& prefix,
+                        const std::vector<const syntax::UpdateEntry*>& entries) -> Expr*;
+  // `f <| x`, and the shared part of `x |> stage` when the stage has a `_`
+  auto BuildPipeBack(const syntax::PipeBack* back) -> Expr*;
+  auto BuildPipedStage(const syntax::Node* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
+  void BuildStaticAssert(const syntax::StaticAssert* assertion);
+
+  // A value the compiler can compute: what `static-assert` conditions are made of.
+  struct Constant {
+    enum Kind { kBool, kInt, kFloat, kString };
+    Kind kind = kBool;
+    bool boolean = false;
+    int64_t integer = 0;
+    double real = 0.0;
+    std::string text{};
+  };
+  auto Fold(Expr* expr) const -> std::optional<Constant>;
+  std::unordered_map<const LocalVariable*, Constant> constants_{};
   auto BuildPattern(const syntax::Node* node) -> PatternExpr*;
   auto BuildLiteralPattern(const syntax::LiteralPattern* pattern) -> PatternExpr*;
   auto BuildArgs(const std::vector<syntax::Node*>& args) -> ExprList;

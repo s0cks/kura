@@ -26,6 +26,9 @@ namespace kura::syntax {
   V(Use,    "use")                \
   V(As,     "as")                 \
   V(Extern, "extern")             \
+  V(When,   "when")               \
+  V(Is,     "is")                 \
+  V(StaticAssert, "static-assert") \
   V(True,   "true")               \
   V(False,  "false")              \
   V(None,   "None")
@@ -50,7 +53,17 @@ namespace kura::syntax {
   V(FatArrow, "=>")                   \
   V(Assign,   "=")                    \
   V(Spread,   "...")                  \
+  V(DotDotEq, "..=")                  \
+  V(DotDot,   "..")                   \
   V(Dot,      ".")                    \
+  V(QQ,       "??")                   \
+  V(QDot,     "?.")                   \
+  V(PipeBack, "<|")                   \
+  V(PlusEq,   "+=")                   \
+  V(MinusEq,  "-=")                   \
+  V(StarEq,   "*=")                   \
+  V(SlashEq,  "/=")                   \
+  V(PercentEq, "%=")                  \
   V(Comma,    ",")                    \
   V(Colon,    ":")                    \
   V(QMark,    "?")                    \

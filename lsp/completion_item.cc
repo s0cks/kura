@@ -19,6 +19,12 @@ void CompletionItem::operator>>(json_t* doc) const {
     json_object_set(doc, "insertTextFormat", json_integer(insertTextFormat));
   if (!insertText.empty())
     json_object_set(doc, "insertText", json_string(insertText.c_str()));
+  if (textEdit) {
+    json_t* edit_node = json_object();
+    KASSERT(edit_node);
+    (*textEdit) >> edit_node;
+    json_object_set_new(doc, "textEdit", edit_node);
+  }
 
   // TODO(@s0cks):
   // MarkupContent documentation{};

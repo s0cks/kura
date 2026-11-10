@@ -4,6 +4,7 @@ include(GoogleTest)
 add_executable(kura-syntax-tests
   test_lexer.cc
   test_parser.cc
+  test_v1_syntax.cc
   test_recovery.cc
   test_robustness.cc)
 target_compile_definitions(kura-syntax-tests

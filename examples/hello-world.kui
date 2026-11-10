@@ -1,4 +1,4 @@
-fn init() => { message: "Hello World" }
+fn init() => { message: "Hello World"  }
 
 fn view(count: Int, test: Bool): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }

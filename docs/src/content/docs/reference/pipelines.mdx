@@ -104,3 +104,22 @@ let x = pipe(1) // => 50
 // Resolves the composition down to:
 // div(100, add(1, 1)) -> div(100, 2) -> 50
 ```
+
+## Placeholders anywhere in a stage
+
+The placeholder doesn't have to be a whole argument. Everywhere a `_` appears in the stage, the piped value goes
+there, and it is computed once:
+
+```kura
+let x = 10 |> _ + 1        // 11
+let y = 4 |> mul(_, _)     // 16
+```
+
+Outside a pipeline, a `_` is only allowed as a whole argument of a call (`div(100, _)`), where it leaves that
+argument open.
+
+## Reverse Application
+
+`f <| x` applies the function on its left to the value on its right. It is read from the right, so
+`f <| g <| x` is `f(g(x))`. The two directions can't be mixed in one chain without parentheses:
+`(x |> f()) |> g()`.

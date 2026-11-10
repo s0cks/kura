@@ -1,5 +1,7 @@
 #include "lsp/document.h"
 
+#include <algorithm>
+#include <memory>
 #include <mutex>
 #include <sstream>
 
@@ -7,8 +9,52 @@
 
 namespace kura::lsp {
 Document::Document(const URI uri, std::string contents) :
-  uri_(std::move(uri)),
-  contents_(contents) {}
+  uri_(std::move(uri)) {
+  Update(std::move(contents));
+}
+
+void Document::Update(std::string content) {
+  contents_ = std::move(content);
+  version_++;
+  source_ = std::make_shared<const syntax::SourceFile>(uri_, contents_);
+}
+
+auto Document::ToOffset(const Position& rhs) const -> uint32_t {
+  if (rhs.line < 0)
+    return 0;
+
+  const auto line = static_cast<uint32_t>(rhs.line);
+  if (line >= source_->GetNumberOfLines())
+    return source_->GetSize();
+
+  const auto span = source_->GetLineSpan(line);
+  const auto& text = source_->GetText();
+  auto target = static_cast<uint32_t>(std::max(rhs.character, 0));
+  uint32_t offset = span.begin;
+  uint32_t units = 0;
+  while (offset < span.end && units < target) {
+    const auto c = static_cast<unsigned char>(text[offset]);
+    const uint32_t width = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+    units += c >= 0xF0 ? 2 : 1;
+    offset = std::min(offset + width, span.end);
+  }
+  return offset;
+}
+
+auto Document::ToPosition(const uint32_t offset) const -> Position {
+  const auto pos = source_->GetPosition(offset);
+  return Position{
+      .line = static_cast<int>(pos.line),
+      .character = static_cast<int>(source_->GetUtf16Column(offset)),
+  };
+}
+
+auto Document::ToRange(const syntax::Span& span) const -> Range {
+  return Range{
+      .start = ToPosition(span.begin),
+      .end = ToPosition(span.end),
+  };
+}
 
 Document::~Document() = default;
 

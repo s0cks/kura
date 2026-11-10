@@ -1,0 +1,19 @@
+let r = { message: "Hello World", status: 10 }
+let { message, status } = r
+let { message: m, status: 0 } = r
+let { message: renamed, ...rest } = r
+let { status: s, ... } = r
+let { a, b: { c, d } } = nested
+
+type Point = { x: Float, y: Float }
+let p: Point = { x: 0, y: 7 }
+let described = match p {
+  Point { x, y: 0 } => "on the x axis"
+  Point { x: 0, y } => "on the y axis"
+  Point { x, y: 1..=10, ...others } => "near"
+  { x, y } => "elsewhere"
+}
+let optional = match entry {
+  Some({ x, y }) => x + y
+  None => 0
+}

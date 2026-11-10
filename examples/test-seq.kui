@@ -1,2 +1,2 @@
 fn add-three(x: Int): Seq<Int> =>
-  for n in [ x, x + 1, x + 2, x + 3, 11 ] if n < 10 => n + 3
+  for _, n in [ x, x + 1, x + 2, x + 3, 11 ] if n < 10 => n + 3

@@ -27,6 +27,11 @@ struct LexResult {
 // `a - b` is a subtraction only with whitespace on both sides of the `-`; the
 // lexer tells the parser by emitting kBinMinus rather than kMinus.
 auto Lex(const SourceFile& source, DiagnosticList& diagnostics) -> LexResult;
+
+// Lexes only the bytes in [begin, end) of the source. The tokens keep their offsets in the whole file, so
+// a piece of a file (the expression inside a string's `{...}`) can be parsed on its own and still point at
+// the right place in the original text.
+auto LexRange(const SourceFile& source, uint32_t begin, uint32_t end, DiagnosticList& diagnostics) -> LexResult;
 }  // namespace kura::syntax
 
 #endif  // KURA_SYNTAX_LEXER_H

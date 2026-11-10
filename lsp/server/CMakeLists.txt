@@ -1,4 +1,4 @@
-target_sources(kura-lsp
+target_sources(kura-lsp-common
   PUBLIC exit.cc
          initialize.cc
          initialized.cc

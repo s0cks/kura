@@ -1,0 +1,50 @@
+// set rules can be at the top level, in a block, in an element and at the start of an unbraced function body
+set button(fill: black)
+set text(fill: white)
+
+fn view(): Node =>
+  set button(fill: green)
+  set text(size: 14px)
+  #fragment {
+    #button()
+    #block {
+      set text(fill: red)
+      #button {
+        #text("Hello World")
+      }
+    }
+  }
+
+fn children(items: Seq<String>, wide: Bool) =>
+  #block {
+    // a string is a text node; adjacent strings stay separate
+    "Hello"
+    "World"
+    "Hi {name}"
+    // spacers
+    1fr
+    10px
+    50%
+    #v(1fr)
+    #h(10px)
+    #button()
+    // dynamic content
+    when wide { #text("wide") }
+    if wide { #text("a") } else { #text("b") }
+    for _, item in items => #text(item)
+    match wide {
+      true => #text("yes")
+      _ => #text("no")
+    }
+    my-helper(1, 2)
+    items |> render(_)
+    let local = 10
+    set text(fill: red)
+    #text(local)
+  }
+
+fn braced() => {
+  let a = 10
+  set text(fill: red)
+  #text(a)
+}

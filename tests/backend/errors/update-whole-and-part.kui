@@ -1,0 +1,2 @@
+// error: is updated as a whole and also by a field inside it
+fn f(): Int => { let p = { q: { x: 1 } } let n = { p | q: { x: 2 }, q.x += 1 } n.q.x }

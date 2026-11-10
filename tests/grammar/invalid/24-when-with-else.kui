@@ -1,0 +1,1 @@
+let a = when x { 1 } else { 2 }

@@ -1,6 +1,6 @@
 type Message = Tick | Inc
 // run: labels => [#text(value: "a"), #text(value: "b")]
-fn labels(): Seq<Node> => for item in ["a", "b"] => #text(item)
+fn labels(): Seq<Node> => for _, item in ["a", "b"] => #text(item)
 // run: maybe true => #text(value: "shown")
 // run: maybe false => None
 fn maybe(show: Bool): Node | None => if show { #text("shown") } else { None }

@@ -1,0 +1,10 @@
+let pos = { x: 10.0, y: 10.0 }
+let a = "plain text"
+let b = "{pos.x}, {pos.y}"
+let c = "sum: {1 + 2}!"
+let d = "call: {format("nested {pos.x}")}"
+let e = "escaped: \{ and \}"
+let f = "nested: {"inner {pos.x}"}"
+let g = "a lone } is text"
+fn view() =>
+  #text("{pos.x}, {pos.y}")
