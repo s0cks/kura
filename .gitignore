@@ -11,3 +11,4 @@ prompt.md
 test.md
 node_modules/
 .astro/
+/misc/
