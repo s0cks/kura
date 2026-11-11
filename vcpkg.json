@@ -9,6 +9,12 @@
     "libpng",
     "libjpeg-turbo",
     "gtest",
-    "benchmark"
+    "rang",
+    "benchmark",
+    "freetype",
+    {
+      "name": "harfbuzz",
+      "features": ["freetype"]
+    }
   ]
 }

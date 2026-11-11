@@ -7,5 +7,6 @@ add_library(kura-renderer-image STATIC
   renderer.cc)
 target_link_libraries(kura-renderer-image
   PUBLIC kura-renderer-base
+         kura-text
          PNG::PNG
          JPEG::JPEG)

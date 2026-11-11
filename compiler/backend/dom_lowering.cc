@@ -126,7 +126,7 @@ auto DomLowering::VisitText(dom::Node* node) -> bool {
   // Layout needs to know how big the text is going to be, so it has to be told before it runs.
   const auto id = plan_->FindId(node);
   if (id)
-    host_->Emit(LayoutSetTextInstr::New(plan_, *id, value, plan_->GetFontSize(*id)));
+    host_->Emit(LayoutSetTextInstr::New(plan_, *id, value, plan_->GetFontSize(*id), plan_->GetFontFamily(*id)));
 
   ops_.push_back(Op{node, value});
   return true;
@@ -184,7 +184,16 @@ auto DomLowering::DrawButton(dom::Node* node) -> bool {
 }
 
 auto DomLowering::DrawText(const Op& op) -> bool {
-  EmitRenderCall(DrawTextInstr::New(op.text));
+  const auto id = plan_->FindId(op.node);
+  if (!id)
+    return Fail("internal error: #" + std::string(op.node->GetTag()) + " has no place in the layout");
+
+  // Text is opaque black unless it says otherwise (0xRRGGBBAA).
+  Value* color = ResolvePropertyByName(op.node, "color", resolved_[op.node]);
+  if (!color)
+    color = host_->Bind(ConstantInstr::New(Int::New(0x000000FF)));
+
+  EmitRenderCall(DrawTextInstr::New(plan_, *id, op.text, color));
   return true;
 }
 

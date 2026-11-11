@@ -6,23 +6,71 @@ fn init(): State => { message: "Hello World"  }
 
 fn view(count: Int, test: Bool): Node => {
   let text = if count > 1 { "Done" } else { "Hello World" }
-  #block(direction: "row",
-         fill: white,
-         radius: 16px,
-         width: 1fr,
-         height: 1fr,
-         padding: 10px,
-         gap: 10px){
-    #button(fill: red, shrink: 0) {
-      "Hello World"
+  #block(direction: "column", gap: 16px){
+    #block(direction: "row",
+           fill: white,
+           radius: 16px,
+           width: 1fr,
+           height: 1fr,
+           padding: 10px,
+           gap: 10px){
+      #block(fill: red,
+             justify: "center",
+             align: "center"){
+        "Hello World"
+      }
+
+      #block(fill: green, grow: 1) {
+        #text(font-family: "Inter", size: 24px, text)
+      }
+
+      #block(fill: blue){
+        #text(font-family: "Inter", size: 24px, "Hello World")
+      }
     }
 
-    #button(fill: green, grow: 1) {
-      "test"
+    #block(direction: "row",
+           fill: white,
+           radius: 16px,
+           width: 1fr,
+           height: 1fr,
+           padding: 10px,
+           gap: 10px){
+      #block(fill: red,
+             justify: "center",
+             align: "center"){
+        #text(font-family: "Inter", size: 24px, text-align: "center", "Hello World")
+      }
+
+      #block(fill: green, grow: 1) {
+        #text(font-family: "Inter", size: 24px, text)
+      }
+
+      #block(fill: blue){
+        #text(font-family: "Inter", size: 24px, "Hello World")
+      }
     }
 
-    #button(fill: blue, shrink: 0) {
-      "test"
+    #block(direction: "row",
+           fill: white,
+           radius: 16px,
+           width: 1fr,
+           height: 1fr,
+           padding: 10px,
+           gap: 10px){
+      #block(fill: red,
+             justify: "center",
+             align: "center"){
+        #text(font-family: "Inter", size: 24px, text-align: "center", "Hello World")
+      }
+
+      #block(fill: green, grow: 1) {
+        #text(font-family: "Inter", size: 24px, text)
+      }
+
+      #block(fill: blue){
+        #text(font-family: "Inter", size: 24px, "Hello World")
+      }
     }
   }
 }

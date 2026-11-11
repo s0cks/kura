@@ -14,5 +14,4 @@ target_include_directories(kurafmt
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(kurafmt
   PUBLIC kura-compiler
-         rang
          PkgConfig::YAML)

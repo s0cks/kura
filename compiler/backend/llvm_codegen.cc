@@ -548,9 +548,14 @@ class Generator {
 
   void EmitLayoutSetText(LayoutSetTextInstr* instr) {
     const auto plan = instr->GetPlan().get();
+    // The family is a constant of the plan: its bytes, or no pointer at all for the default font.
+    const auto& family = instr->GetFontFamily();
+    llvm::Value* family_data =
+        family.empty() ? llvm::Constant::getNullValue(ptr_ty_) : b_.CreateGlobalString(family, "kura.family");
     CallRt("kura_rt_layout_set_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
-            As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize())});
+            As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize()),
+            family_data, b_.getInt64(family.size())});
   }
 
   void EmitLayoutSetProperty(LayoutSetPropertyInstr* instr) {
@@ -604,8 +609,11 @@ class Generator {
   }
 
   void EmitDrawText(DrawTextInstr* draw) {
-    const auto a = Val(draw->GetValue());
-    CallRt("kura_rt_draw_text", void_ty_, {a});
+    // What's drawn, and where, is the layout's: it has the node's text, box and font.
+    const auto plan = draw->GetPlan().get();
+    CallRt("kura_rt_draw_text", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
+            Val(draw->GetColor())});
   }
 
   // ── calls ────────────────────────────────────────────────────────────────

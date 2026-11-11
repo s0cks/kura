@@ -1,15 +1,20 @@
-type  Message = Click
+type Message = Increment | Decrement
+
+type State = {
+  value: Int,
+}
 
 fn init(): State => { value: 1 }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Click => { value: state.value + 1 }
+    Increment => { value: state.value + 1 }
+    Decrement => { value: state.value - 1 }
     _ => state
   }
 
-fn view(state: State): Content =>
-  #button(on-click: 1) {
+fn view(state: State): Node =>
+  #button(on-click: Increment) {
     #text("Click")
     #text(state.value)
   }

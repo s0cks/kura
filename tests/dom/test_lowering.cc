@@ -179,6 +179,63 @@ TEST(DomLowering, ConstantPropertiesEmitNothing) {
     EXPECT_FALSE(instr->IsConstant());
 }
 
+TEST(DomLowering, TextFontFamilyIsPassedToLayout) {
+  Program program(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))),
+                                            Prop("font-family", Lit(String::New("Inter, sans-serif")))}));
+  ASSERT_TRUE(program.Compile()) << (program.errors.empty() ? "" : program.errors[0]);
+  auto found = false;
+  for (const auto instr : program.Instructions()) {
+    if (const auto set = instr->AsLayoutSetText()) {
+      EXPECT_EQ(set->GetFontFamily(), "Inter, sans-serif");
+      found = true;
+    }
+  }
+  EXPECT_TRUE(found);
+}
+
+TEST(DomLowering, TextWithoutAFontFamilyUsesTheDefaultFont) {
+  Program program(Text("hi"));
+  ASSERT_TRUE(program.Compile());
+  for (const auto instr : program.Instructions()) {
+    if (const auto set = instr->AsLayoutSetText())
+      EXPECT_TRUE(set->GetFontFamily().empty());
+  }
+}
+
+TEST(DomLowering, FontFamilyHasToBeAConstantString) {
+  Program dynamic{};
+  dynamic.view->SetBody(SeqExpr::New(Element(
+      NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("font-family", LoadLocalExpr::New(dynamic.model))})));
+  EXPECT_FALSE(dynamic.Compile());
+  EXPECT_TRUE(dynamic.HasError("'font-family' has to be a constant string"));
+
+  Program wrong(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("font-family", Lit(Px::New(2)))}));
+  EXPECT_FALSE(wrong.Compile());
+}
+
+TEST(DomLowering, TextIsDrawnOpaqueBlackUnlessItHasAColor) {
+  Program plain(Text("hi"));
+  ASSERT_TRUE(plain.Compile());
+  Program red(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("color", Lit(Color::Red()))}));
+  ASSERT_TRUE(red.Compile());
+  const auto color_of = [](const Program& program) -> Object* {
+    for (const auto instr : program.Instructions()) {
+      if (const auto draw = instr->AsDrawText()) {
+        const auto constant = draw->GetColor()->GetDefinition()->AsConstant();
+        return constant ? constant->GetValue() : nullptr;
+      }
+    }
+    return nullptr;
+  };
+  const auto black = color_of(plain);
+  ASSERT_NE(black, nullptr);
+  ASSERT_EQ(black->GetType(), kIntType);
+  EXPECT_EQ(static_cast<Int*>(black)->GetValue(), 0x000000FF);
+  const auto chosen = color_of(red);
+  ASSERT_NE(chosen, nullptr);
+  EXPECT_EQ(chosen->GetType(), kColorType);
+}
+
 TEST(DomLowering, FoldsLetsIntoTheText) {
   const auto local = LocalVariable::New("title");
   Program program(SeqExpr::New(ExprList{StoreLocalExpr::New(local, Lit(String::New("Count"))),

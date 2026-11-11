@@ -5,6 +5,7 @@ add_library(kura-renderer-gl STATIC
   renderer.cc)
 target_link_libraries(kura-renderer-gl
   PUBLIC kura-renderer-base
+         kura-text
          PkgConfig::EPOXY)
 
 option(KURA_BUILD_GL_DEMO "Build kura-gl-demo, which draws a rect in a loop through the runtime (needs GLFW)" ON)

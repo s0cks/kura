@@ -1,5 +1,7 @@
 #include <cctype>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -336,6 +338,17 @@ auto main(int argc, char** argv) -> int {
 #ifdef KURA_HAS_HEADLESS_RENDERER
   if (options.dump_draw) {
     for (const auto& command : headless.GetCommands()) {
+      if (command.kind == renderer::Command::Kind::kText) {
+        // one line per run of text: a text that wraps is drawn in several
+        const auto byte = [](const float channel) { return static_cast<int>(std::lround(channel * 255.0f)); };
+        char color[16];
+        std::snprintf(color, sizeof(color), "#%02x%02x%02x%02x", byte(command.color.r), byte(command.color.g),
+                      byte(command.color.b), byte(command.color.a));
+        std::cout << "text x=" << command.from.x << " y=" << command.from.y << " size=" << command.font_size
+                  << " family=\"" << command.family << "\" color=" << color << " value=\"" << command.text << "\""
+                  << std::endl;
+        continue;
+      }
       if (command.kind != renderer::Command::Kind::kFillRect)
         continue;
       std::cout << "fill-rect x=" << command.rect.x << " y=" << command.rect.y << " w=" << command.rect.width

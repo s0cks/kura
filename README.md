@@ -1,8 +1,10 @@
 # Kura
 
 > A declarative, functional DSL for real-time game engine UIs
-
+> 
 > ***Warning***: Under active development. Expect breaking changes and evolving ABIs
+
+![Mascot](./assets/mascot.png)
 
 Kura combines pure functional composition and layout primitives with a compiler-driven UI architecture and
 a deterministic rendering pipeline.
@@ -124,9 +126,9 @@ kura_rt_render_text("Done")
 finished in 82us
 ```
 
-### C Interop
+### C Interoperability
 
-The following example demonstrates Kura's robust C interop - inspired by Zig:
+The following example demonstrates Kura's robust C interoperability - inspired by Zig:
 
 ```kura
 use "stdio.h"
@@ -160,7 +162,7 @@ See [examples/](examples/)
 
 ## Docs
 
-Checkout the [docs/](https://s0cks.github.io/kura).
+Checkout the [docs/](https://s0cks.github.io/kura/getting-started).
 
 ## License
 

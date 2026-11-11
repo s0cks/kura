@@ -1,0 +1,2 @@
+text x=10 y=10 size=20 family="Inter, sans-serif" color=#ff0000ff value="hello"
+text x=60 y=10 size=10 family="" color=#000000ff value="plain"

@@ -8,7 +8,8 @@
 extern "C" {
 #endif
 
-#define KURA_RENDERER_ABI_VERSION 1u
+// 2: KuraTextStyle gained `family`.
+#define KURA_RENDERER_ABI_VERSION 2u
 
 typedef enum KuraRendererStatus {
   KURA_RENDERER_OK = 0,
@@ -42,6 +43,11 @@ typedef struct KuraColor {
 typedef struct KuraTextStyle {
   // The font size in pixels. Must be > 0.
   float size;
+  // The `font-family` to draw with, UTF-8 and not NUL-terminated: a name, or a comma-separated list of
+  // them in order of preference (`Inter, sans-serif`). The renderer keeps whatever it needs per family,
+  // and uses the system's default font for a family it can't find. NULL or a zero length is the default.
+  const char* family;
+  size_t family_length;
 } KuraTextStyle;
 
 typedef struct KuraTextMetrics {

@@ -10,6 +10,7 @@
 #include "conformance.h"
 #include "gl_test_util.h"
 #include "renderer/gl/renderer.h"
+#include "text/text.h"
 
 namespace {
 class GlRendererTest : public ::testing::Test {
@@ -198,6 +199,141 @@ TEST_F(GlRendererTest, ClearingCanBeTurnedOffToDrawOverWhatIsThere) {
   const Frame frame;
   EXPECT_EQ(frame.At(2, 2), kRed);
   EXPECT_EQ(frame.At(50, 50), kBlue);  // the blue is still there from before
+}
+
+namespace {
+auto TextStyle(const float size, const char* family = nullptr) -> KuraTextStyle {
+  return KuraTextStyle{size, family, family == nullptr ? 0 : std::char_traits<char>::length(family)};
+}
+
+auto HasSystemFont() -> bool {
+  kura::text::FontLibrary library{};
+  return library.Find("") != nullptr;
+}
+
+// How many pixels of the frame aren't the black it's cleared to.
+auto Ink(const Frame& frame, const uint32_t size = kSize) -> size_t {
+  size_t count = 0;
+  for (uint32_t y = 0; y < size; y++) {
+    for (uint32_t x = 0; x < size; x++)
+      count += frame.At(x, y) == kBlack ? 0 : 1;
+  }
+  return count;
+}
+}  // namespace
+
+TEST_F(GlRendererTest, DrawsTextInItsColorFromAGlyphAtlas) {
+  if (!HasSystemFont())
+    GTEST_SKIP() << "no system font";
+  ASSERT_EQ(Begin(), KURA_RENDERER_OK);
+  const char text[] = "Hello";
+  ASSERT_EQ(Ops().draw_text(renderer_.self, KuraVec2{4, 4}, text, 5, TextStyle(24), kRedColor), KURA_RENDERER_OK);
+  ASSERT_EQ(End(), KURA_RENDERER_OK);
+  const Frame frame;
+  EXPECT_GT(Ink(frame), 20u);
+  // coverage tints red: the other channels stay empty
+  for (uint32_t y = 0; y < kSize; y++) {
+    for (uint32_t x = 0; x < kSize; x++) {
+      const auto pixel = frame.At(x, y);
+      EXPECT_EQ(pixel.g, 0);
+      EXPECT_EQ(pixel.b, 0);
+    }
+  }
+  // nothing above or left of the box's corner
+  for (uint32_t x = 0; x < kSize; x++)
+    EXPECT_EQ(frame.At(x, 3), kBlack);
+}
+
+TEST_F(GlRendererTest, TextIsClippedAndOrderedWithRects) {
+  if (!HasSystemFont())
+    GTEST_SKIP() << "no system font";
+  ASSERT_EQ(Begin(), KURA_RENDERER_OK);
+  const char text[] = "Wide text that runs far past the clip";
+  ASSERT_EQ(Ops().push_clip(renderer_.self, KuraRect{0, 0, 30, 60}), KURA_RENDERER_OK);
+  ASSERT_EQ(Ops().draw_text(renderer_.self, KuraVec2{0, 4}, text, sizeof(text) - 1, TextStyle(20), kRedColor),
+            KURA_RENDERER_OK);
+  ASSERT_EQ(Ops().pop_clip(renderer_.self), KURA_RENDERER_OK);
+  // a rect drawn after the text covers it
+  ASSERT_EQ(Fill(0, 0, 20, 60, kBlueColor), KURA_RENDERER_OK);
+  ASSERT_EQ(End(), KURA_RENDERER_OK);
+  const Frame frame;
+  for (uint32_t y = 0; y < kSize; y++) {
+    for (uint32_t x = 30; x < kSize; x++)
+      EXPECT_EQ(frame.At(x, y), kBlack) << x << "," << y;
+  }
+  EXPECT_EQ(frame.At(10, 10), kBlue);
+  size_t red_ink = 0;
+  for (uint32_t y = 0; y < 60; y++) {
+    for (uint32_t x = 20; x < 30; x++)
+      red_ink += frame.At(x, y).r > 0 ? 1 : 0;
+  }
+  EXPECT_GT(red_ink, 0u);
+}
+
+TEST_F(GlRendererTest, MeasuresWithTheFontItDraws) {
+  if (!HasSystemFont())
+    GTEST_SKIP() << "no system font";
+  kura::text::FontLibrary library{};
+  const auto expected = library.Find("")->Measure("Kura text", 18);
+  KuraTextMetrics metrics{};
+  ASSERT_EQ(Ops().measure_text(renderer_.self, "Kura text", 9, TextStyle(18), &metrics), KURA_RENDERER_OK);
+  EXPECT_EQ(metrics.width, expected.width);
+  EXPECT_EQ(metrics.height, expected.height);
+  EXPECT_EQ(metrics.ascent, expected.ascent);
+
+  // a family that isn't installed measures as the default font
+  KuraTextMetrics missing{};
+  ASSERT_EQ(Ops().measure_text(renderer_.self, "Kura text", 9, TextStyle(18, "No Such Family 4f1c"), &missing),
+            KURA_RENDERER_OK);
+  EXPECT_EQ(missing.width, metrics.width);
+}
+
+TEST_F(GlRendererTest, ManyGlyphsAtManySizesFillTheAtlasAndKeepDrawing) {
+  if (!HasSystemFont())
+    GTEST_SKIP() << "no system font";
+  // Enough distinct (glyph, size) pairs to overflow a 1024x1024 atlas more than once.
+  ASSERT_EQ(Begin(), KURA_RENDERER_OK);
+  for (int size = 12; size < 120; size++) {
+    const char text[] = "The quick brown fox jumps over the lazy dog 0123456789";
+    ASSERT_EQ(Ops().draw_text(renderer_.self, KuraVec2{0, 0}, text, sizeof(text) - 1,
+                              TextStyle(static_cast<float>(size)), kRedColor),
+              KURA_RENDERER_OK);
+  }
+  // the last draw still works after resets
+  ASSERT_EQ(Fill(0, 0, kSize, kSize, kBlueColor), KURA_RENDERER_OK);
+  const char text[] = "After";
+  ASSERT_EQ(Ops().draw_text(renderer_.self, KuraVec2{4, 4}, text, 5, TextStyle(24), kRedColor), KURA_RENDERER_OK);
+  ASSERT_EQ(End(), KURA_RENDERER_OK);
+  const Frame frame;
+  size_t red = 0;
+  for (uint32_t y = 0; y < kSize; y++) {
+    for (uint32_t x = 0; x < kSize; x++)
+      red += frame.At(x, y).r > 200 ? 1 : 0;
+  }
+  EXPECT_GT(red, 20u);
+}
+
+TEST_F(GlRendererTest, TextLeavesTheHostsTextureStateAsItWasFound) {
+  if (!HasSystemFont())
+    GTEST_SKIP() << "no system font";
+  GLuint texture = 0;
+  glGenTextures(1, &texture);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glActiveTexture(GL_TEXTURE3);
+
+  ASSERT_EQ(Begin(), KURA_RENDERER_OK);
+  ASSERT_EQ(Ops().draw_text(renderer_.self, KuraVec2{0, 0}, "Hi", 2, TextStyle(16), kRedColor), KURA_RENDERER_OK);
+  ASSERT_EQ(End(), KURA_RENDERER_OK);
+
+  GLint active = 0;
+  glGetIntegerv(GL_ACTIVE_TEXTURE, &active);
+  EXPECT_EQ(active, GL_TEXTURE3);
+  glActiveTexture(GL_TEXTURE0);
+  GLint bound = 0;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &bound);
+  EXPECT_EQ(static_cast<GLuint>(bound), texture);
+  glDeleteTextures(1, &texture);
 }
 
 TEST(GlRendererCreate, RejectsBadArguments) {

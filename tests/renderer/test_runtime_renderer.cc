@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
+#include <string>
 #include <thread>
 
 #include "backend/runtime_abi.h"
@@ -69,6 +70,42 @@ TEST_F(RuntimeRendererTest, ColorIsPackedRgba8) {
   EXPECT_FLOAT_EQ(color.b, 0x99 / 255.0f);
   EXPECT_FLOAT_EQ(color.a, 0xCC / 255.0f);
   kura_rt_end_frame();
+}
+
+TEST_F(RuntimeRendererTest, TextCarriesItsFamilyAndColorToTheRenderer) {
+  kura_rt_begin_frame(200, 100);
+  const std::string family = "Inter, sans-serif";
+  const std::string text = "hello";
+  kura_rt_render_text(12.5, 30, text.data(), text.size(), 18.0f, family.data(), family.size(), 0xFF8000FFu);
+  kura_rt_check_renderer();
+  // no family is the default font
+  kura_rt_render_text(0, 0, "x", 1, 10.0f, nullptr, 0, 0x000000FFu);
+  kura_rt_check_renderer();
+  kura_rt_end_frame();
+
+  ASSERT_EQ(renderer_->GetCommands().size(), 2u);
+  const auto& first = renderer_->GetCommands()[0];
+  EXPECT_EQ(first.kind, Command::Kind::kText);
+  EXPECT_EQ(first.from.x, 12.5f);
+  EXPECT_EQ(first.from.y, 30.0f);
+  EXPECT_EQ(first.font_size, 18.0f);
+  EXPECT_EQ(first.text, "hello");
+  EXPECT_EQ(first.family, "Inter, sans-serif");
+  EXPECT_EQ(first.color.r, 1.0f);
+  EXPECT_NEAR(first.color.g, 128.0f / 255.0f, 1e-6f);
+  EXPECT_EQ(renderer_->GetCommands()[1].family, "");
+}
+
+TEST_F(RuntimeRendererTest, MeasuringTakesTheFamily) {
+  float width = 0;
+  float height = 0;
+  const std::string family = "Whatever";
+  // the headless renderer's fixed model ignores the family, but the call has to get through
+  ASSERT_EQ(kura_rt_measure_text("abcd", 4, 20.0f, family.data(), family.size(), &width, &height), 0);
+  EXPECT_EQ(width, 40.0f);
+  EXPECT_EQ(height, 25.0f);
+  ASSERT_EQ(kura_rt_measure_text("abcd", 4, 20.0f, nullptr, 0, &width, &height), 0);
+  EXPECT_EQ(width, 40.0f);
 }
 
 TEST_F(RuntimeRendererTest, CheckRendererPassesWhenTheLastCallWorked) {

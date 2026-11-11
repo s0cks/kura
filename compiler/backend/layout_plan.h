@@ -28,6 +28,7 @@ class LayoutPlan {
   std::vector<layout::Node> nodes_{};
   std::unordered_map<const dom::Node*, layout::NodeId> ids_{};
   std::unordered_map<layout::NodeId, double> font_sizes_{};
+  std::unordered_map<layout::NodeId, std::string> font_families_{};
 
   explicit LayoutPlan(const uint64_t index) :
     index_(index) {}
@@ -64,6 +65,13 @@ class LayoutPlan {
   inline auto FindId(const dom::Node* node) const -> std::optional<layout::NodeId> {
     const auto it = ids_.find(node);
     return it == ids_.end() ? std::nullopt : std::optional<layout::NodeId>(it->second);
+  }
+
+  // The `font-family` of a text, or empty for the default font.
+  inline auto GetFontFamily(const layout::NodeId id) const -> const std::string& {
+    static const std::string kNone{};
+    const auto it = font_families_.find(id);
+    return it == font_families_.end() ? kNone : it->second;
   }
 
   inline auto GetFontSize(const layout::NodeId id) const -> double {

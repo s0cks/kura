@@ -432,10 +432,6 @@ void kura_rt_draw_rect() {
   NOT_IMPLEMENTED;
 }
 
-void kura_rt_draw_text(void* a) {
-  // std::cout << "rendering text: " << static_cast<kura::String*>(a)->GetValue() << std::endl;
-}
-
 int64_t kura_rt_len(void* object) {
   const auto obj = static_cast<Obj*>(object);
   if (obj->kind == ObjKind::kSeq)

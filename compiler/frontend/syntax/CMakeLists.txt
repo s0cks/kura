@@ -5,7 +5,8 @@ add_library(kura-syntax STATIC
   lexer.cc
   parser.cc)
 target_link_libraries(kura-syntax
-  PUBLIC kura-heap)
+  PUBLIC kura-heap
+         rang::rang)
 target_include_directories(kura-syntax
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 target_compile_features(kura-syntax

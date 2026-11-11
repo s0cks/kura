@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs every program in programs/ with `kura --run view` on the headless renderer and compares the rects
-# its view filled with the program's .expected file. The first line of a program says what to call it
+# its view filled with the program's .expected file. A program that draws text also has a .text-expected file
+# with the runs of text it drew: where, at what size, in which font family and color, and what they say. The first line of a program says what to call it
 # with (`// args: 1`). Pass --update to write the .expected files instead of comparing.
 #
 #   tests/layout/run.sh path/to/kura [--update]
@@ -16,9 +17,19 @@ for f in "$dir"/*.kui; do
     # shellcheck disable=SC2086
     out="$("$kura" "$f" --dump-draw --run view $args 2>&1)" || { echo "FAIL  $name (did not run)"; echo "$out" | sed 's/^/      /'; status=1; continue; }
     got="$(echo "$out" | grep '^fill-rect')"
+    got_text="$(echo "$out" | grep '^text ')"
     if [ "$update" = "--update" ]; then
         echo "$got" > "$dir/$name.expected"
         echo "wrote $name.expected"
+        if [ -n "$got_text" ]; then
+            echo "$got_text" > "$dir/$name.text-expected"
+            echo "wrote $name.text-expected"
+        fi
+    elif [ -f "$dir/$name.text-expected" ] && [ "$got_text" != "$(cat "$dir/$name.text-expected")" ]; then
+        echo "FAIL  $name (text)"
+        echo "      expected:"; sed 's/^/        /' "$dir/$name.text-expected"
+        echo "      got:"; echo "$got_text" | sed 's/^/        /'
+        status=1
     elif [ "$got" = "$(cat "$dir/$name.expected")" ]; then
         echo "ok    $name"
     else

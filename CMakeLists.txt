@@ -12,6 +12,7 @@ if(CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug")
 endif()
 
 find_package(PkgConfig REQUIRED)
+find_package(rang CONFIG REQUIRED)
 
 find_package(glm CONFIG REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
@@ -22,12 +23,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 include(FetchContent)
-include(rang)
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 add_subdirectory(heap)
 add_subdirectory(runtime)
 add_subdirectory(layout)
+add_subdirectory(text)
 add_subdirectory(compiler)
 
 add_subdirectory(renderer)

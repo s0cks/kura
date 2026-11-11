@@ -5,7 +5,12 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
+#include <memory>
 #include <new>
+#include <tuple>
+
+#include "text/text.h"
 
 namespace kura::renderer {
 namespace {
@@ -37,7 +42,12 @@ inline auto IsValid(const KuraColor& value) -> bool {
 }
 
 inline auto IsValid(const KuraTextStyle& value) -> bool {
-  return IsValid(value.size) && value.size > 0.0f;
+  return IsValid(value.size) && value.size > 0.0f && (value.family != nullptr || value.family_length == 0);
+}
+
+inline auto FamilyOf(const KuraTextStyle& style) -> std::string {
+  return style.family == nullptr || style.family_length == 0 ? std::string{}
+                                                              : std::string(style.family, style.family_length);
 }
 
 inline auto Quantize(const float channel) -> uint8_t {
@@ -136,14 +146,17 @@ inline auto Same(const KuraColor& a, const KuraColor& b) -> bool {
 
 auto Command::operator==(const Command& rhs) const -> bool {
   return kind == rhs.kind && Same(rect, rhs.rect) && Same(from, rhs.from) && Same(to, rhs.to) &&
-         Same(color, rhs.color) && text == rhs.text && SameFloat(font_size, rhs.font_size);
+         Same(color, rhs.color) && text == rhs.text && SameFloat(font_size, rhs.font_size) && family == rhs.family;
 }
 
 class HeadlessImpl {
  public:
   explicit HeadlessImpl(const HeadlessOptions& options) :
     options_(options),
-    clear_(ToRgba8(options.clear)) {}
+    clear_(ToRgba8(options.clear)) {
+    if (options.shaped_text)
+      fonts_ = std::make_unique<text::FontLibrary>();
+  }
 
   auto BeginFrame(const uint32_t width, const uint32_t height) -> Status {
     if (in_frame_)
@@ -290,14 +303,32 @@ class HeadlessImpl {
     command.color = color;
     command.text.assign(length == 0 ? "" : utf8, length);
     command.font_size = style.size;
+    command.family = FamilyOf(style);
+    if (options_.rasterize && fonts_ != nullptr)
+      RasterizeText(pos, command.text, style.size, command.family, color);
     commands_.push_back(std::move(command));
     return KURA_RENDERER_OK;
   }
 
-  static auto MeasureText(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out)
+  auto MeasureText(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out)
       -> Status {
     if (out == nullptr || !IsValid(style) || (utf8 == nullptr && length != 0))
       return KURA_RENDERER_ERR_INVALID_ARG;
+    if (fonts_ != nullptr) {
+      if (const auto font = fonts_->Find(FamilyOf(style))) {
+        const auto metrics = font->Measure(std::string_view(length == 0 ? "" : utf8, length), style.size);
+        out->width = metrics.width;
+        out->height = metrics.height;
+        out->ascent = metrics.ascent;
+        return KURA_RENDERER_OK;
+      }
+    }
+    return FixedMetrics(utf8, length, style, out);
+  }
+
+  // The fixed model: what text measures when there are no real fonts.
+  static auto FixedMetrics(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out)
+      -> Status {
     size_t lines = 1;
     size_t current = 0;
     size_t widest = 0;
@@ -350,6 +381,9 @@ class HeadlessImpl {
 
  private:
   HeadlessOptions options_;
+  // Only with `shaped_text`.
+  std::unique_ptr<text::FontLibrary> fonts_{};
+  std::map<std::tuple<const void*, uint32_t, float>, text::GlyphBitmap> glyphs_{};
   Rgba8 clear_;
   bool in_frame_ = false;
   uint32_t width_ = 0;
@@ -375,6 +409,56 @@ class HeadlessImpl {
 
   inline auto CurrentClip() const -> PixelRect {
     return clips_.empty() ? PixelRect{0, 0, static_cast<int>(width_), static_cast<int>(height_)} : clips_.back();
+  }
+
+  // Draws `text` into the framebuffer: each glyph's coverage bitmap, tinted by `color`, clipped. The top-left
+  // of the text's box is at `pos`, the baseline of its first line is `ascent` below that.
+  void RasterizeText(const KuraVec2& pos, const std::string& text, const float size, const std::string& family,
+                     const KuraColor& color) {
+    const auto font = fonts_->Find(family);
+    if (font == nullptr)
+      return;
+    const auto base = ToRgba8(color);
+    if (base.a == 0)
+      return;
+    const auto metrics = font->GetMetrics(size);
+    const auto clip = CurrentClip();
+    auto baseline = static_cast<double>(pos.y) + static_cast<double>(metrics.ascent);
+    for (const auto& line : font->Shape(text, size)) {
+      auto pen = static_cast<double>(pos.x);
+      for (const auto& glyph : line.glyphs) {
+        const auto& bitmap = CachedGlyph(font, glyph.id, size);
+        const auto left = ToInt(std::round(pen + static_cast<double>(glyph.x_offset))) + bitmap.left;
+        const auto top = ToInt(std::round(baseline + static_cast<double>(glyph.y_offset))) - bitmap.top;
+        for (auto row = 0; row < bitmap.height; row++) {
+          const auto y = top + row;
+          if (y < clip.y0 || y >= clip.y1)
+            continue;
+          for (auto column = 0; column < bitmap.width; column++) {
+            const auto x = left + column;
+            if (x < clip.x0 || x >= clip.x1)
+              continue;
+            const uint32_t coverage = bitmap.alpha[static_cast<size_t>(row) * static_cast<size_t>(bitmap.width) +
+                                                   static_cast<size_t>(column)];
+            if (coverage == 0)
+              continue;
+            Rgba8 src = base;
+            src.a = static_cast<uint8_t>((coverage * base.a + 127) / 255);
+            Blend(x, y, src);
+          }
+        }
+        pen += static_cast<double>(glyph.x_advance);
+      }
+      baseline += static_cast<double>(metrics.line_height);
+    }
+  }
+
+  auto CachedGlyph(text::Font* font, const uint32_t glyph, const float size) -> const text::GlyphBitmap& {
+    const auto key = std::make_tuple(static_cast<const void*>(font), glyph, size);
+    auto it = glyphs_.find(key);
+    if (it == glyphs_.end())
+      it = glyphs_.emplace(key, font->Rasterize(glyph, size)).first;
+    return it->second;
   }
 
   void FillPixels(const PixelRect& area, const Rgba8& color) {
@@ -477,10 +561,10 @@ auto OpDrawText(void* self, const KuraVec2 pos, const char* utf8, const size_t l
   });
 }
 
-auto OpMeasureText(void*, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
+auto OpMeasureText(void* self, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
     -> Status {
   return Guard([&] {
-    return HeadlessImpl::MeasureText(utf8, length, style, out);
+    return Self(self)->MeasureText(utf8, length, style, out);
   });
 }
 
@@ -586,6 +670,11 @@ auto HeadlessRenderer::DumpCommands() const -> std::string {
         color(command.color);
         out.push_back(' ');
         AppendQuoted(out, command.text);
+        // only when there is one, so a dump of text without a family reads as it always did
+        if (!command.family.empty()) {
+          out.append(" font ");
+          AppendQuoted(out, command.family);
+        }
         break;
       case Command::Kind::kPushClip:
         out.append("push-clip");
@@ -641,7 +730,7 @@ auto HeadlessRenderer::ToPpm(const Rgba8& background) const -> std::string {
 
 auto HeadlessRenderer::MeasureText(const std::string& text, const float font_size) -> KuraTextMetrics {
   KuraTextMetrics metrics{};
-  if (HeadlessImpl::MeasureText(text.data(), text.size(), KuraTextStyle{font_size}, &metrics) != KURA_RENDERER_OK)
+  if (HeadlessImpl::FixedMetrics(text.data(), text.size(), KuraTextStyle{font_size}, &metrics) != KURA_RENDERER_OK)
     return KuraTextMetrics{};
   return metrics;
 }
@@ -656,6 +745,7 @@ KuraRendererStatus kura_headless_renderer_create(const KuraHeadlessOptions* opti
   if (options != nullptr) {
     headless.rasterize = options->rasterize != 0;
     headless.clear = options->clear;
+    headless.shaped_text = options->shaped_text != 0;
   }
   try {
     *renderer = KuraRenderer{&kOwnedOps, new HeadlessImpl(headless)};

@@ -26,6 +26,7 @@ struct Context {
   std::vector<lay::Box> boxes{};
   std::vector<std::string> texts{};
   std::vector<float> sizes{};
+  std::vector<std::string> families{};
   lay::Engine engine{};
   lay::Size viewport{lay::kUndefined, lay::kUndefined};
   bool dirty = true;
@@ -44,52 +45,66 @@ auto ContextFor(const void* table, const uint64_t count) -> Context& {
   slot->boxes.resize(count);
   slot->texts.resize(count);
   slot->sizes.assign(count, kDefaultFontSize);
+  slot->families.resize(count);
   return *slot;
 }
 
 // What the renderer can't tell us, when there is no renderer to ask: enough to keep layout working.
-auto MeasureLine(const std::string& text, const float size) -> lay::Size {
+auto MeasureLine(const std::string& text, const float size, const std::string& family) -> lay::Size {
   float width = 0;
   float height = 0;
-  if (kura_rt_measure_text(text.data(), text.size(), size, &width, &height) != 0)
+  if (kura_rt_measure_text(text.data(), text.size(), size, family.empty() ? nullptr : family.data(), family.size(),
+                           &width, &height) != 0)
     return lay::Size{static_cast<float>(text.size()) * size * 0.5f, size * 1.2f};
   return lay::Size{width, height};
 }
 
-// The size of a text node's content, wrapped at word boundaries to `max_width` when it is given.
-auto Measure(void* user, const lay::NodeId id, const lay::Scalar max_width) -> lay::Size {
-  const auto& context = *static_cast<Context*>(user);
-  const auto& text = context.texts[id];
-  const auto size = context.sizes[id];
-  const auto whole = MeasureLine(text, size);
-  if (!lay::IsDefined(max_width) || whole.width <= max_width)
-    return whole;
+// One line of a text that has been wrapped, and how big it is.
+struct Line {
+  std::string text{};
+  float width = 0;
+  float height = 0;
+};
 
-  // A word longer than the line gets a line of its own and overflows it.
-  size_t lines = 0;
-  float widest = 0;
-  std::string line{};
-  float line_width = 0;
+// A text's lines: all of it on one line when it fits in `max_width` (or there is none), and otherwise broken at
+// word boundaries. A word longer than the line gets a line of its own and overflows it. Layout measures a text
+// with this, and drawing places its lines with it, so what is drawn is what was made room for.
+auto Wrap(const std::string& text, const float size, const std::string& family, const lay::Scalar max_width)
+    -> std::vector<Line> {
+  const auto whole = MeasureLine(text, size, family);
+  if (!lay::IsDefined(max_width) || whole.width <= max_width)
+    return {Line{text, whole.width, whole.height}};
+
+  std::vector<Line> lines{};
+  Line line{};
   size_t pos = 0;
   while (pos <= text.size()) {
     const auto end = std::min(text.find(' ', pos), text.size());
     const auto word = text.substr(pos, end - pos);
     pos = end + 1;
-    const auto candidate = line.empty() ? word : line + " " + word;
-    const auto measured = MeasureLine(candidate, size);
-    if (line.empty() || measured.width <= max_width) {
-      line = candidate;
-      line_width = measured.width;
+    const auto candidate = line.text.empty() ? word : line.text + " " + word;
+    const auto measured = MeasureLine(candidate, size, family);
+    if (line.text.empty() || measured.width <= max_width) {
+      line = Line{candidate, measured.width, measured.height};
     } else {
-      widest = std::max(widest, line_width);
-      lines++;
-      line = word;
-      line_width = MeasureLine(word, size).width;
+      lines.push_back(std::move(line));
+      const auto alone = MeasureLine(word, size, family);
+      line = Line{word, alone.width, alone.height};
     }
   }
-  widest = std::max(widest, line_width);
-  lines++;
-  return lay::Size{widest, whole.height * static_cast<float>(lines)};
+  lines.push_back(std::move(line));
+  return lines;
+}
+
+// The size of a text node's content, wrapped at word boundaries to `max_width` when it is given.
+auto Measure(void* user, const lay::NodeId id, const lay::Scalar max_width) -> lay::Size {
+  const auto& context = *static_cast<Context*>(user);
+  lay::Size size{};
+  for (const auto& line : Wrap(context.texts[id], context.sizes[id], context.families[id], max_width)) {
+    size.width = std::max(size.width, line.width);
+    size.height += line.height;
+  }
+  return size;
 }
 
 auto AsDouble(const uint64_t bits) -> double {
@@ -275,17 +290,50 @@ void kura_rt_layout_set(const void* table, const uint64_t count, const uint64_t 
 }
 
 void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint64_t node, void* text,
-                             const double size) {
+                             const double size, const char* family, const uint64_t family_length) {
   auto& context = ContextFor(table, count);
   if (node >= count)
     return;
   const auto& value = static_cast<kura::String*>(text)->GetValue();
   const auto font_size = static_cast<float>(size);
-  if (context.texts[node] == value && context.sizes[node] == font_size)
+  const auto font_family = family == nullptr ? std::string{} : std::string(family, static_cast<size_t>(family_length));
+  if (context.texts[node] == value && context.sizes[node] == font_size && context.families[node] == font_family)
     return;
   context.texts[node] = value;
   context.sizes[node] = font_size;
+  context.families[node] = font_family;
   context.dirty = true;
+}
+
+void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const uint64_t color) {
+  auto& context = ContextFor(table, count);
+  if (node >= count)
+    return;
+  const auto& text = context.texts[node];
+  if (text.empty())
+    return;
+
+  // The text starts inside its padding. (A percentage padding is left out: it resolves against a width that
+  // the box doesn't keep.)
+  const auto& padding = context.nodes[node].style.padding;
+  const auto pixels = [](const lay::Length& length) {
+    return length.unit == lay::Unit::kPx ? std::max(length.value, 0.0f) : 0.0f;
+  };
+  const auto& box = context.boxes[node];
+  const auto left = pixels(padding.left);
+  const auto top = pixels(padding.top);
+  // a hair of slack, so that a box that is exactly as wide as its text doesn't wrap it for rounding
+  const auto room = box.width - left - pixels(padding.right) + 0.01f;
+
+  const auto& family = context.families[node];
+  auto y = box.y + top;
+  for (const auto& line : Wrap(text, context.sizes[node], family, room)) {
+    if (!line.text.empty()) {
+      kura_rt_render_text(box.x + left, y, line.text.data(), line.text.size(), context.sizes[node],
+                          family.empty() ? nullptr : family.data(), family.size(), color);
+    }
+    y += line.height;
+  }
 }
 
 void kura_rt_layout_run(const void* table, const uint64_t count) {

@@ -1,0 +1,124 @@
+use "math.h"
+use "stdio.h"
+
+fn sqrt(x: Float): Float => math.sqrt(x)
+
+fn print(x: String) => stdio.printf("%s\n", x)
+
+fn apply-print-pos(pos: Position) => stdio.printf("%lf, %lf\n", pos.x, pos.y)
+
+fn print-pos(x: Float, y: Float) => apply-print-pos({ x, y, })
+
+type Position = {
+  x: Float,
+  y: Float,
+}
+
+type Rect = {
+  width: Float,
+  height: Float,
+  pos: Position,
+}
+
+fn apply-print-rect(rect: Rect) =>
+  stdio.printf("%lf, %lf, %lf, %lf\n", rect.pos.x, rect.pos.y, rect.width, rect.height)
+
+fn print-rect(x: Float, y: Float, width: Float, height: Float) =>
+  apply-print-rect({ width: width, height: height } + { pos: { x: x, y: y }})
+
+type State = {
+  message?: String,
+}
+
+fn init(msg: Number): State =>
+  match msg {
+    x if x > 10 => { message: "This is 10" },
+    x if x < 0 => { message: "negative" },
+    0 => { message: "zero" },
+    _ => { message: "Hello World" },
+  }
+
+fn add(a: Int, b: Int): Int => a + b
+fn sub(a: Int, b: Int): Int => a - b
+fn mul(a: Int, b: Int): Int => a * b
+fn div(a: Int, b: Int): Int => a / b
+
+fn pipe1(): Int => 10 |> add(10)
+fn pipe2(): Int => 10 |> add(_, 10)
+fn pipe3(): Int => 10 |> sub(2, _)
+
+let pipe5 = add(_, 2) >> sub(0, _)
+
+fn pipe6(): Int => pipe5(10) // sub(0, add(10, 2)) => sub(0, 12) => -12
+
+let pipe7 = add(2, _) << sub(_, 1)
+
+fn pipe8(): Int => pipe7(10) // add(2, sub(10, 1)) => add(2, 9) => 11
+
+fn sum(items: Seq<Number>): Number =>
+  for _, item in items if item > 0 fold total = 0 => total + item
+
+fn apply(op: (Number, Number) => Number, a: Number, b: Number): Number => op(a, b)
+fn add-one(x: Number): Number => apply((a, b) => a + b, x, 1)
+
+fn messages(): Message => Click({ x: 1, y: 2, })
+fn idle(): Message => Tick
+fn piped(p: Position): Message => p |> Click()
+
+fn ordered(a: Position, b: Position): Position => { ...a, x: 1, ...b, y: 2, }
+fn nested(m: Optional<Message>): Number =>
+  match m {
+    Some(Click(p)) => 1,
+    Some(other) => 2,
+    None => 3,
+  }
+
+@meta(tags: [ Player ])
+fn view(count: Int, test: Bool): Node => {
+  let text = if count > 1 { "Done" } else { "Hello World" }
+  #block(direction: "column", gap: 16px){
+    #block(direction: "row",
+           fill: white,
+           radius: 16px,
+           width: 1fr,
+           height: 1fr,
+           padding: 10px,
+           gap: 10px){
+      #block(fill: red,
+             justify: "center",
+             align: "center"){
+        #text(font-family: "Inter", size: 24px, text-align: "center", "Hello World")
+      }
+
+      #block(fill: green, grow: 1) {
+        #text(font-family: "Inter", size: 24px, text)
+      }
+
+      #block(fill: blue){
+        #text(font-family: "Inter", size: 24px, "Hello World")
+      }
+    }
+
+    #block(direction: "row",
+           fill: white,
+           radius: 16px,
+           width: 1fr,
+           height: 1fr,
+           padding: 10px,
+           gap: 10px){
+      #block(fill: red,
+             justify: "center",
+             align: "center"){
+        #text(font-family: "Inter", size: 24px, text-align: "center", "Hello World")
+      }
+
+      #block(fill: green, grow: 1) {
+        #text(font-family: "Inter", size: 24px, text)
+      }
+
+      #block(fill: blue){
+        #text(font-family: "Inter", size: 24px, "Hello World")
+      }
+    }
+  }
+}

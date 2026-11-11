@@ -116,12 +116,23 @@ uint32_t kura_rt_viewport_height() {
   return tl_viewport_height;
 }
 
-int kura_rt_measure_text(const char* utf8, const uint64_t length, const float size, float* width, float* height) {
+void kura_rt_render_text(const double x, const double y, const char* utf8, const uint64_t length, const float size,
+                         const char* family, const uint64_t family_length, const uint64_t color) {
+  const auto& ops = Current("kura_rt_draw_text");
+  const KuraVec2 pos{static_cast<float>(x), static_cast<float>(y)};
+  const KuraTextStyle style{size, family, family == nullptr ? 0 : static_cast<size_t>(family_length)};
+  Record("kura_rt_draw_text", ops.draw_text(tl_renderer.self, pos, utf8, static_cast<size_t>(length), style,
+                                            UnpackColor(color)));
+}
+
+int kura_rt_measure_text(const char* utf8, const uint64_t length, const float size, const char* family,
+                         const uint64_t family_length, float* width, float* height) {
   if (tl_renderer.ops == nullptr || tl_renderer.ops->measure_text == nullptr)
     return 1;
   KuraTextMetrics metrics{};
-  if (tl_renderer.ops->measure_text(tl_renderer.self, utf8, static_cast<size_t>(length), KuraTextStyle{size},
-                                    &metrics) != KURA_RENDERER_OK)
+  const KuraTextStyle style{size, family, family == nullptr ? 0 : static_cast<size_t>(family_length)};
+  if (tl_renderer.ops->measure_text(tl_renderer.self, utf8, static_cast<size_t>(length), style, &metrics) !=
+      KURA_RENDERER_OK)
     return 2;
   *width = metrics.width;
   *height = metrics.height;

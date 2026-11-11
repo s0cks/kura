@@ -181,24 +181,49 @@ class DrawRectInstr : public GraphicsInstr {
   }
 };
 
-class DrawTextInstr : public GraphicsInstr {
+// Draws a text node. What is drawn, where, and at what size and in which family is the layout's: it has the
+// text, its box and its font, so the instruction only names the node, and the color is the one thing it's
+// given. The value is the text's content, kept as an input so that it is computed before the draw.
+class DrawTextInstr : public TemplateGraphicsInstr<2> {
+ public:
+  static const auto kValuePos = 0;
+  static const auto kColorPos = 1;
+
  private:
-  Value* value_;
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
 
  public:
-  explicit DrawTextInstr(Value* value) :
-    value_(value) {}
+  DrawTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color) :
+    plan_(std::move(plan)),
+    node_(node) {
+    SetInputAt(kValuePos, value);
+    SetInputAt(kColorPos, color);
+  }
   ~DrawTextInstr() override = default;
 
-  auto GetValue() const -> Value* {
-    return value_;
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
+  inline auto GetColor() const -> Value* {
+    return GetInputAt(kColorPos);
   }
 
   DECLARE_INSTRUCTION_TYPE(DrawText);
 
  public:
-  static inline auto New(Value* value) -> DrawTextInstr* {
-    return new DrawTextInstr(value);
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color)
+      -> DrawTextInstr* {
+    return new DrawTextInstr(std::move(plan), node, value, color);
   }
 };
 
@@ -390,12 +415,15 @@ class LayoutSetTextInstr : public TemplateGraphicsInstr<1> {
   std::shared_ptr<LayoutPlan> plan_;
   layout::NodeId node_;
   double font_size_;
+  std::string font_family_;
 
  public:
-  LayoutSetTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* text, const double font_size) :
+  LayoutSetTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* text, const double font_size,
+                     std::string font_family) :
     plan_(std::move(plan)),
     node_(node),
-    font_size_(font_size) {
+    font_size_(font_size),
+    font_family_(std::move(font_family)) {
     SetInputAt(0, text);
   }
   ~LayoutSetTextInstr() override = default;
@@ -416,12 +444,16 @@ class LayoutSetTextInstr : public TemplateGraphicsInstr<1> {
     return font_size_;
   }
 
+  inline auto GetFontFamily() const -> const std::string& {
+    return font_family_;
+  }
+
   DECLARE_INSTRUCTION_TYPE(LayoutSetText);
 
  public:
   static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* text,
-                         const double font_size) -> LayoutSetTextInstr* {
-    return new LayoutSetTextInstr(std::move(plan), node, text, font_size);
+                         const double font_size, std::string font_family = {}) -> LayoutSetTextInstr* {
+    return new LayoutSetTextInstr(std::move(plan), node, text, font_size, std::move(font_family));
   }
 };
 

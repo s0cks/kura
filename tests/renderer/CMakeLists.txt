@@ -19,9 +19,11 @@ target_link_libraries(kura-renderer-conformance
 add_executable(kura-renderer-tests
   test_conformance_headless.cc
   test_headless.cc
-  test_headless_golden.cc)
+  test_headless_golden.cc
+  test_headless_text.cc)
 target_link_libraries(kura-renderer-tests
   PRIVATE kura-renderer-conformance
+          kura-text
           GTest::gtest_main)
 gtest_discover_tests(kura-renderer-tests
   DISCOVERY_MODE PRE_TEST)

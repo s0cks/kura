@@ -2,3 +2,5 @@ Typst
 Jsonnet
 ABI[s]
 UI[s]
+(?i)Renderers
+stdout

@@ -40,13 +40,20 @@
 //    pixels are drawn.
 //  - Blending is source-over on non-premultiplied 8-bit channels, in integer
 //    arithmetic, with the color quantized with round(c * 255).
-//  - Text is measured and recorded, but its glyphs are not rasterized: there
-//    is no font here to rasterize them with.
+//  - Text is measured and recorded. Its glyphs are only rasterized when
+//    `HeadlessOptions::shaped_text` is on (see below).
 //
-// Text metrics are a fixed model, so layout can be tested exactly: every code
+// Text metrics are a fixed model by default, so layout can be tested exactly: every code
 // point is `0.5 * size` wide, a line is `1.25 * size` tall, and the baseline is
 // `size` below the top of a line. Text is split into lines at '\n', and the
 // width is that of the widest line. (So "" is one line tall, and "a\n" is two.)
+// The font family of a text is recorded and otherwise ignored.
+//
+// With `shaped_text`, text is shaped with HarfBuzz and drawn with FreeType from the font the `font-family`
+// names (or the system's default font), like the GL renderer does: metrics are the font's, and glyphs are
+// blended into the framebuffer. That depends on the fonts installed, so a test that asserts on exact glyph
+// pixels or sizes shouldn't use it; it's for looking at a frame (the image renderer's PNGs) and for
+// checking that layout and a real font agree.
 namespace kura::renderer {
 class HeadlessImpl;
 
@@ -65,6 +72,8 @@ struct Command {
   // kText.
   std::string text{};
   float font_size = 0.0f;
+  // kText: the `font-family` it was drawn with, empty for the default.
+  std::string family{};
 
   auto operator==(const Command& rhs) const -> bool;
   auto operator!=(const Command& rhs) const -> bool {
@@ -91,6 +100,8 @@ struct HeadlessOptions {
   bool rasterize = true;
   // What each frame is cleared to.
   KuraColor clear = {0.0f, 0.0f, 0.0f, 0.0f};
+  // Measure and draw text with real fonts instead of the fixed model.
+  bool shaped_text = false;
 };
 
 class HeadlessRenderer {
@@ -144,6 +155,8 @@ typedef struct KuraHeadlessOptions {
   // Non-zero to rasterize.
   uint8_t rasterize;
   KuraColor clear;
+  // Non-zero to measure and draw text with real fonts (see HeadlessOptions::shaped_text).
+  uint8_t shaped_text;
 } KuraHeadlessOptions;
 
 // Creates a headless renderer that owns itself: `renderer->ops->destroy` frees

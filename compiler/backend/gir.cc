@@ -37,6 +37,8 @@ auto LayoutSetTextInstr::ToString() const -> std::string {
   ss << "node=" << GetNode() << ", ";
   ss << "text=" << Name(GetText()) << ", ";
   ss << "size=" << GetFontSize();
+  if (!GetFontFamily().empty())
+    ss << ", family=\"" << GetFontFamily() << "\"";
   ss << ")";
   return ss.str();
 }
@@ -98,6 +100,10 @@ auto DrawRectInstr::ToString() const -> std::string {
 auto DrawTextInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawText(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << "text=" << Name(GetValue()) << ", ";
+  ss << "color=" << Name(GetColor());
   ss << ")";
   return ss.str();
 }

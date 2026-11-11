@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "benchmark/types.h"
-#include "benchmark/utils.h"
 #include "common.h"
 #include "frontend/syntax/parser.h"
 #include "heap/heap.h"

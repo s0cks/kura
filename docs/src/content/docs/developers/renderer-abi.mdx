@@ -32,13 +32,32 @@ status after each draw call (`kura_rt_check_renderer`).
 `sizeof(KuraRendererOps)` as it was built. New operations are only ever added at the end, so a
 host reads `struct_size` to learn which operations an older renderer has.
 
+## Text
+
+`draw_text` and `measure_text` take a `KuraTextStyle`: a font `size` in pixels and a `family`,
+the UTF-8 bytes of a `font-family` value (not NUL-terminated, with `family_length`). It is a name or a
+comma-separated list in order of preference (`Inter, sans-serif`), and `NULL` or a zero length means
+the default font. The renderer decides how to keep what it needs per family. The OpenGL renderer keeps a glyph atlas per
+font. A family that can't be found is drawn in the system's default font, never as an error.
+
+Layout measures text with `measure_text` before anything is drawn, so a renderer has to measure the way it
+draws: the same text, style and renderer always give the same metrics. `ascent` is the distance from the top
+of the box to the baseline of the first line, and `draw_text` puts the top-left of that box at `pos`.
+
+The shared `text/` library does the shaping (HarfBuzz) and the rasterizing (FreeType), and finds the font for
+a family on the system (fontconfig, with a few well-known paths when there is none). A renderer that wants
+real text uses it, and one that doesn't can keep the fixed-width model the headless renderer defaults to.
+
+`KURA_RENDERER_ABI_VERSION` is 2: version 2 added `family` to `KuraTextStyle`.
+
 ## Renderers in the tree
 
 | Renderer          | Purpose                                                                  |
 | ----------------- | ------------------------------------------------------------------------ |
-| Headless          | Implements the ABI without drawing. Used for unit tests (with GTest).    |
-| Image             | Renders to an image, for visual regression tests.                        |
-| OpenGL, Vulkan    | Platform renderers (in progress / planned).                              |
+| Headless          | Implements the ABI without drawing. Used for unit tests (with GTest). Text is a fixed-width model, or real fonts with `shaped_text`. |
+| Image             | Encodes the headless renderer's framebuffer as PNG/JPEG, for visual regression tests. |
+| OpenGL            | Draws text with HarfBuzz and a glyph atlas per font.                     |
+| Vulkan            | Planned.                                                                 |
 
 The headless renderer defines the ABI every other renderer follows, and runs without a GPU so
 that tests are simple.

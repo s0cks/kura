@@ -17,9 +17,11 @@
 // touch GL state that affects drawing.
 //
 // What's drawn today: fill_rect, stroke_rect, draw_line, push_clip and
-// pop_clip. `draw_text` checks its arguments and draws nothing, and
-// `measure_text` uses the same fixed-width model as the headless renderer, until
-// text rendering lands.
+// pop_clip, and draw_text. Text is shaped with HarfBuzz and drawn from a glyph
+// atlas the renderer keeps for each font: the `family` of a text style is looked
+// up on the system (a comma-separated list is tried in order, and a family
+// that isn't installed is drawn in the system's default font), and `measure_text`
+// measures with the same shaping, so what layout measures is what is drawn.
 
 #include <stdint.h>
 

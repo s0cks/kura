@@ -101,6 +101,26 @@ In v1 a `set` value must be a compile-time constant. That includes computed cons
 `let default-font-size = a + b` where `a` and `b` are constant. Anything that depends on
 runtime state is an error. Typst-style `show` rules are out of scope for v1.
 
+## Text
+
+`#text` takes these properties:
+
+| Property      | Meaning                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `value`       | What to show.                                                                            |
+| `size`        | The font size, in `px`.                                                                  |
+| `font-family` | The font: a name, or a comma-separated list in order of preference.                      |
+| `color`       | The color of the text. Opaque black if it isn't given.                                   |
+
+```kura
+#text(value: "Hello", size: 24px, font-family: "Inter, sans-serif", color: white)
+```
+
+`font-family` is a constant string, like `size`, because text is measured before the view runs.
+The renderer finds the first family in the list that is installed on the system, and uses the system's
+default font when none is. Text wraps at word boundaries to the room its box has, and is laid out and drawn
+with the same measurements.
+
 ## Directives on elements
 
 [Directives](/kura/reference/directives/) such as `@meta` can be attached to elements, and

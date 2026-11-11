@@ -1,0 +1,6 @@
+services:
+  build:
+    build:
+      context: .
+      dockerfile: docker/build/Dockerfile
+    image: ghcr.io/s0cks/kura/build:latest

@@ -148,8 +148,13 @@ KuraRendererStatus kura_rt_set_renderer(const KuraRenderer* renderer);
 // The renderer set on this thread, or NULL.
 const KuraRenderer* kura_rt_get_renderer();
 void kura_rt_draw_rect();
-void kura_rt_draw_text(void* text);
-
+// Draws the text node `node` of the layout `table` (see below): its content, in the font and size it was given
+// with `kura_rt_layout_set_text`, wrapped to its box and placed in it. `color` is a packed RGBA8.
+void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_t color);
+// The renderer call under `kura_rt_draw_text`: draws one run of text with the top-left of its box at (x, y).
+// `family` is the `font-family`, NULL (or a zero length) for the default font. Not called by compiled code.
+void kura_rt_render_text(double x, double y, const char* utf8, uint64_t length, float size, const char* family,
+                         uint64_t family_length, uint64_t color);
 // ── viewport and layout ────────────────────────────────────────────────────
 // The size of the surface a view lays out in and draws into. The host sets it (a window's size, say)
 // and a view reads it at the start of every frame, so changing it reflows the next frame. It is
@@ -159,17 +164,21 @@ uint32_t kura_rt_viewport_width();
 uint32_t kura_rt_viewport_height();
 
 // Measures text with this thread's renderer, outside of a frame. Returns 0 and sets `width` and
-// `height`, or non-zero (and sets nothing) when there is no renderer or it couldn't measure.
-int kura_rt_measure_text(const char* utf8, uint64_t length, float size, float* width, float* height);
+// `height`, or non-zero (and sets nothing) when there is no renderer or it couldn't measure. `family` is as
+// for `kura_rt_render_text`.
+int kura_rt_measure_text(const char* utf8, uint64_t length, float size, const char* family, uint64_t family_length,
+                         float* width, float* height);
 
 // What compiled code lays a view out with. `table` is the constant table of `count` layout nodes
 // (layout/layout.h) that the compiler emitted for one DOM tree; it also keys the layout state kept
 // for that tree on this thread, so the tree is only laid out again when something it depends on
 // changed: a text, or the viewport.
 //
-// `set_text` gives a text node its content and font size; `run` lays the tree out if it needs it;
+// `set_text` gives a text node its content, font size and font family (the family's bytes, NULL for the default
+// font); `run` lays the tree out if it needs it;
 // `get` reads a node's box back (component 0, 1, 2, 3 is x, y, width, height).
-void kura_rt_layout_set_text(const void* table, uint64_t count, uint64_t node, void* text, double size);
+void kura_rt_layout_set_text(const void* table, uint64_t count, uint64_t node, void* text, double size,
+                             const char* family, uint64_t family_length);
 // `set` changes a node's style property (a layout::Property) to a value known only at run time.
 void kura_rt_layout_set(const void* table, uint64_t count, uint64_t node, uint64_t property, uint64_t tag,
                         uint64_t bits);

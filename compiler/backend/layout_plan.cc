@@ -106,6 +106,16 @@ auto LayoutPlan::Convert(dom::Node* node, layout::Style* style, const layout::No
       continue;
     }
 
+    if (name == "font-family" && node->IsText()) {
+      // Like `size`, it has to be known when the text is measured, which is before the view runs.
+      if (!property.IsConstant() || property.constant->GetType() != kStringType) {
+        *error = tag + " 'font-family' has to be a constant string for now: text is measured before the view runs";
+        return false;
+      }
+      font_families_[id] = StringOf(property.constant);
+      continue;
+    }
+
     if (!PropertyOf(name))
       continue;
 

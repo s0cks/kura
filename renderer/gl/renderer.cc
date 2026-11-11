@@ -7,7 +7,11 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
+
+#include "text/text.h"
 
 #ifndef KURA_MAX_NUMBER_OF_VERTICES
 #define KURA_MAX_NUMBER_OF_VERTICES 16384
@@ -46,6 +50,34 @@ constexpr const char* kFragmentShader =
     "out vec4 out_color;\n"
     "void main() { out_color = v_color; }\n";
 
+// Text is drawn as textured quads: the glyph's coverage is in the atlas's red channel, and tints the color.
+constexpr const char* kTextVertexShader =
+    "#version 330 core\n"
+    "layout(location = 0) in vec2 a_pos;\n"
+    "layout(location = 1) in vec2 a_uv;\n"
+    "layout(location = 2) in vec4 a_color;\n"
+    "uniform vec2 u_res;\n"
+    "out vec2 v_uv;\n"
+    "out vec4 v_color;\n"
+    "void main() {\n"
+    "  vec2 p = a_pos / u_res * 2.0 - 1.0;\n"
+    "  gl_Position = vec4(p.x, -p.y, 0.0, 1.0);\n"
+    "  v_uv = a_uv;\n"
+    "  v_color = a_color;\n"
+    "}\n";
+
+constexpr const char* kTextFragmentShader =
+    "#version 330 core\n"
+    "in vec2 v_uv;\n"
+    "in vec4 v_color;\n"
+    "uniform sampler2D u_atlas;\n"
+    "out vec4 out_color;\n"
+    "void main() { out_color = vec4(v_color.rgb, v_color.a * texture(u_atlas, v_uv).r); }\n";
+
+// The side of a font's glyph atlas, in texels. One texture holds a family's glyphs at every size drawn; when
+// it fills up it's emptied and filled again, which only costs rasterizing what's drawn next.
+constexpr int kAtlasSize = 1024;
+
 // The same checks the headless renderer makes, so that renderers agree on what is an error.
 inline auto IsValid(const float value) -> bool {
   return std::isfinite(value);
@@ -65,7 +97,12 @@ inline auto IsValid(const KuraColor& value) -> bool {
 }
 
 inline auto IsValid(const KuraTextStyle& value) -> bool {
-  return IsValid(value.size) && value.size > 0.0f;
+  return IsValid(value.size) && value.size > 0.0f && (value.family != nullptr || value.family_length == 0);
+}
+
+inline auto FamilyOf(const KuraTextStyle& style) -> std::string {
+  return style.family == nullptr || style.family_length == 0 ? std::string{}
+                                                              : std::string(style.family, style.family_length);
 }
 
 inline auto Coord(const float value) -> float {
@@ -83,6 +120,40 @@ struct Vertex {
   float g;
   float b;
   float a;
+};
+
+struct TextVertex {
+  float x;
+  float y;
+  float u;
+  float v;
+  float r;
+  float g;
+  float b;
+  float a;
+};
+
+// Where a glyph is in its atlas, and where it sits from the pen.
+struct GlyphEntry {
+  int left = 0;
+  int top = 0;
+  int width = 0;
+  int height = 0;
+  float u0 = 0;
+  float v0 = 0;
+  float u1 = 0;
+  float v1 = 0;
+  // Nothing to draw: a space, or a glyph too big for the atlas.
+  bool empty = false;
+};
+
+// One font's glyphs: a texture packed in rows (a shelf at a time), and where each glyph went.
+struct Atlas {
+  GLuint texture = 0;
+  int cursor_x = 0;
+  int cursor_y = 0;
+  int row_height = 0;
+  std::unordered_map<uint64_t, GlyphEntry> glyphs{};
 };
 
 // A half-open rect of pixels: [x0, x1) x [y0, y1), with (0, 0) at the top-left.
@@ -108,6 +179,8 @@ struct SavedState {
   GLint vao;
   GLint array_buffer;
   GLint blend_func[4];
+  GLint active_texture;
+  GLint texture_2d;
   GLboolean blend;
   GLboolean scissor_test;
   GLboolean depth_test;
@@ -279,14 +352,65 @@ class GlImpl {
       return KURA_RENDERER_ERR_NOT_IN_FRAME;
     if (!IsValid(pos) || !IsValid(style) || !IsValid(color) || (utf8 == nullptr && length != 0))
       return KURA_RENDERER_ERR_INVALID_ARG;
-    // TODO: glyph rendering. Until then text is accepted and not drawn.
+    const auto font = fonts_.Find(FamilyOf(style));
+    if (font == nullptr)
+      return KURA_RENDERER_OK;
+    const auto lines = font->Shape(std::string_view(length == 0 ? "" : utf8, length), style.size);
+    const auto metrics = font->GetMetrics(style.size);
+
+    // what was batched is drawn first, so that text lands over it and under what comes later
+    Flush();
+    EnsureTextPipeline();
+    auto& atlas = AtlasFor(font);
+    const auto r = Channel(color.r);
+    const auto g = Channel(color.g);
+    const auto b = Channel(color.b);
+    const auto a = Channel(color.a);
+    const auto target_height = static_cast<double>(pos.y) + static_cast<double>(metrics.ascent);
+
+    auto baseline = target_height;
+    for (const auto& line : lines) {
+      auto pen = static_cast<double>(pos.x);
+      for (const auto& glyph : line.glyphs) {
+        const auto entry = GlyphFor(atlas, font, glyph.id, style.size);
+        if (entry != nullptr && !entry->empty) {
+          const auto left = static_cast<float>(std::round(pen + static_cast<double>(glyph.x_offset))) +
+                            static_cast<float>(entry->left);
+          const auto top = static_cast<float>(std::round(baseline + static_cast<double>(glyph.y_offset))) -
+                           static_cast<float>(entry->top);
+          const auto right = left + static_cast<float>(entry->width);
+          const auto bottom = top + static_cast<float>(entry->height);
+          AddGlyphQuad(atlas, TextVertex{Coord(left), Coord(top), entry->u0, entry->v0, r, g, b, a},
+                       TextVertex{Coord(right), Coord(top), entry->u1, entry->v0, r, g, b, a},
+                       TextVertex{Coord(right), Coord(bottom), entry->u1, entry->v1, r, g, b, a},
+                       TextVertex{Coord(left), Coord(bottom), entry->u0, entry->v1, r, g, b, a});
+        }
+        pen += static_cast<double>(glyph.x_advance);
+      }
+      baseline += static_cast<double>(metrics.line_height);
+    }
+    FlushText(atlas);
     return KURA_RENDERER_OK;
   }
 
-  // The fixed-width model the headless renderer uses, so layout agrees between renderers
-  // until there is a font to measure with: every code point is 0.5 * size wide, a line is
+  // The size of text in the font the family names: the same shaping the text is drawn with, so what layout
+  // measures is what gets drawn. Without any font at all, the fixed model keeps layout working.
+  auto MeasureText(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out) -> Status {
+    if (out == nullptr || !IsValid(style) || (utf8 == nullptr && length != 0))
+      return KURA_RENDERER_ERR_INVALID_ARG;
+    if (const auto font = fonts_.Find(FamilyOf(style))) {
+      const auto metrics = font->Measure(std::string_view(length == 0 ? "" : utf8, length), style.size);
+      out->width = metrics.width;
+      out->height = metrics.height;
+      out->ascent = metrics.ascent;
+      return KURA_RENDERER_OK;
+    }
+    return FixedMetrics(utf8, length, style, out);
+  }
+
+  // The fixed-width model the headless renderer uses: every code point is 0.5 * size wide, a line is
   // 1.25 * size tall, and the baseline is `size` below the top of the first line.
-  static auto MeasureText(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out)
+  static auto FixedMetrics(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out)
       -> Status {
     if (out == nullptr || !IsValid(style) || (utf8 == nullptr && length != 0))
       return KURA_RENDERER_ERR_INVALID_ARG;
@@ -327,6 +451,159 @@ class GlImpl {
   std::vector<Vertex> verts_{};
   std::vector<uint32_t> idx_{};
   SavedState saved_{};
+
+  // Text. The pipeline and the atlases are made the first time text is drawn, so a renderer that never draws
+  // any never touches them. The library finds the font of a family; an atlas is kept per font, so families
+  // that fall back to the same font share one.
+  text::FontLibrary fonts_{};
+  GLuint text_program_ = 0;
+  GLint text_u_res_ = -1;
+  GLuint text_vao_ = 0;
+  GLuint text_vbo_ = 0;
+  GLuint text_ibo_ = 0;
+  std::unordered_map<const text::Font*, Atlas> atlases_{};
+  std::vector<TextVertex> text_verts_{};
+  std::vector<uint32_t> text_idx_{};
+
+  void EnsureTextPipeline() {
+    if (text_program_ != 0)
+      return;
+    const auto vs = Compile(GL_VERTEX_SHADER, kTextVertexShader);
+    GLuint fs = 0;
+    try {
+      fs = Compile(GL_FRAGMENT_SHADER, kTextFragmentShader);
+    } catch (...) {
+      glDeleteShader(vs);
+      throw;
+    }
+    const auto program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (ok != GL_TRUE) {
+      char log[1024] = {};
+      glGetProgramInfoLog(program, sizeof(log) - 1, nullptr, log);
+      glDeleteProgram(program);
+      throw std::runtime_error(std::string("kura gl renderer: text program failed to link: ") + log);
+    }
+    text_program_ = program;
+    text_u_res_ = glGetUniformLocation(text_program_, "u_res");
+    glUseProgram(text_program_);
+    glUniform1i(glGetUniformLocation(text_program_, "u_atlas"), 0);
+
+    glGenVertexArrays(1, &text_vao_);
+    glGenBuffers(1, &text_vbo_);
+    glGenBuffers(1, &text_ibo_);
+    glBindVertexArray(text_vao_);
+    glBindBuffer(GL_ARRAY_BUFFER, text_vbo_);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, text_ibo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, u)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, r)));
+    glBindVertexArray(0);
+    text_verts_.reserve(kMaxVertices);
+    text_idx_.reserve(kMaxIndices);
+  }
+
+  auto AtlasFor(const text::Font* font) -> Atlas& {
+    auto& atlas = atlases_[font];
+    if (atlas.texture == 0) {
+      glGenTextures(1, &atlas.texture);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, atlas.texture);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, kAtlasSize, kAtlasSize, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    return atlas;
+  }
+
+  // The glyph in the atlas, rasterized and uploaded the first time it's asked for. Null only if the atlas
+  // couldn't take it, which can't happen to a glyph that fits.
+  auto GlyphFor(Atlas& atlas, text::Font* font, const uint32_t id, const float size) -> const GlyphEntry* {
+    const auto key = (static_cast<uint64_t>(id) << 32) | static_cast<uint32_t>(std::lround(size * 64.0f));
+    if (const auto it = atlas.glyphs.find(key); it != atlas.glyphs.end())
+      return &it->second;
+
+    const auto bitmap = font->Rasterize(id, size);
+    GlyphEntry entry{};
+    // one texel of room around each glyph, so nothing bleeds into its neighbor
+    if (bitmap.width == 0 || bitmap.height == 0 || bitmap.width + 1 > kAtlasSize || bitmap.height + 1 > kAtlasSize) {
+      entry.empty = true;
+      return &atlas.glyphs.emplace(key, entry).first->second;
+    }
+
+    if (atlas.cursor_x + bitmap.width + 1 > kAtlasSize) {
+      atlas.cursor_x = 0;
+      atlas.cursor_y += atlas.row_height + 1;
+      atlas.row_height = 0;
+    }
+    if (atlas.cursor_y + bitmap.height + 1 > kAtlasSize) {
+      // Full. What's queued refers to the glyphs about to go, so it's drawn before they do.
+      FlushText(atlas);
+      atlas.glyphs.clear();
+      atlas.cursor_x = atlas.cursor_y = atlas.row_height = 0;
+    }
+
+    GLint alignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, atlas.texture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, atlas.cursor_x, atlas.cursor_y, bitmap.width, bitmap.height, GL_RED,
+                    GL_UNSIGNED_BYTE, bitmap.alpha.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+
+    entry.left = bitmap.left;
+    entry.top = bitmap.top;
+    entry.width = bitmap.width;
+    entry.height = bitmap.height;
+    constexpr auto kTexel = 1.0f / static_cast<float>(kAtlasSize);
+    entry.u0 = static_cast<float>(atlas.cursor_x) * kTexel;
+    entry.v0 = static_cast<float>(atlas.cursor_y) * kTexel;
+    entry.u1 = static_cast<float>(atlas.cursor_x + bitmap.width) * kTexel;
+    entry.v1 = static_cast<float>(atlas.cursor_y + bitmap.height) * kTexel;
+    atlas.cursor_x += bitmap.width + 1;
+    atlas.row_height = std::max(atlas.row_height, bitmap.height);
+    return &atlas.glyphs.emplace(key, entry).first->second;
+  }
+
+  void AddGlyphQuad(Atlas& atlas, const TextVertex& a, const TextVertex& b, const TextVertex& c, const TextVertex& d) {
+    if (text_verts_.size() + 4 > kMaxVertices || text_idx_.size() + 6 > kMaxIndices)
+      FlushText(atlas);
+    const auto base = static_cast<uint32_t>(text_verts_.size());
+    text_verts_.insert(text_verts_.end(), {a, b, c, d});
+    text_idx_.insert(text_idx_.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+  }
+
+  // Draws the queued glyphs, which are all in `atlas`, under the clip that's current.
+  void FlushText(const Atlas& atlas) {
+    if (text_idx_.empty())
+      return;
+    glUseProgram(text_program_);
+    glUniform2f(text_u_res_, static_cast<float>(width_), static_cast<float>(height_));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, atlas.texture);
+    glBindVertexArray(text_vao_);
+    glBindBuffer(GL_ARRAY_BUFFER, text_vbo_);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(text_verts_.size() * sizeof(TextVertex)), text_verts_.data(),
+                 GL_STREAM_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, text_ibo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(text_idx_.size() * sizeof(uint32_t)),
+                 text_idx_.data(), GL_STREAM_DRAW);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(text_idx_.size()), GL_UNSIGNED_INT, nullptr);
+    text_verts_.clear();
+    text_idx_.clear();
+  }
 
   void CreateProgram() {
     const auto vs = Compile(GL_VERTEX_SHADER, kVertexShader);
@@ -380,6 +657,21 @@ class GlImpl {
     if (program_ != 0)
       glDeleteProgram(program_);
     vao_ = vbo_ = ibo_ = program_ = 0;
+
+    for (auto& [font, atlas] : atlases_) {
+      if (atlas.texture != 0)
+        glDeleteTextures(1, &atlas.texture);
+    }
+    atlases_.clear();
+    if (text_vao_ != 0)
+      glDeleteVertexArrays(1, &text_vao_);
+    if (text_vbo_ != 0)
+      glDeleteBuffers(1, &text_vbo_);
+    if (text_ibo_ != 0)
+      glDeleteBuffers(1, &text_ibo_);
+    if (text_program_ != 0)
+      glDeleteProgram(text_program_);
+    text_vao_ = text_vbo_ = text_ibo_ = text_program_ = 0;
   }
 
   void Save() {
@@ -392,6 +684,10 @@ class GlImpl {
     glGetIntegerv(GL_BLEND_DST_RGB, &saved_.blend_func[1]);
     glGetIntegerv(GL_BLEND_SRC_ALPHA, &saved_.blend_func[2]);
     glGetIntegerv(GL_BLEND_DST_ALPHA, &saved_.blend_func[3]);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &saved_.active_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &saved_.texture_2d);
+    glActiveTexture(static_cast<GLenum>(saved_.active_texture));
     saved_.blend = glIsEnabled(GL_BLEND);
     saved_.scissor_test = glIsEnabled(GL_SCISSOR_TEST);
     saved_.depth_test = glIsEnabled(GL_DEPTH_TEST);
@@ -412,6 +708,9 @@ class GlImpl {
     glBlendFuncSeparate(saved_.blend_func[0], saved_.blend_func[1], saved_.blend_func[2], saved_.blend_func[3]);
     glScissor(saved_.scissor_box[0], saved_.scissor_box[1], saved_.scissor_box[2], saved_.scissor_box[3]);
     glViewport(saved_.viewport[0], saved_.viewport[1], saved_.viewport[2], saved_.viewport[3]);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(saved_.texture_2d));
+    glActiveTexture(static_cast<GLenum>(saved_.active_texture));
     glBindBuffer(GL_ARRAY_BUFFER, saved_.array_buffer);
     glBindVertexArray(saved_.vao);
     glUseProgram(saved_.program);
@@ -556,10 +855,10 @@ auto OpDrawText(void* self, const KuraVec2 pos, const char* utf8, const size_t l
   });
 }
 
-auto OpMeasureText(void*, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
+auto OpMeasureText(void* self, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
     -> Status {
   return Guard([&] {
-    return GlImpl::MeasureText(utf8, length, style, out);
+    return Self(self)->MeasureText(utf8, length, style, out);
   });
 }
 
