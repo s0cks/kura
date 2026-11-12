@@ -1,0 +1,4 @@
+// A program's own messages are its own: `Tick` isn't a built-in, so a payload-less one is fine.
+type Message = Tick | Reset
+
+fn update(msg: Message, n: Int): Int => match msg { Tick => n + 1, Reset => 0 }

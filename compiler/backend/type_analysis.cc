@@ -9,6 +9,7 @@
 
 #include "backend/ir.h"
 #include "c_type.h"
+#include "frontend/builtins.h"
 #include "frontend/expr.h"
 #include "frontend/type_expr.h"
 #include "function.h"
@@ -195,10 +196,33 @@ class Analyzer {
     return CompileType::Any();
   }
 
-  void CollectVariants(CompileType* type) {
+  // The built-in messages (see builtins.h), by name, as the built-in declarations gave them.
+  std::unordered_map<std::string, CompileType*> builtin_variants_{};
+
+  static auto PayloadString(CompileType* variant) -> std::string {
+    return variant->GetPayload() ? variant->GetPayload()->ToString() : "";
+  }
+
+  void CollectVariants(CompileType* type, const bool builtin = false) {
     for (const auto alt : type->GetAlternatives()) {
-      if (alt->IsVariant())
-        declared_variants_[alt->GetVariantName()] = alt;
+      if (!alt->IsVariant())
+        continue;
+      const auto& name = alt->GetVariantName();
+      if (builtin) {
+        builtin_variants_[name] = alt;
+      } else if (const auto it = builtin_variants_.find(name);
+                 it != builtin_variants_.end() && PayloadString(it->second) != PayloadString(alt)) {
+        // The host builds a built-in message with its payload, so a program that reads another would read it wrongly.
+        std::string expected = "no payload";
+        for (const auto& known : BuiltinMessages()) {
+          if (known.name == name)
+            expected = "a " + std::string(known.payload);
+        }
+        const auto given = PayloadString(alt);
+        Error("`" + name + "` is a built-in message, which carries " + expected + ", not " +
+              (given.empty() ? std::string("no payload") : "a " + given));
+      }
+      declared_variants_[name] = alt;
     }
   }
 
@@ -1080,17 +1104,38 @@ class Analyzer {
     errors_(errors) {}
 
   auto Run() -> bool {
-    for (const auto decl : module_->types)
+    // The built-in declarations are in every program, and a program's own can't take their names.
+    const auto& builtins = BuiltinTypeDecls();
+    for (const auto decl : builtins)
       decls_[decl->GetName()] = decl;
+    for (const auto decl : module_->types) {
+      if (std::find_if(builtins.begin(), builtins.end(), [&](const auto* builtin) {
+            return builtin->GetName() == decl->GetName();
+          }) != builtins.end()) {
+        Error("type " + decl->GetName() + ": `" + decl->GetName() +
+              "` is a built-in type, so a program can't declare one of its own");
+        continue;
+      }
+      decls_[decl->GetName()] = decl;
+    }
 
     for (const auto binding : module_->bindings) {
       if (binding->GetAnnotation())
         annotations_[binding->GetLocal()] = binding->GetAnnotation();
     }
 
+    for (const auto decl : builtins) {
+      resolving_.insert(decl->GetName());
+      const auto type = Resolve(decl->GetDefinition(), {}, "type " + decl->GetName());
+      resolving_.erase(decl->GetName());
+      CollectVariants(type, true);
+    }
+
     for (const auto decl : module_->types) {
       if (!decl->GetParams().empty())
         continue;
+      if (decls_[decl->GetName()] != decl)
+        continue;  // it took a built-in's name, which was reported above
 
       resolving_.insert(decl->GetName());
       const auto type = Resolve(decl->GetDefinition(), {}, "type " + decl->GetName());

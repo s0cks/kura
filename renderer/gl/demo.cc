@@ -39,6 +39,7 @@
 #endif  // KURA_DEBUG
 
 namespace {
+// The window starts this big, in screen points, and can be resized.
 constexpr int kFrameSize = 1024;
 
 struct Options {
@@ -77,6 +78,18 @@ auto ParseOptions(const int argc, char** argv, Options* options) -> bool {
 void OnGlfwError(const int code, const char* message) {
   std::fprintf(stderr, "glfw error %d: %s\n", code, message);
 }
+
+// What the window tells the host between two frames, for the loop to tell the UI about.
+struct WindowState {
+  bool focus_changed = false;
+  bool focused = false;
+};
+
+void OnFocus(GLFWwindow* window, const int focused) {
+  const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
+  state->focus_changed = true;
+  state->focused = focused != 0;
+}
 }  // namespace
 
 int main(const int argc, char** argv) {
@@ -101,21 +114,15 @@ int main(const int argc, char** argv) {
   }
 
   auto session = kura::Session::Create(program.get(), &error);  // runs `init`
-  session->AddListener([&program](const kura::Session::Event& event) {
+  session->AddListener([](const kura::Session::Event& event) {
     std::println("{} => {}", kura::rt::Format(event.message), kura::rt::Format(event.state));
   });
 
   // host => UI
   session->Send(kura::rt::MakeVariant("Reset"), &error);
-  const kura::rt::KuraValue five{kura::rt::kTagInt, 5};
-  session->Send(kura::rt::MakeVariant("Set", &five), &error);
 
   std::vector<kura::rt::KuraValue> args{};
   if (options.args.empty()) {
-    const auto record = kura_rt_record_new();
-    kura_rt_record_set(record, rt::HashName("value"), "value", kura::rt::kTagInt, 0);
-    args.push_back({kura::rt::kTagRecord, (uint64_t)record});
-
     // if (!program->ZeroArguments(options.function, &args, &error)) {
     //   std::fprintf(stderr, "error2: %s\n", error.c_str());
     //   return EXIT_FAILURE;
@@ -132,7 +139,7 @@ int main(const int argc, char** argv) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 #ifdef __APPLE__
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
@@ -142,13 +149,9 @@ int main(const int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  // On a high-DPI display the framebuffer is bigger than the window, and the renderer would draw the
-  // 1024x1024 frame into one corner of it. The frame is a fixed size, so shrink the window to match.
-  int fb_width = 0;
-  int fb_height = 0;
-  glfwGetFramebufferSize(window, &fb_width, &fb_height);
-  if (fb_width > 0 && fb_height > 0 && (fb_width != kFrameSize || fb_height != kFrameSize))
-    glfwSetWindowSize(window, kFrameSize * kFrameSize / fb_width, kFrameSize * kFrameSize / fb_height);
+  WindowState window_state{};
+  glfwSetWindowUserPointer(window, &window_state);
+  glfwSetWindowFocusCallback(window, &OnFocus);
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);
 
@@ -172,12 +175,43 @@ int main(const int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  kura_rt_set_viewport(kFrameSize, kFrameSize);
+  // The UI is drawn into the whole framebuffer, so the viewport is the framebuffer's size in pixels (which on a
+  // high-DPI display is more than the window's), and it follows the window. Whenever it changes the host tells
+  // the UI with the built-in `Resized` message, so the view can use the space it has. The first frame counts as
+  // a change, so a UI is told its size before it draws.
+  int viewport_width = 0;
+  int viewport_height = 0;
 
   int exit_code = EXIT_SUCCESS;
   long frame = 0;
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
+
+    {
+      int fb_width = 0;
+      int fb_height = 0;
+      glfwGetFramebufferSize(window, &fb_width, &fb_height);
+      // a minimized window has no size to draw into, and nothing to tell the UI
+      if (fb_width > 0 && fb_height > 0 && (fb_width != viewport_width || fb_height != viewport_height)) {
+        viewport_width = fb_width;
+        viewport_height = fb_height;
+        kura_rt_set_viewport(static_cast<uint32_t>(fb_width), static_cast<uint32_t>(fb_height));
+        // host => UI
+        if (!session->Resized(fb_width, fb_height, &error)) {
+          std::cerr << "failed to send Resized: " << error << std::endl;
+          std::exit(1);
+        }
+      }
+
+      if (frame == 0 || window_state.focus_changed) {
+        window_state.focus_changed = false;
+        const auto focused = frame == 0 ? glfwGetWindowAttrib(window, GLFW_FOCUSED) != 0 : window_state.focused;
+        if (!session->Focused(focused, &error)) {
+          std::cerr << "failed to send Focused: " << error << std::endl;
+          std::exit(1);
+        }
+      }
+    }
 
     {
       // Check if the Escape key is pressed
@@ -209,13 +243,10 @@ int main(const int argc, char** argv) {
           double scaleX = static_cast<double>(fbW) / winW;
           double scaleY = static_cast<double>(fbH) / winH;
 
-          // The 1024x1024 physical viewport sits at the bottom-left of the framebuffer
           double canvasTop = winH - (kura_rt_viewport_height() / scaleY);
           double uiX = mx * scaleX;
           double uiY = (my - canvasTop) * scaleY;
 
-          std::cout << "local-ui-pos: " << uiX << ", " << uiY << std::endl;
-          session->Click(uiX, uiY, &handled, &error);
           if (!session->Click(uiX, uiY, &handled, &error)) {
             std::cerr << "failed to invoke click: " << error << std::endl;
             std::exit(1);
@@ -226,12 +257,10 @@ int main(const int argc, char** argv) {
       wasLeftDown = isLeftDown;
     }
 
-    PROFILE_BEGIN(call);
     if (!session->Render(&error)) {
       std::cerr << "failed to render: " << error << std::endl;
       std::exit(1);
     }
-    PROFILE_END(call);
 
     glfwSwapBuffers(window);
     frame++;

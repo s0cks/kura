@@ -65,6 +65,88 @@ auto ParseArgument(const std::string& text) -> rt::KuraValue {
 
   return rt::MakeString(text);
 }
+// Whether a value of this kind fits the type. Only the kind is checked, not what a record or a variant holds.
+auto Matches(CompileType* type, const uint64_t tag) -> bool {
+  bool ok = false;
+  for (const auto alt : type->GetAlternatives()) {
+    switch (alt->GetKind()) {
+      case CompileType::kAny:
+        ok = true;
+        break;
+
+      case CompileType::kNumber:
+        ok |= tag == rt::kTagInt || tag == rt::kTagFloat;
+        break;
+
+      case CompileType::kInt:
+        ok |= tag == rt::kTagInt;
+        break;
+
+      case CompileType::kFloat:
+        ok |= tag == rt::kTagFloat;
+        break;
+
+      case CompileType::kBool:
+        ok |= tag == rt::kTagBool;
+        break;
+
+      case CompileType::kNone:
+        ok |= tag == rt::kTagNone;
+        break;
+
+      case CompileType::kString:
+        ok |= tag == rt::kTagString;
+        break;
+
+      case CompileType::kPx:
+        ok |= tag == rt::kTagPx;
+        break;
+
+      case CompileType::kPct:
+        ok |= tag == rt::kTagPct;
+        break;
+
+      case CompileType::kFr:
+        ok |= tag == rt::kTagFr;
+        break;
+
+      case CompileType::kColor:
+        ok |= tag == rt::kTagColor;
+        break;
+
+      case CompileType::kNode:
+        ok |= tag == rt::kTagNode;
+        break;
+
+      case CompileType::kSeq:
+        ok |= tag == rt::kTagSeq;
+        break;
+
+      case CompileType::kRecord:
+        ok |= tag == rt::kTagRecord;
+        break;
+
+      case CompileType::kFunction:
+        ok |= tag == rt::kTagFunction;
+        break;
+
+      case CompileType::kHandle:
+        ok |= tag == rt::kTagHandle;
+        break;
+
+      case CompileType::kVariant:
+        // a Message is a variant of the type: `Increment`, not any other name
+        ok |= tag == rt::VariantTag(alt->GetVariantName());
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  return ok;
+}
+
 // The arguments of a call from a host (or the command line, which can only build scalars) are checked
 // against the function's signature: handing the code a value of the wrong type is undefined behaviour, not an
 // error it can report. Only the kind of a value is checked, not what a record or a variant holds.
@@ -91,83 +173,7 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
   for (size_t idx = 0; idx < args.size(); idx++) {
     const auto type = params[idx];
     const auto tag = args[idx].tag;
-    bool ok = false;
-    for (const auto alt : type->GetAlternatives()) {
-      switch (alt->GetKind()) {
-        case CompileType::kAny:
-          ok = true;
-          break;
-
-        case CompileType::kNumber:
-          ok |= tag == rt::kTagInt || tag == rt::kTagFloat;
-          break;
-
-        case CompileType::kInt:
-          ok |= tag == rt::kTagInt;
-          break;
-
-        case CompileType::kFloat:
-          ok |= tag == rt::kTagFloat;
-          break;
-
-        case CompileType::kBool:
-          ok |= tag == rt::kTagBool;
-          break;
-
-        case CompileType::kNone:
-          ok |= tag == rt::kTagNone;
-          break;
-
-        case CompileType::kString:
-          ok |= tag == rt::kTagString;
-          break;
-
-        case CompileType::kPx:
-          ok |= tag == rt::kTagPx;
-          break;
-
-        case CompileType::kPct:
-          ok |= tag == rt::kTagPct;
-          break;
-
-        case CompileType::kFr:
-          ok |= tag == rt::kTagFr;
-          break;
-
-        case CompileType::kColor:
-          ok |= tag == rt::kTagColor;
-          break;
-
-        case CompileType::kNode:
-          ok |= tag == rt::kTagNode;
-          break;
-
-        case CompileType::kSeq:
-          ok |= tag == rt::kTagSeq;
-          break;
-
-        case CompileType::kRecord:
-          ok |= tag == rt::kTagRecord;
-          break;
-
-        case CompileType::kFunction:
-          ok |= tag == rt::kTagFunction;
-          break;
-
-        case CompileType::kHandle:
-          ok |= tag == rt::kTagHandle;
-          break;
-
-        case CompileType::kVariant:
-          // a Message is a variant of the type: `Increment`, not any other name
-          ok |= tag == rt::VariantTag(alt->GetVariantName());
-          break;
-
-        default:
-          break;
-      }
-    }
-
+    const auto ok = Matches(type, tag);
     if (!ok) {
       *error = "argument " + std::to_string(idx + 1) + " of `" + name + "` is " + rt::Format(args[idx]) +
                ", which isn't a " + type->ToString();
@@ -227,6 +233,18 @@ auto Program::GetArity(const std::string& function) const -> int {
     return graph && graph->GetReturnType() ? static_cast<int>(graph->GetParameterTypes().size()) : -1;
   }
   return -1;
+}
+
+auto Program::Accepts(const std::string& function, const size_t param, const rt::KuraValue& value) const -> bool {
+  for (const auto fn : module_->functions) {
+    if (std::string(fn->GetName()->GetData()) != function)
+      continue;
+    const auto graph = graphs_->GetGraphFor(fn);
+    if (!graph || !graph->GetReturnType() || param >= graph->GetParameterTypes().size())
+      return false;
+    return Matches(graph->GetParameterTypes()[param], value.tag);
+  }
+  return false;
 }
 
 auto Program::HasFunction(const std::string& function) const -> bool {

@@ -1,6 +1,8 @@
 #include "backend/session.h"
 
 #include <algorithm>
+#include <format>
+#include <print>
 
 namespace kura {
 auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Session> {
@@ -17,9 +19,13 @@ auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Se
       *error = "`init` takes no arguments, but it takes " + std::to_string(program->GetArity("init"));
       return nullptr;
     }
+
     if (!program->Call("init", {}, &session->state_, error))
       return nullptr;
+
+    std::println("init state => {}", kura::rt::Format(session->state_));
   }
+
   if (session->has_update_ && program->GetArity("update") != 2) {
     *error = "`update` takes a Message and the state, but it takes " + std::to_string(program->GetArity("update")) +
              " argument(s)";
@@ -66,7 +72,11 @@ auto Session::Send(const rt::KuraValue& message, std::string* error) -> bool {
 
 auto Session::Deliver(const rt::KuraValue& message, std::string* error) -> bool {
   const auto previous = state_;
-  if (has_update_) {
+  // A built-in message (see rt::IsBuiltinMessage) is sent to every UI, whether or not it asked for it, so one
+  // that isn't in the program's Message type isn't an error: `update` can't take it, and never sees it. The
+  // listeners still do, since the host is the one that knows what it sent.
+  const auto wanted = !rt::IsBuiltinMessage(message) || program_->Accepts("update", 0, message);
+  if (has_update_ && wanted) {
     rt::KuraValue next{};
     if (!program_->Call("update", {message, state_}, &next, error))
       return false;
@@ -84,6 +94,14 @@ auto Session::Deliver(const rt::KuraValue& message, std::string* error) -> bool 
       listener(Event{message, previous, state_});
   }
   return true;
+}
+
+auto Session::Resized(const double width, const double height, std::string* error) -> bool {
+  return Send(rt::MakeResized(width, height), error);
+}
+
+auto Session::Focused(const bool focused, std::string* error) -> bool {
+  return Send(rt::MakeFocused(focused), error);
 }
 
 auto Session::Render(std::string* error) -> bool {

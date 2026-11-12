@@ -1,0 +1,5 @@
+// `Size` is a built-in type, so a program can't declare one of its own.
+type Size = { w: Int }
+type Message = Bump | Reset
+
+fn update(msg: Message, n: Int): Int => n

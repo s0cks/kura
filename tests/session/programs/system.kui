@@ -1,0 +1,19 @@
+// A program that asks for every built-in message at once, with `SystemMessage`.
+type Message = Bump | SystemMessage
+
+type State = {
+  bumps: Int,
+  resizes: Int,
+  width: Float,
+  height: Float,
+  focused: Bool,
+}
+
+fn init(): State => { bumps: 0, resizes: 0, width: 0.0, height: 0.0, focused: false }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Bump => { bumps: state.bumps + 1, resizes: state.resizes, width: state.width, height: state.height, focused: state.focused }
+    Resized(size) => { bumps: state.bumps, resizes: state.resizes + 1, width: size.width, height: size.height, focused: state.focused }
+    Focused(f) => { bumps: state.bumps, resizes: state.resizes, width: state.width, height: state.height, focused: f }
+  }

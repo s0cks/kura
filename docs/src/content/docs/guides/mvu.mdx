@@ -112,15 +112,72 @@ A few rules:
   error (`handled` is false).
 - A `Session` belongs to one thread: `Render` and `Click` go on the thread that draws.
 
-There are no global built-in messages and no subscriptions.
+There are no subscriptions, and your own Messages are yours: the runtime never invents one for you.
 
 The fixed exception is the set of built-in **event payloads** that elements can carry
 (`on-click`, `on-input`, `on-scroll`). They are predefined so the runtime and the host
 agree on how user input gets back into your UI as Messages. Only `on-click`, on blocks and
 buttons, is routed so far.
 
-Viewport changes are also delivered to `update` as a Message, so your UI can react to a
-resize without a "get viewport size" API.
+## Built-in messages
+
+Some things a UI needs to know come from the world around it, not from anything in the UI. The host
+tells it with **built-in messages**: Messages and types that every program has without declaring
+them, until a standard library exists to hold them.
+
+```kura
+type Size = { width: Float, height: Float }
+
+type SystemMessage = Resized(Size) | Focused(Bool)
+```
+
+| Message         | Sent when                                                                  |
+| --------------- | -------------------------------------------------------------------------- |
+| `Resized(Size)` | The viewport changed size, in the pixels the UI is drawn in.               |
+| `Focused(Bool)` | The UI gained (`true`) or lost (`false`) the host's input focus.           |
+
+That is how your UI reacts to a resize without a "get viewport size" API. A program gets the ones it
+asks for by listing them in its Message type, by name or all at once with `SystemMessage`:
+
+```kura
+type Message = Increment | Resized(Size)        // by name
+type Message = Increment | SystemMessage        // all of them
+
+type State = { value: Int, width: Float, height: Float }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Increment => { value: state.value + 1, width: state.width, height: state.height }
+    Resized(size) => { value: state.value, width: size.width, height: size.height }
+    _ => state
+  }
+
+fn view(state: State): Node => {
+  // wide windows lay out in a row, narrow ones in a column
+  #block(direction: if state.width > 700.0 { "row" } else { "column" }, width: 1fr, height: 1fr) {
+    #text("Hello")
+  }
+}
+```
+
+The host sends them like any other Message, or with the Session's `Resized` and `Focused`:
+
+```cpp
+kura_rt_set_viewport(width, height);     // what the view draws into
+session->Resized(width, height, &error); // and how it finds out
+session->Focused(true, &error);
+```
+
+A few rules:
+
+- A built-in message goes through `update` first and then to the listeners, like every Message. One
+  that isn't in the program's Message type is not an error: `update` can't take it and never sees it,
+  and the listeners still hear it.
+- Tell the UI its size before it first draws, and again whenever it changes. The GL demo does, and
+  resizing its window re-lays-out `examples/counter.kui`.
+- A program can't declare a type named `Size` or `SystemMessage`, and can't give `Resized` or `Focused`
+  another payload: the host builds these values, and a program that expected something else would read
+  them wrongly. Any other name, `Tick` included, is yours.
 
 ## Reactivity
 

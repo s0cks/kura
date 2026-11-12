@@ -1,0 +1,4 @@
+// `Resized` is a built-in message: it carries a Size, so a program can't say it carries something else.
+type Message = Bump | Resized(Int)
+
+fn update(msg: Message, n: Int): Int => n

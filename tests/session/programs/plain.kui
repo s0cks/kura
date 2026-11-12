@@ -1,0 +1,14 @@
+// A program that doesn't ask for any built-in message: its Message type lists none.
+type Message = Bump | Reset
+
+type State = {
+  value: Int,
+}
+
+fn init(): State => { value: 0 }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Bump => { value: state.value + 1 }
+    Reset => { value: 0 }
+  }

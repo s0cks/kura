@@ -79,7 +79,7 @@ Boxes are the absolute most basic UI primitive
   <Property name="shrink" types={["Number"]}>
     Flex shrink factor when space is constrained (`>= 0`).
   </Property>
-  <Property name="basis" types={["Px", "Pct", "Fr"]} allowAuto>
+  <Property name="basis" types={["Px", "Pct", "Fr"]} allowAuto={true}>
     Initial main-axis size before growing or shrinking (`>= 0`).
   </Property>
   <Property name="align-self" types={["Align"]}>
@@ -170,10 +170,8 @@ A <Node name="box" /> for displaying text
   <Property name="text-align" types={["String"]}>
     Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
   </Property>
-
   <TableSeparator text="Positional Arguments"
                   color="primary" />
-
   <Property name="value"
             types={["String"]}>
     The text to render
@@ -220,9 +218,7 @@ A single-line <Node name="box" /> for user input.
   <Property name="on-input" types={["Message"]}>
     Message dispatched when the user edits the text.
   </Property>
-
   <TableSeparator text="Positional Properties" />
-
   <Property name="value" types={["String"]}>
     The current text value inside the input.
   </Property>
@@ -254,9 +250,7 @@ A <Node name="box" /> for rendering an image
   <Property name="fit" types={["String"]}>
     How the image scales inside its box: `"contain"`, `"cover"`, `"fill"`, or `"none"`.
   </Property>
-
   <TableSeparator text="Positional Properties" />
-
   <Property name="source" types={["String"]}>
     The source uri for the image
   </Property>
@@ -277,7 +271,7 @@ A <Node name="box" /> for rendering an image
 
 A <Node name="box" /> that response to clicks
 
-<PropertyTable inherits={"box"}>
+<PropertyTable inherits={"container"}>
 </PropertyTable>
 
 <Example>
@@ -323,9 +317,7 @@ A <Node name="container" /> for displaying multiple children
 A <Node name="box" /> visual indicator showing completion progress.
 
 <PropertyTable inherits={"box"}>
-
   <TableSeparator text="Positional Properties" />
-
   <Property name="value"
           types={[ "Number" ]}>
     Completion ratio between `0` (empty) and `1` (complete).

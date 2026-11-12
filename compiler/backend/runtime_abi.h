@@ -59,6 +59,22 @@ auto Format(const KuraValue& value) -> std::string;
 // `Increment` or `Set(5)`, so a host can send it to `update`.
 auto MakeVariant(std::string_view name, const KuraValue* payload = nullptr) -> KuraValue;
 
+// ── Built-in messages ──
+// What the runtime and the host tell a UI about the world around it (see frontend/builtins.h for the types, and
+// the MVU guide for how a program asks for them). The host builds them with these, and sends them with
+// `Session::Send` like any other Message, or with the Session's `Resized` and `Focused`.
+auto MakeInt(int64_t value) -> KuraValue;
+auto MakeFloat(double value) -> KuraValue;
+auto MakeBool(bool value) -> KuraValue;
+// The built-in `Size`: `{ width, height }`, in pixels.
+auto MakeSize(double width, double height) -> KuraValue;
+// `Resized(Size)`: the viewport is now this big.
+auto MakeResized(double width, double height) -> KuraValue;
+// `Focused(Bool)`: the UI gained (true) or lost (false) the host's input focus.
+auto MakeFocused(bool focused) -> KuraValue;
+// Whether `message` is one of the built-in messages.
+auto IsBuiltinMessage(const KuraValue& message) -> bool;
+
 // What a place on the screen can mean to the view. Only clicks are routed so far.
 enum EventKind : uint64_t {
   kEventClick = 1,

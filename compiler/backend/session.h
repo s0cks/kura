@@ -83,6 +83,14 @@ class Session {
   // queued and delivered once the one being delivered is done, and this returns true for it at once.
   auto Send(const rt::KuraValue& message, std::string* error) -> bool;
 
+  // The built-in messages (see frontend/builtins.h), sent like any other. A program gets the ones its Message
+  // type lists; for one that doesn't, `update` is skipped (not an error) and the listeners still hear it.
+  //   Resized(Size)   the viewport is now this big, in the pixels the UI is drawn in. Set the viewport too
+  //                   (`kura_rt_set_viewport`): that is what the view draws into, and this is how it finds out.
+  //   Focused(Bool)   the UI gained or lost the host's input focus.
+  auto Resized(double width, double height, std::string* error) -> bool;
+  auto Focused(bool focused, std::string* error) -> bool;
+
   // Listeners hear every Message, from either side, after `update` has. Removing one while a Message is being
   // delivered takes effect for the next listener that hasn't been called yet.
   auto AddListener(Listener listener) -> ListenerId;

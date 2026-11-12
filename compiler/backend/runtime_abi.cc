@@ -1,5 +1,6 @@
 #include "backend/runtime_abi.h"
 
+#include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
@@ -344,6 +345,41 @@ auto Format(const KuraValue& value) -> std::string {
 
 auto MakeString(const std::string& value) -> KuraValue {
   return {kTagString, reinterpret_cast<uint64_t>(String::New(value))};
+}
+
+auto MakeInt(const int64_t value) -> KuraValue {
+  return {kTagInt, static_cast<uint64_t>(value)};
+}
+
+auto MakeFloat(const double value) -> KuraValue {
+  return {kTagFloat, std::bit_cast<uint64_t>(value)};
+}
+
+auto MakeBool(const bool value) -> KuraValue {
+  return {kTagBool, value ? 1ULL : 0ULL};
+}
+
+auto MakeSize(const double width, const double height) -> KuraValue {
+  const auto record = kura_rt_record_new();
+  const auto w = MakeFloat(width);
+  const auto h = MakeFloat(height);
+  kura_rt_record_set(record, HashName("width"), "width", w.tag, w.bits);
+  kura_rt_record_set(record, HashName("height"), "height", h.tag, h.bits);
+  return {kTagRecord, reinterpret_cast<uint64_t>(record)};
+}
+
+auto MakeResized(const double width, const double height) -> KuraValue {
+  const auto size = MakeSize(width, height);
+  return MakeVariant("Resized", &size);
+}
+
+auto MakeFocused(const bool focused) -> KuraValue {
+  const auto value = MakeBool(focused);
+  return MakeVariant("Focused", &value);
+}
+
+auto IsBuiltinMessage(const KuraValue& message) -> bool {
+  return message.tag == VariantTag("Resized") || message.tag == VariantTag("Focused");
 }
 
 auto MakeVariant(const std::string_view name, const KuraValue* payload) -> KuraValue {

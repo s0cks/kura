@@ -11,9 +11,6 @@ a deterministic rendering pipeline.
 
 By treating the UI as a compile-time data structure, Kura bypasses the overhead of traditional virtual DOM architectures.
 
-Kura transforms your view declarations directly into a reactive, dependency-sorted render graph built to execute inside
-game engine loops at native speeds.
-
 ---
 
 ## Influenced By
@@ -41,26 +38,28 @@ Kura is engineered to solve these friction points by providing:
 A complete counter implementation in Kura follows the Model-View-Update (MVU) pattern:
 
 ```kura
-type Message = Increment(Int) | Decrement(Int) | Reset | Set(Int) | Hover
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size)
 
 type State = {
   value: Int,
+  width: Float,
+  height: Float,
 }
-
-fn init(): State => { value: 1 }
+ 
+fn init(): State => { value: 1, width: 0.0, height: 0.0 }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment(n) => { state | value += n }
-    Decrement(n) => { state | value -= n }
-    Reset => { value: 0 }
-    Set(n) => { value: n }
+    Increment => { value: state.value + 1, width: state.width, height: state.height }
+    Decrement => { value: state.value - 1, width: state.width, height: state.height }
+    Reset => { value: 0, width: state.width, height: state.height }
+    Set(n) => { value: n, width: state.width, height: state.height }
+    Resized(size) => { value: state.value, width: size.width, height: size.height }
     _ => state
   }
 
 fn view(state: State): Node => {
   let label = if state.value > 0 { "Positive" } else { "Zero or less" }
-
   #block(direction: "column",
          width: 1fr,
          height: 1fr,
@@ -68,11 +67,20 @@ fn view(state: State): Node => {
          gap: 10px,
          fill: if state.value > 0 { white } else { red }) {
     #text(size: 24px, label)
-    #button(on-click: Increment(1)) {
-      #text(size: 24px, "+")
+
+    #button(on-click: Increment,
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Increment")
     }
-    #button(fill: white, on-click: Decrement(1)) {
-      #text(size: 24px, "-")
+
+    #button(fill: white,
+            on-click: Decrement,
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Decrement")
     }
   }
 }
@@ -101,7 +109,6 @@ while(running) {
 ## Examples
 
 > The following example is ran using the headless renderer, and therefore don't draw any graphics.
-> The headless renderer just renders the draw commands to stdout
 
 ### A simple example
 

@@ -28,6 +28,17 @@ auto SetMessage(const int64_t value) -> rt::KuraValue {
   return rt::MakeVariant("Set", &payload);
 }
 
+// The counter's `value`, which is what these tests are about: its state also keeps the size of the viewport.
+auto ValueOf(const rt::KuraValue& state) -> int64_t {
+  const auto field = kura_rt_record_get(reinterpret_cast<void*>(state.bits), rt::HashName("value"));
+  return static_cast<int64_t>(field.bits);
+}
+
+// `{ value: 2 }`
+auto Describe(const rt::KuraValue& state) -> std::string {
+  return "{ value: " + std::to_string(ValueOf(state)) + " }";
+}
+
 // What a listener saw of one Message.
 struct Heard {
   std::string message;
@@ -56,13 +67,13 @@ class SessionTest : public ::testing::Test {
   }
 
   auto State() const -> std::string {
-    return rt::Format(session_->GetState());
+    return Describe(session_->GetState());
   }
 
   // A listener that writes what it heard into `heard_`.
   auto Listen(const int id) -> Session::ListenerId {
     return session_->AddListener([this, id](const Session::Event& event) {
-      heard_.push_back(Heard{rt::Format(event.message), rt::Format(event.previous), rt::Format(event.state), id});
+      heard_.push_back(Heard{rt::Format(event.message), Describe(event.previous), Describe(event.state), id});
     });
   }
 
@@ -206,7 +217,7 @@ TEST_F(SessionTest, AMessageSentFromAListenerWaitsItsTurn) {
       std::string error{};
       EXPECT_TRUE(session_->Send(Message("Reset"), &error)) << error;
       // still inside the Increment: nothing has changed under this listener
-      EXPECT_EQ(rt::Format(session_->GetState()), "{ value: 2 }");
+      EXPECT_EQ(Describe(session_->GetState()), "{ value: 2 }");
     }
   });
   Listen(2);

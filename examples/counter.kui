@@ -1,36 +1,63 @@
-type Message = Increment(Int) | Decrement(Int) | Reset | Set(Int) | Hover
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size)
 
 type State = {
   value: Int,
+  width: Float,
+  height: Float,
 }
-
-fn init(): State => { value: 1 }
+ 
+fn init(): State => { value: 1, width: 0.0, height: 0.0 }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment(n) => { state | value += n }
-    Decrement(n) => { state | value -= n }
-    Reset => { state | value: 0 }
-    Set(n) => { state | value: n }
+    Increment => { value: state.value + 1, width: state.width, height: state.height }
+    Decrement => { value: state.value - 1, width: state.width, height: state.height }
+    Reset => { value: 0, width: state.width, height: state.height }
+    Set(n) => { value: n, width: state.width, height: state.height }
+    Resized(size) => { value: state.value, width: size.width, height: size.height }
     _ => state
   }
 
 fn view(state: State): Node => {
-  let label = if state.value > 0 { "Positive" } else { "Zero or less" }
+  let label = match state.value {
+    n if n > 0 => "Positive",
+    n if n < 0 => "Negative",
+    0 => "Zero",
+    _ => "None",
+  }
+
+  let wide = state.width > 700.0
   #block(direction: "column",
+         justify: "center",
          width: 1fr,
          height: 1fr,
          padding: 10px,
          gap: 10px,
-         fill: if state.value > 0 { green } else { red }) {
-    #text(size: 24px, label)
-
-    #button(fill: white, on-click: Increment(1)) {
-      #text(size: 24px, "Increment")
+         fill: match state.value {
+                n if n > 0 => green,
+                n if n < 0 => red,
+                _ => white,
+              }){
+    #block(direction: "row",
+         justify: "center"){
+      #text(size: 24px, label)
     }
 
-    #button(fill: white, on-click: Decrement(1)) {
-      #text(size: 24px, "Decrement")
+    #button(on-click: Increment,
+            justify: "center",
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Increment")
+    }
+
+    #button(fill: white,
+            on-click: Decrement,
+            justify: "center",
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Decrement")
     }
   }
 }

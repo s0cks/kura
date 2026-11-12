@@ -43,6 +43,10 @@ class Program {
   // Whether the program defines `function`: a host asks for `init` and `update`, which are optional.
   auto HasFunction(const std::string& function) const -> bool;
 
+  // Whether `function`'s parameter number `param` (from 0) takes a value like `value`: the same check a call
+  // makes. A host asks it of `update` before sending a built-in message the program may not have asked for.
+  auto Accepts(const std::string& function, size_t param, const rt::KuraValue& value) const -> bool;
+
   // The number of parameters of `function`, or -1 if there is no such function.
   auto GetArity(const std::string& function) const -> int;
 
