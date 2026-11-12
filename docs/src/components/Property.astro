@@ -1,0 +1,49 @@
+---
+import type { ComponentProps } from 'astro/types';
+import Type from './Type.astro';
+
+type TypeProps = ComponentProps<typeof Type>;
+type TypeList = (string | TypeProps)[];
+
+interface Props {
+  name: string;
+  types?: TypeList;
+  desc: string;
+  allowAuto?: boolean;
+}
+
+const {
+  name,
+  types = [],
+  desc,
+  allowAuto = false,
+} = Astro.props;
+
+const hasContent = types.length > 0 || allowAuto;
+---
+<tr>
+  <td>{name}</td>
+  <td>
+    {hasContent ? (
+      <>
+        {types.map((item, index) => (
+          <>
+            {index > 0 && ' | '}
+            {typeof item === 'string' ? <Type name={item} /> : <Type {...item} />}
+          </>
+        ))}
+        {allowAuto && (
+          <>
+            {types.length > 0 && ' | '}
+            <span>auto</span>
+          </>
+        )}
+      </>
+    ) : (
+      '-'
+    )}
+  </td>
+  <td>
+    <slot>{desc}</slot>
+  </td>
+</tr>

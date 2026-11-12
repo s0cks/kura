@@ -7,6 +7,32 @@
 #include "ir.h"
 
 namespace kura {
+class TracyBeginZoneInstr : public EntryInstr {
+ public:
+  TracyBeginZoneInstr() {}
+  ~TracyBeginZoneInstr() override = default;
+
+  DECLARE_INSTRUCTION_TYPE(TracyBeginZone);
+
+ public:
+  static inline auto New() -> TracyBeginZoneInstr* {
+    return new TracyBeginZoneInstr();
+  }
+};
+
+class TracyEndZoneInstr : public Instruction {
+ public:
+  TracyEndZoneInstr() = default;
+  ~TracyEndZoneInstr() override = default;
+
+  DECLARE_INSTRUCTION_TYPE(TracyEndZone);
+
+ public:
+  static inline auto New() -> TracyEndZoneInstr* {
+    return new TracyEndZoneInstr();
+  }
+};
+
 class CheckRendererStatusInstr : public Instruction {
  private:
   Value* value_;
@@ -227,6 +253,53 @@ class DrawTextInstr : public TemplateGraphicsInstr<2> {
   }
 };
 
+// Says that the box of a node means a Message when an event of `kind` (`rt::EventKind`) happens in it. It is
+// emitted where the node is drawn, after layout, so the box is the one that was drawn, and the runtime keeps
+// it for the frame for a host to look up.
+class RegisterEventInstr : public TemplateGraphicsInstr<1> {
+ public:
+  static const auto kMessagePos = 0;
+
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
+  uint64_t kind_;
+
+ public:
+  RegisterEventInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const uint64_t kind,
+                     Value* message) :
+    plan_(std::move(plan)),
+    node_(node),
+    kind_(kind) {
+    SetInputAt(kMessagePos, message);
+  }
+  ~RegisterEventInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetKind() const -> uint64_t {
+    return kind_;
+  }
+
+  inline auto GetMessage() const -> Value* {
+    return GetInputAt(kMessagePos);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(RegisterEvent);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const uint64_t kind,
+                         Value* message) -> RegisterEventInstr* {
+    return new RegisterEventInstr(std::move(plan), node, kind, message);
+  }
+};
+
 class PushClipInstr : public GraphicsInstr {
  public:
   PushClipInstr() = default;
@@ -344,16 +417,16 @@ class DrawCircleInstr : public GraphicsInstr {
   }
 };
 
-class DrawElipseInstr : public GraphicsInstr {
+class DrawEllipseInstr : public GraphicsInstr {
  public:
-  DrawElipseInstr() = default;
-  ~DrawElipseInstr() override = default;
+  DrawEllipseInstr() = default;
+  ~DrawEllipseInstr() override = default;
 
-  DECLARE_INSTRUCTION_TYPE(DrawElipse);
+  DECLARE_INSTRUCTION_TYPE(DrawEllipse);
 
  public:
-  static inline auto New() -> DrawElipseInstr* {
-    return new DrawElipseInstr();
+  static inline auto New() -> DrawEllipseInstr* {
+    return new DrawEllipseInstr();
   }
 };
 

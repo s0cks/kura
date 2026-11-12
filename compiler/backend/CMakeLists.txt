@@ -9,6 +9,7 @@ target_sources(kura-compiler
          flow_graph_compiler.cc
          ir.cc
          gir.cc
+         stub.cc
          ir_printer.cc
          jit.cc
          layout_plan.cc
@@ -16,7 +17,9 @@ target_sources(kura-compiler
          program.cc
          purity_analysis.cc
          runtime_abi.cc
+         runtime_events.cc
          runtime_layout.cc
+         session.cc
          runtime_renderer.cc
          type_analysis.cc
          node_visitor.cc

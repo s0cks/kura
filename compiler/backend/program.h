@@ -40,6 +40,12 @@ class Program {
   auto Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
             std::string* error) -> bool;
 
+  // Whether the program defines `function`: a host asks for `init` and `update`, which are optional.
+  auto HasFunction(const std::string& function) const -> bool;
+
+  // The number of parameters of `function`, or -1 if there is no such function.
+  auto GetArity(const std::string& function) const -> int;
+
   // One value per parameter of `function`, each the zero of its type (0, 0.0, false, none, ""),
   // for a host that has nothing better to pass. False, with `error` set, if a parameter has no
   // such value.

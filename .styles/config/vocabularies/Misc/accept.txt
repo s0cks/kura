@@ -4,3 +4,4 @@ ABI[s]
 UI[s]
 (?i)Renderers
 stdout
+(?i)GIR

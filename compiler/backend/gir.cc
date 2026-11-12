@@ -97,6 +97,17 @@ auto DrawRectInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto RegisterEventInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "RegisterEvent(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << "kind=" << GetKind() << ", ";
+  ss << "message=" << Name(GetMessage());
+  ss << ")";
+  return ss.str();
+}
+
 auto DrawTextInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawText(";
@@ -171,9 +182,9 @@ auto DrawCircleInstr::ToString() const -> std::string {
   return ss.str();
 }
 
-auto DrawElipseInstr::ToString() const -> std::string {
+auto DrawEllipseInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "DrawElipse(";
+  ss << "DrawEllipse(";
   ss << ")";
   return ss.str();
 }

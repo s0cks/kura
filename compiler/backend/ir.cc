@@ -92,7 +92,7 @@ auto GotoInstr::ToString() const -> std::string {
 auto NewNodeInstr::ToString() const -> std::string {
   switch (GetKind()) {
 #define DEFINE_CASE(Name, Tag) \
-  case Kind::k##Name:     \
+  case Kind::k##Name:          \
     return "NewNode(" #Name ")";
 
     FOR_EACH_ELEMENT_NODE(DEFINE_CASE)
@@ -268,6 +268,20 @@ auto LabelInstr::ToString() const -> std::string {
   if (HasLabel())
     ss << GetLabel()->GetData();
 
+  ss << ")";
+  return ss.str();
+}
+
+auto TracyBeginZoneInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "TracyBeginZoneInstr(";
+  ss << ")";
+  return ss.str();
+}
+
+auto TracyEndZoneInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "TracyEndZoneInstr(";
   ss << ")";
   return ss.str();
 }

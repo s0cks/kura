@@ -1,0 +1,52 @@
+---
+interface Props {
+  text?: string;
+  colspan?: number;
+  color?: 'purple' | 'red' | 'blue' | 'green' | string;
+}
+
+const {
+  text,
+  color = '',
+  colspan = 3,
+} = Astro.props;
+---
+<tr class="table-separator" data-color={color || "primary"}>
+  <td colspan={colspan}>
+    {text ? <span>{text}</span> : <slot />}
+  </td>
+</tr>
+
+<style>
+tr.table-separator {
+  text-align: center;
+  width: 100%;
+  background-color: var(--flexoki-ui, white);
+  color: var(--color-flexoki-tx, black);
+}
+
+tr.table-separator > td {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+tr.table-separator > td > span {
+  letter-spacing: 0.05em;
+}
+
+tr.table-separator[data-color="primary"] {
+  background-color: var(--color-flexoki-pu2, purple);
+}
+
+tr.table-separator[data-color="purple"] {
+  background-color: var(--color-flexoki-pu2, purple);
+}
+
+tr.table-separator[data-color="red"] {
+  background-color: var(--color-flexoki-re2, red);
+}
+
+tr.table-separator[data-color="blue"] {
+  background-color: var(--color-flexoki-bl2, blue);
+}
+</style>

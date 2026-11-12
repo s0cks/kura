@@ -364,4 +364,14 @@ double kura_rt_layout_get(const void* table, const uint64_t count, const uint64_
       return 0;
   }
 }
+
+void kura_rt_register_event(const void* table, const uint64_t count, const uint64_t node, const uint64_t kind,
+                            const uint64_t tag, const uint64_t bits) {
+  auto& context = ContextFor(table, count);
+  if (node >= count)
+    return;
+  // the place is the node's box as laid out this frame, which is what was just drawn
+  const auto& box = context.boxes[node];
+  kura_rt_event_add(box.x, box.y, box.width, box.height, kind, tag, bits);
+}
 }

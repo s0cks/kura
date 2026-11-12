@@ -123,6 +123,8 @@ auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
 #else
     Emit(defn);
 #endif  // KURA_DEBUG
+    if (enable_tracing_)
+      Emit(TracyBeginZoneInstr::New());
   }
 
   NodeVisitor for_body(this);
@@ -136,6 +138,8 @@ auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
 #else
     Emit(defn);
 #endif  // KURA_DEBUG
+    if (enable_tracing_)
+      Emit(TracyEndZoneInstr::New());
   }
 
   Terminate(ReturnInstr::New());

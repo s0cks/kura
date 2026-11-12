@@ -54,6 +54,16 @@ static inline constexpr auto IsVariantTag(const uint64_t tag) -> bool {
 
 auto Format(const KuraValue& value) -> std::string;
 
+// A variant, which is what a Message is: `MakeVariant("Increment")`, or with a payload,
+// `MakeVariant("Set", &five)`. The payload is copied. It is the same value compiled code builds for
+// `Increment` or `Set(5)`, so a host can send it to `update`.
+auto MakeVariant(std::string_view name, const KuraValue* payload = nullptr) -> KuraValue;
+
+// What a place on the screen can mean to the view. Only clicks are routed so far.
+enum EventKind : uint64_t {
+  kEventClick = 1,
+};
+
 auto MakeString(const std::string& value) -> KuraValue;
 }  // namespace kura::rt
 
@@ -105,7 +115,8 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_layout_set_text)      \
   V(kura_rt_layout_set)           \
   V(kura_rt_layout_run)           \
-  V(kura_rt_layout_get)
+  V(kura_rt_layout_get)           \
+  V(kura_rt_register_event)
 // clang-format on
 
 extern "C" {
@@ -213,6 +224,30 @@ void* kura_rt_string_from_cstr(const char* data, const char* what);
 void* kura_rt_string_from_cstr_opt(const char* data);
 [[noreturn]] void kura_rt_ffi_overflow(int64_t value, const char* what);
 [[noreturn]] void kura_rt_ffi_error(const char* message);
+}
+
+// ── events ─────────────────────────────────────────────────────────────────
+// UI => host. A node with an event property (`#button(on-click: Increment)`) tells the runtime, as the
+// view draws it, that its box means a Message when that kind of event happens inside it. The runtime keeps
+// those places for the frame, in drawing order, and a host asks which one an event landed on. The
+// Session in session.h does that, and sends the Message it finds through `update` like any other.
+//
+// The places belong to the thread that ran the view, like the renderer, and a frame forgets them: a view
+// begins its frame with `kura_rt_begin_frame`, which clears them, before it records its own.
+// `kura_rt_events_clear` does the same for a host that wants them gone sooner. A Message is valid until the places
+// are cleared.
+extern "C" {
+// Called by compiled code, after layout, with the Message the node's property evaluated to.
+void kura_rt_register_event(const void* table, uint64_t count, uint64_t node, uint64_t kind, uint64_t tag,
+                            uint64_t bits);
+// The registration under it: the place is the rectangle (x, y, width, height), in the coordinates the view
+// was drawn in.
+void kura_rt_event_add(double x, double y, double width, double height, uint64_t kind, uint64_t tag, uint64_t bits);
+void kura_rt_events_clear();
+uint64_t kura_rt_event_count();
+// The Message of the last place of `kind` drawn that contains (x, y), which is the topmost one: a parent is
+// drawn before its children. Returns 1 and sets `message`, or 0 and sets nothing if there is none.
+int kura_rt_event_hit(uint64_t kind, double x, double y, KuraValue* message);
 }
 
 #endif  // KURA_RUNTIME_ABI_H

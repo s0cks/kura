@@ -65,9 +65,9 @@ auto ParseArgument(const std::string& text) -> rt::KuraValue {
 
   return rt::MakeString(text);
 }
-// The command line can only build scalars, so the arguments of a call from it
-// are checked against the function's signature: handing the code a value of the
-// wrong type is undefined behaviour, not an error it can report.
+// The arguments of a call from a host (or the command line, which can only build scalars) are checked
+// against the function's signature: handing the code a value of the wrong type is undefined behaviour, not an
+// error it can report. Only the kind of a value is checked, not what a record or a variant holds.
 auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name,
                     const std::vector<rt::KuraValue>& args, std::string* error) -> bool {
   FlowGraph* graph = nullptr;
@@ -134,6 +134,35 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
           ok |= tag == rt::kTagFr;
           break;
 
+        case CompileType::kColor:
+          ok |= tag == rt::kTagColor;
+          break;
+
+        case CompileType::kNode:
+          ok |= tag == rt::kTagNode;
+          break;
+
+        case CompileType::kSeq:
+          ok |= tag == rt::kTagSeq;
+          break;
+
+        case CompileType::kRecord:
+          ok |= tag == rt::kTagRecord;
+          break;
+
+        case CompileType::kFunction:
+          ok |= tag == rt::kTagFunction;
+          break;
+
+        case CompileType::kHandle:
+          ok |= tag == rt::kTagHandle;
+          break;
+
+        case CompileType::kVariant:
+          // a Message is a variant of the type: `Increment`, not any other name
+          ok |= tag == rt::VariantTag(alt->GetVariantName());
+          break;
+
         default:
           break;
       }
@@ -141,8 +170,7 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
 
     if (!ok) {
       *error = "argument " + std::to_string(idx + 1) + " of `" + name + "` is " + rt::Format(args[idx]) +
-               ", which isn't a " + type->ToString() +
-               " (the command line can only pass numbers, units, bools, none and strings)";
+               ", which isn't a " + type->ToString();
       return false;
     }
   }
@@ -189,6 +217,20 @@ auto Program::Load(const std::string& path, const Options& options, std::string*
 auto Program::Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
                    std::string* error) -> bool {
   return CheckArguments(module_, graphs_, function, args, error) && jit_->Call(function, args, result, error);
+}
+
+auto Program::GetArity(const std::string& function) const -> int {
+  for (const auto fn : module_->functions) {
+    if (std::string(fn->GetName()->GetData()) != function)
+      continue;
+    const auto graph = graphs_->GetGraphFor(fn);
+    return graph && graph->GetReturnType() ? static_cast<int>(graph->GetParameterTypes().size()) : -1;
+  }
+  return -1;
+}
+
+auto Program::HasFunction(const std::string& function) const -> bool {
+  return GetArity(function) >= 0;
 }
 
 auto Program::ZeroArguments(const std::string& function, std::vector<rt::KuraValue>* args, std::string* error) const

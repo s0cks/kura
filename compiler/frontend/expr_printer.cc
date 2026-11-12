@@ -82,6 +82,7 @@ auto ExprPrinter::VisitCase(CaseExpr* expr) -> VisitResult {
     stream() << " if ";
     PrintChild(expr->GetGuard());
   }
+
   stream() << " => ";
   PrintChild(expr->GetBody());
   stream() << ')';
@@ -95,11 +96,13 @@ auto ExprPrinter::VisitMatch(MatchExpr* expr) -> VisitResult {
     stream() << ' ';
     PrintChild(arm);
   }
+
   if (expr->HasWildcard()) {
     stream() << " (case _ => ";
     PrintChild(expr->GetWildcard());
     stream() << ')';
   }
+
   stream() << ')';
   return true;
 }
@@ -111,6 +114,7 @@ auto ExprPrinter::VisitNode(NodeExpr* expr) -> VisitResult {
     stream() << ' ';
     PrintChild(property);
   }
+
   PrintChildren(expr->GetChildren());
   stream() << ')';
   return true;
@@ -134,12 +138,14 @@ auto ExprPrinter::VisitListComprehension(ListComprehensionExpr* expr) -> VisitRe
   stream() << "(for ";
   if (expr->GetIndex() != nullptr)
     stream() << NameOf(expr->GetIndex()) << ", ";
+
   stream() << expr->GetBinding() << " in ";
   PrintChild(expr->GetIterable());
   if (expr->HasClause()) {
     stream() << " if ";
     PrintChild(expr->GetClause());
   }
+
   stream() << " => ";
   PrintChild(expr->GetBody());
   stream() << ')';
@@ -150,12 +156,14 @@ auto ExprPrinter::VisitFold(FoldExpr* expr) -> VisitResult {
   stream() << "(fold ";
   if (expr->GetIndex() != nullptr)
     stream() << NameOf(expr->GetIndex()) << ", ";
+
   stream() << (expr->GetBinding() != nullptr ? NameOf(expr->GetBinding()) : std::string("_")) << " in ";
   PrintChild(expr->GetIterable());
   if (expr->HasClause()) {
     stream() << " if ";
     PrintChild(expr->GetClause());
   }
+
   stream() << ' ' << NameOf(expr->GetAccumulator()) << " = ";
   PrintChild(expr->GetInitial());
   stream() << " => ";
@@ -168,6 +176,7 @@ auto ExprPrinter::VisitLambda(LambdaExpr* expr) -> VisitResult {
   stream() << "(lambda (";
   for (size_t i = 0; i < expr->GetParams().size(); i++)
     stream() << (i ? " " : "") << NameOf(expr->GetParams()[i]);
+
   stream() << ") ";
   PrintChild(expr->GetBody());
   stream() << ')';
@@ -180,6 +189,7 @@ auto ExprPrinter::VisitVariant(VariantExpr* expr) -> VisitResult {
     stream() << ' ';
     PrintChild(expr->GetPayload());
   }
+
   stream() << ')';
   return true;
 }
@@ -228,6 +238,7 @@ auto ExprPrinter::VisitStoreLocal(StoreLocalExpr* expr) -> VisitResult {
   stream() << "(set " << NameOf(expr->GetLocal());
   if (expr->GetAnnotation())
     stream() << ": " << expr->GetAnnotation()->ToString();
+
   PrintDirectives(expr->GetDirectives());
   stream() << ' ';
   PrintChild(expr->GetValue());
@@ -262,9 +273,11 @@ auto ExprPrinter::VisitRangePattern(RangePatternExpr* expr) -> VisitResult {
   stream() << "(range-pattern ";
   if (expr->HasBegin())
     PrintChild(expr->GetBegin());
+
   stream() << (expr->IsInclusive() ? "..=" : "..");
   if (expr->HasEnd())
     PrintChild(expr->GetEnd());
+
   stream() << ')';
   return true;
 }
@@ -275,6 +288,7 @@ auto ExprPrinter::VisitRecordPattern(RecordPatternExpr* expr) -> VisitResult {
     stream() << ' ' << field.property->GetPropertyName()->GetValue() << ": ";
     PrintChild(field.pattern);
   }
+
   stream() << ')';
   return true;
 }
@@ -285,6 +299,7 @@ auto ExprPrinter::VisitVariantPattern(VariantPatternExpr* expr) -> VisitResult {
     stream() << ' ';
     PrintChild(expr->GetPayload());
   }
+
   stream() << ')';
   return true;
 }

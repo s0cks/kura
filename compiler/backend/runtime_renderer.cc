@@ -87,6 +87,8 @@ const KuraRenderer* kura_rt_get_renderer() {
 }
 
 void kura_rt_begin_frame(const uint32_t width, const uint32_t height) {
+  // what the last frame's view said its events meant is not what this one's will
+  kura_rt_events_clear();
   const auto& ops = Current("kura_rt_begin_frame");
   Record("kura_rt_begin_frame", ops.begin_frame(tl_renderer.self, width, height));
 }

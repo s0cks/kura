@@ -16,7 +16,7 @@ Document::Document(const URI uri, std::string contents) :
 void Document::Update(std::string content) {
   contents_ = std::move(content);
   version_++;
-  source_ = std::make_shared<const syntax::SourceFile>(uri_, contents_);
+  source_ = std::make_shared<const syntax::SourceFile>(std::string(uri_), contents_);
 }
 
 auto Document::ToOffset(const Position& rhs) const -> uint32_t {
@@ -38,14 +38,15 @@ auto Document::ToOffset(const Position& rhs) const -> uint32_t {
     units += c >= 0xF0 ? 2 : 1;
     offset = std::min(offset + width, span.end);
   }
+
   return offset;
 }
 
 auto Document::ToPosition(const uint32_t offset) const -> Position {
   const auto pos = source_->GetPosition(offset);
   return Position{
-      .line = static_cast<int>(pos.line),
-      .character = static_cast<int>(source_->GetUtf16Column(offset)),
+      static_cast<int>(pos.line),
+      static_cast<int>(source_->GetUtf16Column(offset)),
   };
 }
 
@@ -68,18 +69,9 @@ void Document::GetSymbols(std::vector<Symbol>& rhs) const {
       const auto start_pos = tree_->GetSource().GetPosition(fn->span.begin);
       const auto end_pos = tree_->GetSource().GetPosition(fn->span.end);
       Range range{
-          .start =
-              Position{
-                  .line = static_cast<int>(start_pos.line),
-                  .character = static_cast<int>(start_pos.column),
-              },
-          .end =
-              Position{
-                  .line = static_cast<int>(end_pos.line),
-                  .character = static_cast<int>(end_pos.column),
-              },
+          start_pos,
+          end_pos,
       };
-
       rhs.push_back(Symbol{
           .name = fn->name.text,
           .detail = "",

@@ -12,6 +12,7 @@
     "rang",
     "benchmark",
     "freetype",
+    "tracy",
     {
       "name": "harfbuzz",
       "features": ["freetype"]

@@ -64,11 +64,14 @@ namespace kura {
   V(DrawRect)                   \
   V(DrawRoundRect)              \
   V(DrawCircle)                 \
-  V(DrawElipse)                 \
+  V(DrawEllipse)                \
   V(DrawPolygon)                \
   V(DrawText)                   \
   V(DrawStrokeBezier)           \
-  V(DrawQuadBezier)
+  V(DrawQuadBezier)             \
+  V(RegisterEvent)              \
+  V(TracyBeginZone)             \
+  V(TracyEndZone)
 
 class Instruction;
 class EntryInstr;

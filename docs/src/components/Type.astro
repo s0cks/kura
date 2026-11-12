@@ -1,0 +1,12 @@
+---
+interface Props {
+  name: string,
+  link?: string,
+}
+
+const {
+  name,
+  link = undefined,
+} = Astro.props;
+---
+<a href={link ?? "/kura/reference/types/" + name.toLowerCase()}>{name}</a>

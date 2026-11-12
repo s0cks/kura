@@ -43,24 +43,84 @@ See [Effects](/kura/reference/c-interop/#effects).
 nothing: the render instructions are emitted in place. The UI tree is a compile-time
 concept and doesn't exist at run time.
 
-## Messages come from the host
+## Messages go both ways
 
-Your application builds Messages and sends them through the runtime API. That is how clicks,
-ticks, and anything else reach `update`. There are no global built-in messages and no
-subscriptions.
+Messages travel in both directions, and both go through the same path:
+
+- **host => UI.** Your application builds a Message and sends it. That is how ticks and
+  anything else the host knows about reach `update`.
+- **UI => host.** An element can say what a click on it means: `#button(on-click: Increment)`.
+  When the host reports a click, the runtime finds the element it landed on and sends that
+  Message, as if the host had sent it.
+
+A Message, from either side, is given to `update` first. After `update` has made the next
+state, the Message goes to the host's own **message listeners**, in the order they were added.
+A listener is secondary to `update`: it hears the Message after the state has changed, and sees
+both the state before and the state after. That is how a host reacts to what the UI did (a
+button that means "Quit", say) without the UI knowing about the host.
+
+```kura
+type Message = Increment | Decrement | Reset | Set(Int)
+
+type State = {
+  value: Int,
+}
+
+fn init(): State => { value: 1 }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Increment => { value: state.value + 1 }
+    Decrement => { value: state.value - 1 }
+    Reset => { value: 0 }
+    Set(n) => { value: n }
+    _ => state
+  }
+```
+
+In C++, the host uses a `Session`:
+
+```cpp
+auto program = kura::Program::Load("counter.kui", {}, &error);
+auto session = kura::Session::Create(program.get(), &error);  // runs `init`
+
+// A listener hears every Message, from either side, after `update`.
+session->AddListener([](const kura::Session::Event& event) {
+  std::println("{} => {}", kura::rt::Format(event.message), kura::rt::Format(event.state));
+});
+
+// host => UI
+session->Send(kura::rt::MakeVariant("Reset"), &error);
+const kura::rt::KuraValue five{kura::rt::kTagInt, 5};
+session->Send(kura::rt::MakeVariant("Set", &five), &error);
+
+// draw a frame, then UI => host: the click lands on a button, and its Message is sent
+kura_rt_set_viewport(width, height);
+session->Render(&error);
+bool handled = false;
+session->Click(mouse_x, mouse_y, &handled, &error);
+```
+
+A few rules:
+
+- Messages are delivered one at a time, in the order they were sent. A Message sent from inside a
+  listener waits until the one being delivered is done.
+- `Send` returns false, and the state and listeners are left alone, if `update` couldn't run
+  (for instance, the Message isn't one of the program's).
+- With no `update`, there is no state to change, and a Message goes straight to the listeners.
+- A click goes to the topmost element under it that has an `on-click`. A click on nothing is not an
+  error (`handled` is false).
+- A `Session` belongs to one thread: `Render` and `Click` go on the thread that draws.
+
+There are no global built-in messages and no subscriptions.
 
 The fixed exception is the set of built-in **event payloads** that elements can carry
 (`on-click`, `on-input`, `on-scroll`). They are predefined so the runtime and the host
-agree on how user input gets back into your UI as Messages.
+agree on how user input gets back into your UI as Messages. Only `on-click`, on blocks and
+buttons, is routed so far.
 
 Viewport changes are also delivered to `update` as a Message, so your UI can react to a
 resize without a "get viewport size" API.
-
-<Aside type="note">
-Even when you don't define `update`, the compiler generates a stub that handles runtime
-messages such as viewport changes. Source-level control over this (for UIs that should
-never close, for example) is planned.
-</Aside>
 
 ## Reactivity
 

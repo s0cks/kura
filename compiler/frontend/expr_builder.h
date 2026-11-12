@@ -3,8 +3,8 @@
 
 #include <functional>
 #include <memory>
-#include <stdexcept>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -210,6 +210,7 @@ class ExprBuilder {
     double real = 0.0;
     std::string text{};
   };
+
   auto Fold(Expr* expr) const -> std::optional<Constant>;
   std::unordered_map<const LocalVariable*, Constant> constants_{};
   auto BuildPattern(const syntax::Node* node) -> PatternExpr*;

@@ -1,6 +1,7 @@
 #ifndef KURA_LSP_TYPES_H
 #define KURA_LSP_TYPES_H
 
+#include <initializer_list>
 #include <jansson.h>
 #include <string>
 #include <variant>
@@ -12,6 +13,15 @@ namespace kura::lsp {
 struct Position {
   int line;
   int character;
+
+  Position() = default;
+  Position(const syntax::Position pos) :
+    line(pos.line),
+    character(pos.column) {}
+  Position(const int l, const int c) :
+    line(l),
+    character(c) {}
+  ~Position() = default;
 
   auto operator<<(const json_t* rhs) -> Position&;
   void operator>>(json_t* rhs) const;

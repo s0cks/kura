@@ -22,19 +22,7 @@ void IndexDocumentTask::DoWork(IndexDocumentTask* ctx) {
     const auto start = source.GetPosition(d.span.begin);
     const auto end = source.GetPosition(d.span.end);
     ctx->diagnostics.push_back(Diagnostic{
-        .range =
-            Range{
-                .start =
-                    Position{
-                        .line = static_cast<int>(start.line),
-                        .character = static_cast<int>(start.column),
-                    },
-                .end =
-                    Position{
-                        .line = static_cast<int>(end.line),
-                        .character = static_cast<int>(end.column),
-                    },
-            },
+        .range = Range{start, end},
         .severity = static_cast<Diagnostic::Severity>(d.severity),
         .code = d.code,
         .source = doc->GetUri(),

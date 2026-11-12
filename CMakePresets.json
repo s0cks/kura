@@ -25,6 +25,11 @@
       }
     },
     {
+      "name": "tmp",
+      "hidden": true,
+      "binaryDir": "$env{BUILD_TMP_DIR}"
+    },
+    {
       "name": "base-clang",
       "hidden": true,
       "inherits": ["base"],
@@ -46,6 +51,11 @@
         "BUILD_ENVIRONMENT": "dev"
       },
       "inherits": ["base-clang"]
+    },
+    {
+      "name": "clang-debug-tmp",
+      "displayName": "Debug (clang/tmp)",
+      "inherits": ["tmp", "clang-debug"]
     },
     {
       "name": "clang-llvm20-debug",
@@ -72,6 +82,11 @@
       "name": "clang-debug",
       "displayName": "Debug (Clang)",
       "configurePreset": "clang-debug"
+    },
+    {
+      "name": "clang-debug-tmp",
+      "displayName": "Debug (Clang)",
+      "configurePreset": "clang-debug-tmp"
     },
     {
       "name": "clang-llvm20-debug",

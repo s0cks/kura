@@ -2,6 +2,7 @@
 
 #include "backend/gir.h"
 #include "backend/node_visitor.h"
+#include "backend/runtime_abi.h"
 #include "object.h"
 
 namespace kura {
@@ -20,7 +21,9 @@ void DomLowering::EmitRenderCall(Definition* defn) {
 
 auto DomLowering::ResolveProperties(dom::Node* node, Resolved* resolved) -> bool {
   for (const auto& property : node->GetProperties()) {
-    if (property.IsConstant() || property.def->event)
+    // An event's value is a Message, evaluated like any other property's (`on-click: Increment` builds
+    // `Increment`), and handed to the runtime where the node is drawn: see EmitEvents.
+    if (property.IsConstant())
       continue;
 
     const auto value = host_->Eval(property.expr);
@@ -151,6 +154,21 @@ auto DomLowering::Box(dom::Node* node, const int component) -> Value* {
   return host_->Bind(LayoutBoxInstr::New(plan_, *id, static_cast<LayoutBoxInstr::Component>(component)));
 }
 
+// What a click on the node means. The runtime keeps the node's box for the frame, with the Message, and the host
+// looks up where a click landed. Nodes are drawn parents first, so the last box to hold a point is the topmost.
+void DomLowering::EmitEvents(dom::Node* node) {
+  const auto id = plan_->FindId(node);
+  if (!id)
+    return;
+  const auto& resolved = resolved_[node];
+  for (const auto& property : node->GetProperties()) {
+    if (!property.def->event || std::string_view(property.def->name) != "on-click")
+      continue;
+    if (const auto it = resolved.find(property.def); it != resolved.end())
+      host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventClick, it->second));
+  }
+}
+
 auto DomLowering::DrawBlock(dom::Node* node) -> bool {
   Value* x = Box(node, LayoutBoxInstr::kX);
   Value* y = Box(node, LayoutBoxInstr::kY);
@@ -164,6 +182,7 @@ auto DomLowering::DrawBlock(dom::Node* node) -> bool {
     color = host_->Bind(ConstantInstr::New(Int::New(0)));
 
   EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+  EmitEvents(node);
   return true;
 }
 
@@ -180,6 +199,7 @@ auto DomLowering::DrawButton(dom::Node* node) -> bool {
     color = host_->Bind(ConstantInstr::New(Int::New(0)));
 
   EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+  EmitEvents(node);
   return true;
 }
 

@@ -12,11 +12,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <string>
 #include <vector>
 
 #include "backend/program.h"
 #include "backend/runtime_abi.h"
+#include "backend/session.h"
 #include "heap/heap.h"
 #include "renderer/gl/renderer.h"
 
@@ -98,12 +100,26 @@ int main(const int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  auto session = kura::Session::Create(program.get(), &error);  // runs `init`
+  session->AddListener([&program](const kura::Session::Event& event) {
+    std::println("{} => {}", kura::rt::Format(event.message), kura::rt::Format(event.state));
+  });
+
+  // host => UI
+  session->Send(kura::rt::MakeVariant("Reset"), &error);
+  const kura::rt::KuraValue five{kura::rt::kTagInt, 5};
+  session->Send(kura::rt::MakeVariant("Set", &five), &error);
+
   std::vector<kura::rt::KuraValue> args{};
   if (options.args.empty()) {
-    if (!program->ZeroArguments(options.function, &args, &error)) {
-      std::fprintf(stderr, "error2: %s\n", error.c_str());
-      return EXIT_FAILURE;
-    }
+    const auto record = kura_rt_record_new();
+    kura_rt_record_set(record, rt::HashName("value"), "value", kura::rt::kTagInt, 0);
+    args.push_back({kura::rt::kTagRecord, (uint64_t)record});
+
+    // if (!program->ZeroArguments(options.function, &args, &error)) {
+    //   std::fprintf(stderr, "error2: %s\n", error.c_str());
+    //   return EXIT_FAILURE;
+    // }
   } else {
     for (const auto& arg : options.args)
       args.push_back(kura::ParseArgument(arg));
@@ -156,17 +172,64 @@ int main(const int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  kura_rt_set_viewport(kFrameSize, kFrameSize);
+
   int exit_code = EXIT_SUCCESS;
   long frame = 0;
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
 
+    {
+      // Check if the Escape key is pressed
+      if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, true);
+      }
+
+      // Check continuous movement keys
+      if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        // Move forward
+      }
+
+      static bool wasLeftDown = false;
+      bool isLeftDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+
+      if (isLeftDown && !wasLeftDown) {
+        bool handled = false;
+
+        double mx = 0.0;
+        double my = 0.0;
+        glfwGetCursorPos(window, &mx, &my);
+
+        int winW = 0, winH = 0;
+        int fbW = 0, fbH = 0;
+        glfwGetWindowSize(window, &winW, &winH);
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+
+        if (winW > 0 && winH > 0) {
+          double scaleX = static_cast<double>(fbW) / winW;
+          double scaleY = static_cast<double>(fbH) / winH;
+
+          // The 1024x1024 physical viewport sits at the bottom-left of the framebuffer
+          double canvasTop = winH - (kura_rt_viewport_height() / scaleY);
+          double uiX = mx * scaleX;
+          double uiY = (my - canvasTop) * scaleY;
+
+          std::cout << "local-ui-pos: " << uiX << ", " << uiY << std::endl;
+          session->Click(uiX, uiY, &handled, &error);
+          if (!session->Click(uiX, uiY, &handled, &error)) {
+            std::cerr << "failed to invoke click: " << error << std::endl;
+            std::exit(1);
+          }
+        }
+      }
+
+      wasLeftDown = isLeftDown;
+    }
+
     PROFILE_BEGIN(call);
-    kura::rt::KuraValue result{};
-    if (!program->Call(options.function, args, &result, &error)) {
-      std::fprintf(stderr, "error3: %s\n", error.c_str());
-      exit_code = EXIT_FAILURE;
-      break;
+    if (!session->Render(&error)) {
+      std::cerr << "failed to render: " << error << std::endl;
+      std::exit(1);
     }
     PROFILE_END(call);
 

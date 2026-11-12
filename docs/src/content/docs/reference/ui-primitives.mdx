@@ -1,3 +1,346 @@
 ---
 title: UI Primitives
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+import Node from "../../../components/Node.astro";
+import Example from "../../../components/Example.astro";
+import Property from "../../../components/Property.astro";
+import PropertyTable from "../../../components/PropertyTable.astro";
+import TableSeparator from "../../../components/TableSeparator.astro";
+
+## Fragments
+
+Fragments allow for grouping of UI Primitives but cannot effect the layout and do not have any properties>.
+
+## Box Properties
+
+Boxes are the absolute most basic UI primitive
+
+<PropertyTable>
+        <Property name="width"
+                  types={[
+                    "Px",
+                    "Pct",
+                    "Fr",
+                  ]}
+                  allowAuto={true}>
+                  Width of the box (`>= 0`).
+        </Property>
+        <Property name="height"
+                  types={[
+                    "Px",
+                    "Pct",
+                    "Fr",
+                  ]}
+                  allowAuto={true}>
+                  Height of the box (`>= 0`).
+        </Property>
+        <Property name="min-width"
+                  types={[
+                    "Px",
+                    "Pct",
+                  ]} >
+            Minimum width constraint (`>= 0`).
+        </Property>
+        <Property name="min-height"
+                  types={[
+                    "Px",
+                    "Pct",
+                  ]} >
+            Minimum height constraint (`>= 0`).
+        </Property>
+        <Property name="max-width"
+                  types={[
+                    "Px",
+                    "Pct",
+                  ]} >
+            Inner spacing between the box edge and its content (`>= 0`).
+        </Property>
+        <Property name="max-height"
+                  types={[
+                    "Px",
+                    "Pct",
+                  ]} >
+            Inner spacing between the box edge and its content (`>= 0`).
+        </Property>
+  <Property name="max-height" types={["Px", "Pct"]}>
+    Maximum height constraint (`>= 0`).
+  </Property>
+  <Property name="padding" types={["Px", "Pct"]}>
+    Inner spacing between the box edge and its content (`>= 0`).
+  </Property>
+  <Property name="margin" types={["Px", "Pct"]}>
+    Outer spacing around the box.
+  </Property>
+  <Property name="grow" types={["Number"]}>
+    Flex grow factor when extra space is available (`>= 0`).
+  </Property>
+  <Property name="shrink" types={["Number"]}>
+    Flex shrink factor when space is constrained (`>= 0`).
+  </Property>
+  <Property name="basis" types={["Px", "Pct", "Fr"]} allowAuto>
+    Initial main-axis size before growing or shrinking (`>= 0`).
+  </Property>
+  <Property name="align-self" types={["Align"]}>
+    Overrides the parent's `align`: `"start"`, `"center"`, `"end"`, `"stretch"`.
+  </Property>
+  <Property name="fill" types={["Color"]}>
+    Background fill color of the box.
+  </Property>
+  <Property name="border-color" types={["Color"]}>
+    Color of the box border.
+  </Property>
+  <Property name="border-width" types={["Px"]}>
+    Thickness of the border, in `px` (`>= 0`).
+  </Property>
+  <Property name="radius" types={["Px"]}>
+    Corner rounding radius, in `px` (`>= 0`).
+  </Property>
+  <Property name="opacity" types={["Number"]}>
+    Opacity from `0` (transparent) to `1` (opaque).
+  </Property>
+  <Property name="on-click" types={["Message"]}>
+    Message dispatched when the box is clicked.
+  </Property>
+</PropertyTable>
+
+## Container Properties
+
+Containers are <Node name="boxes" link="/kura/reference/nodes/box" /> that contain children
+
+<PropertyTable inherits={"box"}>
+  <Property name="gap" types={["Px", "Pct"]}>
+    Spacing between adjacent children (`>= 0`).
+  </Property>
+  <Property name="direction" types={["Direction"]}>
+    Main layout axis: `"row"`, `"column"`, `"row-reverse"`, or `"column-reverse"`.
+  </Property>
+  <Property name="align" types={["Align"]}>
+    Cross-axis alignment of children: `"start"`, `"center"`, `"end"`, or `"stretch"`.
+  </Property>
+  <Property name="justify" types={["Justify"]}>
+    Main-axis distribution: `"start"`, `"center"`, `"end"`, `"space-between"`, `"space-around"`, `"space-evenly"`.
+  </Property>
+  <Property name="wrap" types={["Bool"]}>
+    Whether children wrap onto multiple lines when they overflow the main axis.
+  </Property>
+</PropertyTable>
+---
+
+## Block
+
+A general-purpose layout container for grouping and arranging child elements.
+
+<PropertyTable inherits={"container"}>
+</PropertyTable>
+
+<Example>
+
+```kura
+#block(direction: "column",
+       gap: 12px,
+       padding: 16px,
+       fill: #1e1e1e,
+       radius: 8px) {
+  #text(value: "Settings", size: 20px, color: white)
+  #text(value: "Manage your preferences.", size: 14px, color: #a0a0a0)
+}
+```
+
+</Example>
+
+## Text
+
+A <Node name="box" /> for displaying text
+
+<PropertyTable inherits={"box"} >
+  <Property name="value" types={["String"]}>
+    What to show.
+  </Property>
+  <Property name="size" types={["Px"]}>
+    The font size, in `px` (`>= 0`).
+  </Property>
+  <Property name="font-family" types={["String"]}>
+    The font: a name, or a comma-separated list in order of preference.
+  </Property>
+  <Property name="color" types={["Color"]}>
+    The color of the text. Opaque black if it isn't given.
+  </Property>
+  <Property name="text-align" types={["String"]}>
+    Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
+  </Property>
+
+  <TableSeparator text="Positional Arguments"
+                  color="primary" />
+
+  <Property name="value"
+            types={["String"]}>
+    The text to render
+  </Property>
+</PropertyTable>
+
+<Example>
+
+```kura
+#text(size: 24px,
+      font-family: "Inter, sans-serif",
+      color: white,
+      "Hello World")
+```
+
+</Example>
+
+<Aside>
+
+`font-family` is a constant string, like `size`, because text is measured before the view runs.
+The renderer finds the first family in the list that is installed on the system, and uses the system's
+default font when none is. Text wraps at word boundaries to the room its box has, and is laid out and drawn
+with the same measurements.
+
+</Aside>
+
+## Input
+
+A single-line <Node name="box" /> for user input.
+
+<PropertyTable inherits={"box"}>
+  <Property name="size" types={["Px"]}>
+    The font size, in `px` (`>= 0`).
+  </Property>
+  <Property name="font-family" types={["String"]}>
+    The font: a name, or a comma-separated list in order of preference.
+  </Property>
+  <Property name="color" types={["Color"]}>
+    The color of the input text.
+  </Property>
+  <Property name="text-align" types={["String"]}>
+    Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
+  </Property>
+  <Property name="on-input" types={["Message"]}>
+    Message dispatched when the user edits the text.
+  </Property>
+
+  <TableSeparator text="Positional Properties" />
+
+  <Property name="value" types={["String"]}>
+    The current text value inside the input.
+  </Property>
+</PropertyTable>
+
+<Example>
+
+```kura
+#input(size: 16px,
+       padding: 8px,
+       border-color: #444444,
+       border-width: 1px,
+       on-input: UpdateQuery,
+       "Search....")
+```
+</Example>
+
+<Aside>
+
+Like `#text`, `font-family` and `size` are constants used to measure text metrics prior to layout.
+
+</Aside>
+
+## Image
+
+A <Node name="box" /> for rendering an image
+
+<PropertyTable inherits={"box"}>
+  <Property name="fit" types={["String"]}>
+    How the image scales inside its box: `"contain"`, `"cover"`, `"fill"`, or `"none"`.
+  </Property>
+
+  <TableSeparator text="Positional Properties" />
+
+  <Property name="source" types={["String"]}>
+    The source uri for the image
+  </Property>
+</PropertyTable>
+
+<Example>
+
+```kura
+#image(width: 120px,
+       height: 120px,
+       fit: "contain"
+       source)
+```
+
+</Example>
+
+## Button
+
+A <Node name="box" /> that response to clicks
+
+<PropertyTable inherits={"box"}>
+</PropertyTable>
+
+<Example>
+
+```kura
+#button(padding: 10px,
+        fill: blue,
+        radius: 6px,
+        on-click: Submit) {
+  #text(value: "Save", size: 14px, color: white)
+}
+```
+
+</Example>
+
+## Scroll & List
+
+A <Node name="container" /> for displaying multiple children
+
+<PropertyTable inherits={"container"}>
+  <Property name="on-scroll"
+            types={[ "Message" ]}>
+    Message dispatched when the scroll offset changes.
+  </Property>
+</PropertyTable>
+
+<Example>
+
+```kura
+#scroll(height: 300px,
+        direction: "column",
+        gap: 8px,
+        on-scroll: Scrolled) {
+  #text(value: "Item 1", size: 14px)
+  #text(value: "Item 2", size: 14px)
+}
+```
+
+</Example>
+
+## Progress
+
+A <Node name="box" /> visual indicator showing completion progress.
+
+<PropertyTable inherits={"box"}>
+
+  <TableSeparator text="Positional Properties" />
+
+  <Property name="value"
+          types={[ "Number" ]}>
+    Completion ratio between `0` (empty) and `1` (complete).
+  </Property>
+
+</PropertyTable>
+
+<Example>
+
+```kura
+#progress(width: 200px,
+          height: 8px,
+          fill: #333333,
+          radius: 4px
+          0.75)
+```
+
+</Example>

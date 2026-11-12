@@ -1,8 +1,9 @@
 #include "backend/flow_graph.h"
-#include "function.h"
 
 #include <algorithm>
 #include <unordered_set>
+
+#include "function.h"
 
 namespace kura {
 auto FlowGraph::IsExtern() const -> bool {

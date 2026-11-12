@@ -28,7 +28,9 @@ ARG LIBPNG_VERSION=1.6.57-1ubuntu0.1
 ARG LIBJPEG_TURBO_VERSION=1:3.1.3-4ubuntu2
 ARG BENCHMARK_VERSION=1.9.1-1build1
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    VCPKG_ROOT="/opt/vcpkg" \
+    PATH="/opt/vcpkg:${PATH}"
 
 ENV MESON_VERSION=${MESON_VERSION}
 ENV CURL_VERSION=${CURL_VERSION}
@@ -79,6 +81,10 @@ RUN sed -i 's/Components: main/Components: main universe/' /etc/apt/sources.list
       libpng-dev \
       libjpeg-turbo-dev \
       libbenchmark-dev \
+      zip \
+      tar \
+      curl \
+      unzip \
  && rm -rf /var/lib/apt/lists/* \
  && pip3 install \
       --no-cache-dir \
@@ -119,6 +125,14 @@ RUN curl -LsSf "${HADOLINT_DOWNLOAD_URL}" \
       -o hadolint \
  && mv hadolint /usr/local/bin
 # ──────────────────────────────────────────────────────────────────────
+
+# ╭───────────────╮
+# │ Install vcpkg │
+# ╰───────────────╯
+RUN git clone --depth=1 \
+  https://github.com/microsoft/vcpkg \
+  "${VCPKG_ROOT}" \
+ && "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
 
 RUN mkdir -p /workspace
 WORKDIR /workspace

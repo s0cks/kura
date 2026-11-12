@@ -345,6 +345,13 @@ auto Format(const KuraValue& value) -> std::string {
 auto MakeString(const std::string& value) -> KuraValue {
   return {kTagString, reinterpret_cast<uint64_t>(String::New(value))};
 }
+
+auto MakeVariant(const std::string_view name, const KuraValue* payload) -> KuraValue {
+  const auto tag = VariantTag(name);
+  // so that Format can name it, the way the compiled module registers the variants it uses
+  VariantNames()[tag] = std::string(name);
+  return {tag, payload == nullptr ? 0ULL : reinterpret_cast<uint64_t>(new KuraValue{payload->tag, payload->bits})};
+}
 }  // namespace kura::rt
 
 using namespace kura::rt;

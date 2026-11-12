@@ -27,6 +27,7 @@
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
 #include "c_type.h"
+#include "common.h"
 #include "function.h"
 #include "local_scope.h"
 #include "module.h"
@@ -346,6 +347,13 @@ class Generator {
                    Convert(b, tb, CompileType::Any())});
   }
 
+  void EmitRegisterEvent(RegisterEventInstr* reg) {
+    const auto plan = reg->GetPlan().get();
+    CallRt("kura_rt_register_event", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(reg->GetNode()),
+            b_.getInt64(reg->GetKind()), As(reg->GetMessage(), CompileType::Any())});
+  }
+
   void EmitBinary(BinaryOpInstr* instr) {
     const auto left = instr->GetLeft();
     const auto right = instr->GetRight();
@@ -515,6 +523,14 @@ class Generator {
            CompileType::Any());
   }
 
+  void EmitTracyBegin(TracyBeginZoneInstr* instr) {
+    KASSERT(instr);
+  }
+
+  void EmitTracyEnd(TracyEndZoneInstr* instr) {
+    KASSERT(instr);
+  }
+
   void EmitCheckRenererStatusInstr(CheckRendererStatusInstr* instr) {
     CallRt("kura_rt_check_renderer", void_ty_, {});
   }
@@ -540,8 +556,8 @@ class Generator {
       return existing;
     const auto bytes = plan->GetBytes();
     const auto init = llvm::ConstantDataArray::get(module_->getContext(), llvm::ArrayRef<uint8_t>(bytes));
-    const auto global = new llvm::GlobalVariable(*module_, init->getType(), true, llvm::GlobalValue::InternalLinkage,
-                                                 init, name);
+    const auto global =
+        new llvm::GlobalVariable(*module_, init->getType(), true, llvm::GlobalValue::InternalLinkage, init, name);
     global->setAlignment(llvm::Align(alignof(layout::Node)));
     return global;
   }
@@ -554,8 +570,8 @@ class Generator {
         family.empty() ? llvm::Constant::getNullValue(ptr_ty_) : b_.CreateGlobalString(family, "kura.family");
     CallRt("kura_rt_layout_set_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
-            As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize()),
-            family_data, b_.getInt64(family.size())});
+            As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize()), family_data,
+            b_.getInt64(family.size())});
   }
 
   void EmitLayoutSetProperty(LayoutSetPropertyInstr* instr) {
@@ -719,6 +735,8 @@ class Generator {
       return EmitFillRect(d);
     if (const auto d = instr->AsDrawText())
       return EmitDrawText(d);
+    if (const auto r = instr->AsRegisterEvent())
+      return EmitRegisterEvent(r);
     if (const auto d = instr->AsBeginFrame())
       return EmitBeginFrame(d);
     if (const auto d = instr->AsLayoutSetText())
@@ -733,6 +751,10 @@ class Generator {
       return EmitEndFrame(d);
     if (const auto d = instr->AsCheckRendererStatus())
       return EmitCheckRenererStatusInstr(d->AsCheckRendererStatus());
+    if (const auto b = instr->AsTracyBeginZone())
+      return EmitTracyBegin(b);
+    if (const auto e = instr->AsTracyEndZone())
+      return EmitTracyEnd(e);
 
     if (const auto phi = instr->AsPhi()) {
       const auto node = b_.CreatePHI(Lower(phi->GetCompileType()), phi->GetNumberOfIncoming());

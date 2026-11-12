@@ -4,3 +4,16 @@ services:
       context: .
       dockerfile: docker/build/Dockerfile
     image: ghcr.io/s0cks/kura/build:latest
+  toolchain:
+    depends_on:
+      - build
+    build:
+      context: .
+      dockerfile: docker/toolchain/Dockerfile
+      args:
+        BUILD_IMAGE_VERSION: ${BUILD_IMAGE_VERSION:-latest}
+    image: ghcr.io/s0cks/kura/toolchain:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    user: "${UID:-1000}:${GID:-1000}"

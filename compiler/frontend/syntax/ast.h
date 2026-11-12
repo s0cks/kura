@@ -148,8 +148,10 @@ struct Name {
   auto GetValue() const -> std::string {
     if (IsRaw() && text.size() >= 2 && text.back() == '`')
       return text.substr(1, text.size() - 2);
+
     if (IsRaw())
       return text.substr(1);
+
     return text;
   }
 };

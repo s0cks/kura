@@ -41,37 +41,39 @@ Kura is engineered to solve these friction points by providing:
 A complete counter implementation in Kura follows the Model-View-Update (MVU) pattern:
 
 ```kura
+type Message = Increment | Decrement | Reset | Set(Int) | Hover
+
 type State = {
-  count: Int,
+  value: Int,
 }
 
-type Message = 
-  Increment
-| Decrement
-
-fn init(): State =>
-  {
-    count: 0,
-  }
+fn init(): State => { value: 1 }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment => { count: state.count + 1 }
-    Decrement => { count: state.count - 1 }
-    _ => { count: 0 }
+    Increment => { value: state.value + 1 }
+    Decrement => { value: state.value - 1 }
+    Reset => { value: 0 }
+    Set(n) => { value: n }
+    _ => state
   }
 
 fn view(state: State): Node => {
-  let message = if state.count > 10 { "Done" } else { "Hello World" }
-  #text(message)
-  #button(on-click: Increment){
-    #text("Increment")
-  }
-  #button(on-click: Decrement){
-    #text("Decrement")
+  let label = if state.value > 0 { "Positive" } else { "Zero or less" }
+  #block(direction: "column", width: 1fr, height: 1fr, padding: 10px, gap: 10px,
+         fill: if state.value > 0 { white } else { red }) {
+    #text(size: 24px, label)
+    #button(on-click: Increment) {
+      #text(size: 24px, "+")
+    }
+    #button(fill: white, on-click: Decrement) {
+      #text(size: 24px, "-")
+    }
   }
 }
 ```
+
+![Counter Demo](./assets/counter-demo.gif)
 
 ## Host Integration
 

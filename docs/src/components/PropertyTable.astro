@@ -1,0 +1,58 @@
+---
+interface Props {
+  inherits?: string;
+}
+
+const {
+  inherits = undefined,
+} = Astro.props;
+
+import Node from './Node.astro';
+import InheritsProperty from './InheritsProperty.astro';
+
+const HEADERS = ['Name', 'Type', 'Description'];
+---
+<h3>Properties</h3>
+<table>
+  <thead class="border-b border-gray-300 dark:border-gray-700">
+    <tr>
+      {HEADERS.map((header) => (
+        <th class="py-2 text-left">{header}</th>
+      ))}
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
+    {inherits && (
+      <tr class="inherits-property">
+        <td colspan={HEADERS.length}>
+          <span>Inherits from:</span>
+          <Node name={inherits} />
+        </td>
+      </tr>
+    )}
+    <slot />
+  </tbody>
+</table>
+
+<style>
+table {
+  display: table !important;
+  width: 100% !important;
+  border-collapse: collapse;
+}
+
+.inherits-property {
+  text-align: center;
+}
+
+tr.inherits-property > td {
+  font-weight: 800;
+  font-size: 18px;
+  padding-block: 0.75rem;
+}
+
+tr.inherits-property > td > span {
+  margin-right: 0.5em;
+  letter-spacing: 0.05em;
+}
+</style>

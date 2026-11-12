@@ -44,6 +44,7 @@ auto TypeExprOf(const CType& c) -> TypeExpr* {
       fields.push_back({field.name, TypeExprOf(field.type), false});
     return new RecordTypeExpr(std::move(fields));
   }
+
   TypeExpr* named = new NamedTypeExpr(c.ToName());
   if (c.nullable)
     return new UnionTypeExpr({named, new NamedTypeExpr("None")});
@@ -377,15 +378,20 @@ auto ExprBuilder::ToCType(const syntax::Node* where, TypeExpr* type, const bool 
       fail("a union of C types isn't supported");
     found = c;
   }
+
   if (!found)
     fail("'" + type->ToString() + "' is not a type C understands");
+
   if (nullable) {
     if (!found->IsPointer())
       fail("only String and c.ptr can be `| None`");
+
     found->nullable = true;
   }
+
   if (found->kind == CType::kVoid && !is_result)
     fail("None is only a result type");
+
   return *found;
 }
 
@@ -675,8 +681,8 @@ auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
 static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind>;
 
 // `x |> add(_, 1)`: the value is computed once into a local, and every `_` in the stage reads it.
-auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage,
-                                  const syntax::Span& where) -> Expr* {
+auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage, const syntax::Span& where)
+    -> Expr* {
   return BuildStageWith(Build(value_node), stage, where);
 }
 
@@ -765,8 +771,8 @@ auto ExprBuilder::BuildIndex(const syntax::Index* ctx) -> Expr* {
   const auto index = Build(ctx->index);
   if (const auto constant = Fold(index); constant && constant->kind == Constant::kInt) {
     if (constant->integer < 0) {
-      Error(ctx->index, "index " + std::to_string(constant->integer) +
-                            " is out of range: a Seq has no negative positions");
+      Error(ctx->index,
+            "index " + std::to_string(constant->integer) + " is out of range: a Seq has no negative positions");
     }
     if (object->IsList() && static_cast<size_t>(constant->integer) >= object->AsList()->GetChildren().size()) {
       Error(ctx->index, "index " + std::to_string(constant->integer) + " is out of range for a Seq of " +
@@ -806,7 +812,6 @@ auto ExprBuilder::BuildPipe(const syntax::Pipe* pipe) -> Expr* {
 
 auto ExprBuilder::PipeInto(Expr* lhs, const syntax::Node* callee, const std::vector<syntax::Node*>& pipe_args)
     -> Expr* {
-
   Expr* target = nullptr;
   if (const auto* paren = callee->As<syntax::Paren>()) {
     target = Build(paren->inner);
@@ -1159,8 +1164,7 @@ auto ExprBuilder::BuildUpdateLevel(const syntax::Node* base, const std::vector<s
         value = Build(leaf->value);
       } else {
         // `x += v` is `x: <the record>.x + v`
-        value = BinaryExpr::New(UpdateOp(leaf->op), GetPropertyExpr::New(load_current(), property),
-                                Build(leaf->value));
+        value = BinaryExpr::New(UpdateOp(leaf->op), GetPropertyExpr::New(load_current(), property), Build(leaf->value));
       }
     } else {
       auto next = prefix;
@@ -1415,8 +1419,9 @@ auto ExprBuilder::BuildPattern(const Node* node) -> PatternExpr* {
     for (const auto* field_node : record->fields) {
       const auto* field = field_node->As<syntax::FieldPattern>();
       // `{ x }` binds `x`
-      const auto pattern = field->pattern != nullptr ? BuildPattern(field->pattern)
-                                                     : BindingPatternExpr::New(CreateLocal(field->span, field->name.text));
+      const auto pattern = field->pattern != nullptr
+                             ? BuildPattern(field->pattern)
+                             : BindingPatternExpr::New(CreateLocal(field->span, field->name.text));
       fields.push_back({Property::FindOrCreate(String::New(field->name.text), Type::NoneType()), pattern});
     }
     return RecordPatternExpr::New(std::move(fields));

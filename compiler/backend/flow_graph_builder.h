@@ -41,6 +41,12 @@ class FlowGraphBuilder {
 
  private:
   Context* ctx_;
+#ifdef KURA_DEBUG
+  bool enable_tracing_ = true;
+#else
+  // TODO(@s0cks): check init runtime value for release builds
+  bool enable_tracing_ = false;
+#endif  // KURA_DEBUG
   std::string name_;
   Function* function_;
   BlockId current_block_id_ = 0;

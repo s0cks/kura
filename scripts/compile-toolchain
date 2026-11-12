@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+export BUILD_TMP_DIR="$(mktemp -d)"
+cmake --preset=clang-debug-tmp .
+cmake --build "${BUILD_TMP_DIR}" --target all

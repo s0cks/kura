@@ -18,6 +18,7 @@
 #include "backend/flow_graph.h"
 #include "backend/flow_graph_builder.h"
 #include "backend/gir.h"
+#include "backend/runtime_abi.h"
 #include "backend/type_analysis.h"
 #include "frontend/expr.h"
 #include "local_scope.h"
@@ -299,11 +300,67 @@ TEST(DomLowering, RuntimeValuesAreTypeChecked) {
   EXPECT_TRUE(fine.Compile()) << (fine.errors.empty() ? "" : fine.errors[0]);
 }
 
-TEST(DomLowering, EventsAreNotEvaluated) {
+// An event's value is a Message: it's built where the view is, and the runtime is told, as the node is
+// drawn, that the node's box means it when it's clicked.
+// `type Message = A | B`: a message has to be one the program declares.
+void DeclareMessages(Program* program, const std::vector<std::string>& names) {
+  std::vector<TypeExpr*> members{};
+  for (const auto& name : names)
+    members.push_back(new NamedTypeExpr(name, {}));
+  program->module->types.push_back(
+      new TypeDecl("Message", {}, members.size() == 1 ? members[0] : new UnionTypeExpr(members)));
+}
+
+TEST(DomLowering, AnOnClickMessageIsBuiltAndRegisteredWithTheNodesBox) {
   Program program(Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Tick"))}));
+  DeclareMessages(&program, {"Tick", "Tock"});
+  ASSERT_TRUE(program.Compile()) << (program.errors.empty() ? "" : program.errors[0]);
+  auto built = false;
+  auto registered = 0;
+  for (const auto instr : program.Instructions()) {
+    built |= instr->IsNewVariant();
+    if (const auto reg = instr->AsRegisterEvent()) {
+      registered++;
+      EXPECT_EQ(reg->GetKind(), static_cast<uint64_t>(kura::rt::kEventClick));
+      // the message is the value that was built, so it's computed before it is registered
+      EXPECT_TRUE(reg->GetMessage()->GetDefinition()->IsNewVariant());
+    }
+  }
+  EXPECT_TRUE(built);
+  EXPECT_EQ(registered, 1);
+}
+
+TEST(DomLowering, ABlockCanBeClickedToo) {
+  Program program(Element(NodeExpr::kBlock, {Prop("on-click", VariantExpr::New("Tick"))}));
+  DeclareMessages(&program, {"Tick", "Tock"});
+  ASSERT_TRUE(program.Compile()) << (program.errors.empty() ? "" : program.errors[0]);
+  auto registered = 0;
+  for (const auto instr : program.Instructions())
+    registered += instr->IsRegisterEvent() ? 1 : 0;
+  EXPECT_EQ(registered, 1);
+}
+
+TEST(DomLowering, ANodeWithoutAnEventRegistersNothing) {
+  Program program(Element(NodeExpr::kButton, {Prop("radius", Lit(Px::New(4)))}));
   ASSERT_TRUE(program.Compile());
   for (const auto instr : program.Instructions())
-    EXPECT_FALSE(instr->IsNewVariant());
+    EXPECT_FALSE(instr->IsRegisterEvent());
+}
+
+TEST(DomLowering, EveryClickableNodeRegistersItsOwnMessage) {
+  Program program(Element(NodeExpr::kBlock, {}, {
+    Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Up"))}),
+    Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Down"))}),
+  }));
+  DeclareMessages(&program, {"Up", "Down"});
+  ASSERT_TRUE(program.Compile()) << (program.errors.empty() ? "" : program.errors[0]);
+  std::vector<kura::layout::NodeId> nodes{};
+  for (const auto instr : program.Instructions()) {
+    if (const auto reg = instr->AsRegisterEvent())
+      nodes.push_back(reg->GetNode());
+  }
+  ASSERT_EQ(nodes.size(), 2u);
+  EXPECT_NE(nodes[0], nodes[1]);
 }
 
 TEST(DomLowering, DumpsTheDomWhenAsked) {

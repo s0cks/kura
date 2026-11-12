@@ -45,6 +45,7 @@ class DomLowering : public dom::Visitor {
   auto ResolveProperties(dom::Node* node, Resolved* resolved) -> bool;
   void EmitLayoutProperties(dom::Node* node, const Resolved& resolved);
   auto Box(dom::Node* node, int component) -> Value*;
+  void EmitEvents(dom::Node* node);
   auto DrawButton(dom::Node* node) -> bool;
   auto DrawBlock(dom::Node* node) -> bool;
   auto DrawText(const Op& op) -> bool;

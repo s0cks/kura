@@ -8,10 +8,9 @@
 #include "compiler/frontend/syntax/parser.h"
 #include "lsp/symbol.h"
 #include "lsp/types.h"
+#include "lsp/uri.h"
 
 namespace kura::lsp {
-using URI = std::string;
-
 class Document {
   friend class DocumentStore;
 
