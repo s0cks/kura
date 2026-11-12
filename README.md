@@ -41,7 +41,7 @@ Kura is engineered to solve these friction points by providing:
 A complete counter implementation in Kura follows the Model-View-Update (MVU) pattern:
 
 ```kura
-type Message = Increment | Decrement | Reset | Set(Int) | Hover
+type Message = Increment(Int) | Decrement(Int) | Reset | Set(Int) | Hover
 
 type State = {
   value: Int,
@@ -51,8 +51,8 @@ fn init(): State => { value: 1 }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment => { value: state.value + 1 }
-    Decrement => { value: state.value - 1 }
+    Increment(n) => { state | value += n }
+    Decrement(n) => { state | value -= n }
     Reset => { value: 0 }
     Set(n) => { value: n }
     _ => state
@@ -60,6 +60,7 @@ fn update(msg: Message, state: State): State =>
 
 fn view(state: State): Node => {
   let label = if state.value > 0 { "Positive" } else { "Zero or less" }
+
   #block(direction: "column",
          width: 1fr,
          height: 1fr,
@@ -67,10 +68,10 @@ fn view(state: State): Node => {
          gap: 10px,
          fill: if state.value > 0 { white } else { red }) {
     #text(size: 24px, label)
-    #button(on-click: Increment) {
+    #button(on-click: Increment(1)) {
       #text(size: 24px, "+")
     }
-    #button(fill: white, on-click: Decrement) {
+    #button(fill: white, on-click: Decrement(1)) {
       #text(size: 24px, "-")
     }
   }
