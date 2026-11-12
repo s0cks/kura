@@ -60,7 +60,11 @@ fn update(msg: Message, state: State): State =>
 
 fn view(state: State): Node => {
   let label = if state.value > 0 { "Positive" } else { "Zero or less" }
-  #block(direction: "column", width: 1fr, height: 1fr, padding: 10px, gap: 10px,
+  #block(direction: "column",
+         width: 1fr,
+         height: 1fr,
+         padding: 10px,
+         gap: 10px,
          fill: if state.value > 0 { white } else { red }) {
     #text(size: 24px, label)
     #button(on-click: Increment) {
