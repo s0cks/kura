@@ -29,7 +29,7 @@
 #define PROFILE_END(Name)                                                                                     \
   const auto Name##_end = std::chrono::high_resolution_clock::now();                                          \
   const auto Name##_dur = std::chrono::duration_cast<std::chrono::microseconds>((Name##_end - Name##_start)); \
-  std::cout << #Name << " finished in " << Name##_dur.count() << "us" << std::endl;
+  Name##_samples.push_back(Name##_dur.count());
 
 #else
 
@@ -184,6 +184,8 @@ int main(const int argc, char** argv) {
 
   int exit_code = EXIT_SUCCESS;
   long frame = 0;
+  std::vector<uint64_t> render_samples{};
+  render_samples.reserve(1024);
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
 
@@ -257,14 +259,21 @@ int main(const int argc, char** argv) {
       wasLeftDown = isLeftDown;
     }
 
+    PROFILE_BEGIN(render);
     if (!session->Render(&error)) {
       std::cerr << "failed to render: " << error << std::endl;
       std::exit(1);
     }
+    PROFILE_END(render);
 
     glfwSwapBuffers(window);
     frame++;
   }
+
+  const auto render_sample_sum = std::accumulate(render_samples.begin(), render_samples.end(), 0.0);
+  const auto render_sample_avg = render_sample_sum / render_samples.size();
+
+  std::println("render avg {:.2f}us over {} frames", render_sample_avg, render_samples.size());
 
   kura_rt_set_renderer(nullptr);
   renderer.ops->destroy(renderer.self);

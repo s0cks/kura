@@ -63,7 +63,6 @@ fn view(state: State): Node => {
     n if n > 0 => "Positive",
     n if n < 0 => "Negative",
     0 => "Zero",
-    _ => "None",
   }
 
   let wide = state.width > 700.0
