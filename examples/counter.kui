@@ -22,7 +22,7 @@ fn view(state: State): Node => {
   let label = match state.value {
     n if n > 0 => "Positive",
     n if n < 0 => "Negative",
-    0 => "Zero",
+    _ => "Zero",
   }
 
   let wide = state.width > 700.0

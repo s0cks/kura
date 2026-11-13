@@ -1,0 +1,5 @@
+fn view() =>
+  #block(fill: white){
+    for i in 0..3 =>
+      #text(size: 24px, "Hello World")
+  }
