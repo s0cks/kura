@@ -131,6 +131,9 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_layout_set_text)      \
   V(kura_rt_layout_set)           \
   V(kura_rt_layout_run)           \
+  V(kura_rt_layout_slot_begin)    \
+  V(kura_rt_layout_slot_instance) \
+  V(kura_rt_layout_slot_end)      \
   V(kura_rt_layout_get)           \
   V(kura_rt_register_event)
 // clang-format on
@@ -210,6 +213,14 @@ void kura_rt_layout_set_text(const void* table, uint64_t count, uint64_t node, v
 void kura_rt_layout_set(const void* table, uint64_t count, uint64_t node, uint64_t property, uint64_t tag,
                         uint64_t bits);
 void kura_rt_layout_run(const void* table, uint64_t count);
+// A dynamic hole is a `slot` node of a table. `slot_begin` starts its list of instances over, `slot_instance` makes
+// the next one (a copy of the template table `instance`, or the one that was there last time if it is the same table)
+// and makes the template's table mean that instance until the next call, and `slot_end` drops the instances that
+// weren't made. Setting, drawing and reading boxes through a template's table works on its instance.
+void kura_rt_layout_slot_begin(const void* table, uint64_t count, uint64_t slot);
+void kura_rt_layout_slot_instance(const void* table, uint64_t count, uint64_t slot, const void* instance,
+                                  uint64_t instance_count);
+void kura_rt_layout_slot_end(const void* table, uint64_t count, uint64_t slot);
 double kura_rt_layout_get(const void* table, uint64_t count, uint64_t node, uint64_t component);
 
 void* kura_rt_record_new();

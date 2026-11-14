@@ -18,6 +18,26 @@ fn update(msg: Message, state: State): State =>
     _ => state
   }
 
+fn counter-buttons() =>
+  #fragment{
+    #button(on-click: Increment,
+            justify: "center",
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Increment")
+    }
+
+    #button(fill: white,
+            on-click: Decrement,
+            justify: "center",
+            padding: 16px){
+      #text(size: 24px,
+            text-align: "center",
+            "Decrement")
+    }
+  }
+
 fn view(state: State): Node => {
   let label = match state.value {
     n if n > 0 => "Positive",
@@ -42,21 +62,6 @@ fn view(state: State): Node => {
       #text(size: 24px, label)
     }
 
-    #button(on-click: Increment,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Increment")
-    }
-
-    #button(fill: white,
-            on-click: Decrement,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Decrement")
-    }
+    counter-buttons()
   }
 }

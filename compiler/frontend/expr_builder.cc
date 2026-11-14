@@ -177,8 +177,6 @@ auto ExprBuilder::BuildModule() -> Module* {
   for (const auto* item : items) {
     Pending next{item, {}, {}, nullptr, nullptr, nullptr, nullptr, false, false, nullptr};
     if (const auto* fn = item->As<syntax::FnDecl>()) {
-      if (!fn->set_rules.empty())
-        Unsupported(fn->set_rules.front(), "a `set` rule");
       next.where = fn->name.span;
       next.name = fn->name.text;
       next.directives = &fn->directives;
@@ -229,7 +227,7 @@ auto ExprBuilder::BuildModule() -> Module* {
       for (const auto store : BuildBindings(binding))
         m->AddBinding(store);
     } else if (item->Is<syntax::SetRule>()) {
-      Unsupported(item, "a `set` rule");
+      // in force for the functions below it: see pass 3
     } else if (const auto* assertion = item->As<syntax::StaticAssert>()) {
       BuildStaticAssert(assertion);
     } else if (item->Is<syntax::Error>()) {
@@ -237,8 +235,21 @@ auto ExprBuilder::BuildModule() -> Module* {
     }
   }
 
+  // The `set` rules of the file, with where they are: a function is under the ones above it. Their values are
+  // built here, outside any function, so that no parameter of a function can be what a name in one means.
+  std::vector<std::pair<const Node*, SetEntries>> file_rules{};
+  for (const auto* item : items) {
+    if (const auto* rule = item->As<syntax::SetRule>())
+      file_rules.emplace_back(item, BuildSetRule(rule));
+  }
+
   // Pass 3: function bodies.
   for (const auto& [decl, where, name, directives, params, result, body, exported, imported, func] : pending) {
+    SetScope file_scope(this);
+    for (const auto& [at, entries] : file_rules) {
+      if (std::find(items.begin(), items.end(), at) < std::find(items.begin(), items.end(), decl))
+        set_scopes_.back().insert(set_scopes_.back().end(), entries.begin(), entries.end());
+    }
     LocalsScope func_scope(GetOwner());
     Function::ParameterList parameters{};
     for (const auto* param_node : *params) {
@@ -251,6 +262,13 @@ auto ExprBuilder::BuildModule() -> Module* {
       func->SetReturnType(BuildType(result));
     func->SetDirectives(BuildDirectives(*directives));
     func->SetCExport(exported);
+
+    // the function's own `set` rules, written before its body, are in force in all of it
+    SetScope func_rules(this);
+    if (const auto* fn = decl->As<syntax::FnDecl>()) {
+      for (const auto* rule_node : fn->set_rules)
+        AddSetRule(rule_node->As<syntax::SetRule>());
+    }
 
     LocalsScope body_scope(GetOwner());
     func->SetBody(BuildSeq(body));
@@ -607,7 +625,7 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return LoadName(node, pipe_locals_.back());
     }
     case Node::kStringTemplate:
-      Unsupported(node, "string interpolation");
+      return BuildStringTemplate(node->As<syntax::StringTemplate>());
     case Node::kRangeExpr:
       Unsupported(node, "a range");
     case Node::kIndex:
@@ -791,6 +809,24 @@ auto ExprBuilder::BuildIs(const syntax::IsExpr* is) -> Expr* {
     match->AppendCase(CaseExpr::New(pattern, ToSeq(Literal(Bool::True())))->AsCase());
   match->SetWildcard(ToSeq(Literal(pattern->IsWildcardPattern() ? Bool::True() : Bool::False())));
   return static_cast<Expr*>(match);
+}
+
+// `"x is {pos.x}"` is `"x is " + pos.x` with the value written as text: every `{...}` is turned into a string,
+// and the pieces are joined in order. A piece of text that is empty is left out.
+auto ExprBuilder::BuildStringTemplate(const syntax::StringTemplate* ctx) -> Expr* {
+  Expr* result = nullptr;
+  const auto append = [&result](Expr* part) {
+    result = result ? BinaryExpr::New(BinaryOp::kAdd, result, part) : part;
+  };
+
+  for (size_t idx = 0; idx < ctx->exprs.size(); idx++) {
+    if (!ctx->texts[idx].empty())
+      append(Literal(String::New(ctx->texts[idx])));
+    append(UnaryExpr::NewStringify(Build(ctx->exprs[idx])));
+  }
+  if (!ctx->texts.back().empty())
+    append(Literal(String::New(ctx->texts.back())));
+  return result;
 }
 
 auto ExprBuilder::BuildImplicitText(const syntax::Node* value) -> Expr* {
@@ -1338,13 +1374,14 @@ void ExprBuilder::BuildStaticAssert(const syntax::StaticAssert* assertion) {
 
 auto ExprBuilder::BuildBlock(const syntax::Block* block) -> SeqExpr* {
   LocalsScope block_scope(GetOwner());
+  SetScope block_rules(this);
   ExprList body{};
   for (const auto* stmt : block->statements) {
     if (const auto* binding = stmt->As<syntax::Binding>()) {
       for (const auto store : BuildBindings(binding))
         body.push_back(store);
-    } else if (stmt->Is<syntax::SetRule>()) {
-      Unsupported(stmt, "a `set` rule");
+    } else if (const auto* rule = stmt->As<syntax::SetRule>()) {
+      AddSetRule(rule);
     } else {
       BuildStaticAssert(stmt->As<syntax::StaticAssert>());
     }
@@ -1507,6 +1544,28 @@ static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<No
   }
 }
 
+auto ExprBuilder::BuildSetRule(const syntax::SetRule* rule) -> SetEntries {
+  const auto& tag = rule->tag.text;
+  const auto kind = ParseNodeExprKind(tag);
+  if (!kind)
+    Error(rule, "unknown UI element '#" + tag + "' in a `set` rule");
+
+  SetEntries entries{};
+  for (const auto* prop : rule->props) {
+    const auto* arg = prop->As<syntax::Arg>();
+    if (arg->form != syntax::Arg::kNamed && arg->form != syntax::Arg::kPun)
+      Error(prop, "a `set` rule takes named properties, like `set " + tag + "(size: 12px)`");
+    entries.push_back({*kind, arg->name.text, Build(arg->value)});
+  }
+  return entries;
+}
+
+void ExprBuilder::AddSetRule(const syntax::SetRule* rule) {
+  auto entries = BuildSetRule(rule);
+  auto& scope = set_scopes_.back();
+  scope.insert(scope.end(), entries.begin(), entries.end());
+}
+
 auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
   const auto& tag = ctx->tag.text;
   const auto kind = ParseNodeExprKind(tag);
@@ -1535,6 +1594,21 @@ auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
     }
   }
 
+  // the defaults the rules in force give, for what the element didn't set: the innermost, latest rule wins
+  std::unordered_set<std::string> given{};
+  for (const auto store : properties)
+    given.insert(store->GetProperty()->GetPropertyName()->GetValue());
+  for (auto scope = set_scopes_.rbegin(); scope != set_scopes_.rend(); ++scope) {
+    for (auto entry = scope->rbegin(); entry != scope->rend(); ++entry) {
+      if (entry->kind != *kind || !given.insert(entry->property).second)
+        continue;
+      const auto property = Property::FindOrCreate(String::New(entry->property), Type::NoneType());
+      const auto store = StorePropertyExpr::New(property, entry->value);
+      store->SetFromSet();
+      properties.push_back(store);
+    }
+  }
+
   const auto node = NodeExpr::New(*kind, std::move(properties))->AsNode();
   node->SetDirectives(BuildDirectives(ctx->directives));
   if (ctx->has_children)
@@ -1544,18 +1618,24 @@ auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
 
 auto ExprBuilder::BuildUiChildren(NodeExpr* node, const syntax::UiElement* ctx) -> void {
   LocalsScope children_scope(GetOwner());
+  SetScope children_rules(this);
   for (const auto* child : ctx->children) {
     if (const auto* element = child->As<syntax::UiElement>()) {
       node->Append(BuildUi(element));
     } else if (const auto* binding = child->As<syntax::Binding>()) {
       for (const auto store : BuildBindings(binding))
         node->Append(store);
-    } else if (child->Is<syntax::StringLit>()) {
+    } else if (child->Is<syntax::StringLit>() || child->Is<syntax::StringTemplate>()) {
       node->Append(BuildImplicitText(child));
-    } else if (child->Is<syntax::SetRule>()) {
-      Unsupported(child, "a `set` rule");
+    } else if (const auto* rule = child->As<syntax::SetRule>()) {
+      AddSetRule(rule);
+    } else if (child->Is<syntax::Call>() || child->Is<syntax::IfExpr>() || child->Is<syntax::MatchExpr>() ||
+               child->Is<syntax::ForExpr>() || child->Is<syntax::WhenExpr>()) {
+      // Content that is worked out when the view runs: a call to a helper that returns a node, and the
+      // control flow that picks or repeats nodes. What it evaluates to is what the node holds there.
+      node->Append(Build(child));
     } else {
-      Unsupported(child, "this kind of child (strings with `{...}`, spacers, `when`, `if`, `for`, `match` and calls)");
+      Unsupported(child, "a spacer");
     }
   }
 }

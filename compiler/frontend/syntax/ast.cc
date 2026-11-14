@@ -4,6 +4,8 @@
 #include "heap/heap.h"
 
 namespace kura::syntax {
+#ifdef KURA_ENABLE_HEAP
+
 #define DEFINE_NEW(Name)                                                                                            \
   auto Name::operator new(const size_t sz) -> void* {                                                               \
     return ::kura::heap::Heap::Current()->AllocateObject(kura::heap::Space::kModel, ::kura::heap::ObjKind::k##Name, \
@@ -12,6 +14,8 @@ namespace kura::syntax {
 
 FOR_EACH_NODE(DEFINE_NEW)
 #undef DEFINE_NEW
+
+#endif  // KURA_ENABLE_HEAP
 
 auto FindPathAt(const Node* root, const uint32_t offset) -> std::vector<const Node*> {
   std::vector<const Node*> path{};

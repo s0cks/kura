@@ -351,6 +351,7 @@ class LiteralExpr : public Expr {
 class StorePropertyExpr : public TemplateExpr<1> {
  private:
   Property* property_;
+  bool from_set_ = false;
 
   void SetProperty(Property* rhs) {
     property_ = rhs;
@@ -365,6 +366,15 @@ class StorePropertyExpr : public TemplateExpr<1> {
 
   auto GetProperty() const -> Property* {
     return property_;
+  }
+
+  // Whether the value is a default that a `set` rule gave, not something written on the element.
+  inline auto IsFromSet() const -> bool {
+    return from_set_;
+  }
+
+  inline void SetFromSet() {
+    from_set_ = true;
   }
 
   HAS_NAMED_INPUT(Value, 0);

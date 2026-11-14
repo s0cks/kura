@@ -50,30 +50,6 @@ for f in "$dir"/errors/*.kui; do
         echo "$out" | grep -E "error" | sed 's/^/      /'
         status=1
     fi
-  want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
-  if out="$("$kurac" "$f" 2>&1)"; then
-    echo "FAIL  errors/$(basename "$f") (accepted)"
-    status=1
-  elif echo "$out" | grep -qF -- "$want"; then
-    echo "ok    errors/$(basename "$f")"
-  else
-    echo "FAIL  errors/$(basename "$f") (wanted: $want)"
-    echo "$out" | grep -E "error" | sed 's/^/      /'
-    status=1
-  fi
-=======
-    want="$(head -n 1 "$f" | sed -n 's|^// error: ||p')"
-    if out="$("$kurac" "$f" 2>&1)"; then
-        echo "FAIL  errors/$(basename "$f") (accepted)"
-        status=1
-    elif echo "$out" | grep -qF -- "$want"; then
-        echo "ok    errors/$(basename "$f")"
-    else
-        echo "FAIL  errors/$(basename "$f") (wanted: $want)"
-        echo "$out" | grep -E "error" | sed 's/^/      /'
-        status=1
-    fi
->>>>>>> 4025a45 (refactor: 🔨 code cleanup)
 done
 
 # Programs in run/ are compiled and executed. Each `// run: <fn> [args] => <value>`
@@ -81,8 +57,7 @@ done
 # it. Each `// panic: <fn> [args] => <text>` line must abort with <text>.
 tmp="$(mktemp)"
 trap 'rm -f "$tmp" "$tmp.err"; rm -rf "$libs"' EXIT
-for f in "$dir"/run/*.kura; do
-<<<<<<< HEAD
+for f in "$dir"/run/*.kui; do
     name="run/$(basename "$f")"
     grep -hE '^// (run|panic): ' "$f" >"$tmp"
     flags="$(flags_of "$f")"
@@ -90,42 +65,9 @@ for f in "$dir"/run/*.kura; do
     if ! "$kurac" "$f" $flags --emit-llvm >/dev/null 2>"$tmp.err"; then
         echo "FAIL  $name (does not compile)"
         sed 's/^/      /' "$tmp.err" | head -5
-||||||| parent of 4025a45 (refactor: 🔨 code cleanup)
-  name="run/$(basename "$f")"
-  grep -hE '^// (run|panic): ' "$f" > "$tmp"
-  if ! "$kurac" "$f" --emit-llvm > /dev/null 2> "$tmp.err"; then
-    echo "FAIL  $name (does not compile)"
-    sed 's/^/      /' "$tmp.err" | head -5
-    status=1
-    continue
-  fi
-  pass=0
-  while IFS= read -r line; do
-    kind="${line#// }"; kind="${kind%%:*}"
-    spec="${line#// $kind: }"
-    call="${spec%% => *}"
-    want="${spec#* => }"
-    # shellcheck disable=SC2086
-    out="$("$kurac" "$f" --run $call 2>&1)"; code=$?
-    if [ "$kind" = run ]; then
-      got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1)"
-      if [ "$got" = "$want" ]; then
-        pass=$((pass + 1))
-      else
-        echo "FAIL  $name: $call"
-        echo "      wanted: $want"
-        echo "      got:    ${got:-$(echo "$out" | grep -E 'error|panic' | head -n 1)}"
-=======
-    name="run/$(basename "$f")"
-    grep -hE '^// (run|panic): ' "$f" >"$tmp"
-    if ! "$kurac" "$f" --emit-llvm >/dev/null 2>"$tmp.err"; then
-        echo "FAIL  $name (does not compile)"
-        sed 's/^/      /' "$tmp.err" | head -5
->>>>>>> 4025a45 (refactor: 🔨 code cleanup)
         status=1
         continue
     fi
-<<<<<<< HEAD
     pass=0
     while IFS= read -r line; do
         kind="${line#// }"
@@ -156,41 +98,6 @@ for f in "$dir"/run/*.kura; do
         fi
     done <"$tmp"
     echo "ok    $name ($pass checks)"
-||||||| parent of 4025a45 (refactor: 🔨 code cleanup)
-  done < "$tmp"
-  echo "ok    $name ($pass checks)"
-=======
-    pass=0
-    while IFS= read -r line; do
-        kind="${line#// }"
-        kind="${kind%%:*}"
-        spec="${line#// $kind: }"
-        call="${spec%% => *}"
-        want="${spec#* => }"
-        # shellcheck disable=SC2086
-        out="$("$kurac" "$f" --run $call 2>&1)"
-        code=$?
-        if [ "$kind" = run ]; then
-            got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1)"
-            if [ "$got" = "$want" ]; then
-                pass=$((pass + 1))
-            else
-                echo "FAIL  $name: $call"
-                echo "      wanted: $want"
-                echo "      got:    ${got:-$(echo "$out" | grep -E 'error|panic' | head -n 1)}"
-                status=1
-            fi
-        else
-            if [ "$code" -ne 0 ] && echo "$out" | grep -qF -- "$want"; then
-                pass=$((pass + 1))
-            else
-                echo "FAIL  $name: $call (wanted a panic: $want)"
-                status=1
-            fi
-        fi
-    done <"$tmp"
-    echo "ok    $name ($pass checks)"
->>>>>>> 4025a45 (refactor: 🔨 code cleanup)
 done
 rm -f "$tmp.err"
 exit $status

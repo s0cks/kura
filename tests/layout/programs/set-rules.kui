@@ -1,0 +1,35 @@
+// args: 0
+// set rules: the file's, the function's, a block's and an element's, with explicit arguments winning.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+let base = 10
+let big = base + 14
+
+fn early() =>
+  #text("early")
+
+set text(size: 12px)
+
+fn late() =>
+  #text("late")
+
+fn view(state: Int): Node =>
+  set text(size: big * 1px, color: red)
+  #block(direction: "column", gap: 2px){
+    #text("fn rule")
+    #text(size: 30px, "explicit")
+    late()
+    #block {
+      set text(size: 20px)
+      #text("child rule")
+      #block {
+        #text("nested sees it")
+        set text(size: 16px)
+        #text("later wins")
+      }
+    }
+    #text("after the block")
+    early()
+  }

@@ -1,5 +1,15 @@
-fn view() =>
-  #block(fill: white){
-    for i in 0..3 =>
-      #text(size: 24px, "Hello World")
+fn row(label: String) =>
+  set text(size: 24px)
+  #block(direction: "row", justify: "center", padding: 4px, fill: white){
+    #text(label)
+  }
+
+fn view(): Node =>
+  #block(direction: "column", 
+         width: 1fr,
+         height: 1fr,
+         padding: 10px,
+         justify: "center", gap: 2px, fill: blue){
+    row("first")
+    for _, item in ["a", "b", "c"] => row(item)
   }

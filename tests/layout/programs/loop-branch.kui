@@ -1,0 +1,24 @@
+// args: 1
+// The same, taking the other branch of the if.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn cell(label: String) =>
+  #block(padding: 2px, fill: white){
+    #text(label)
+  }
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 4px){
+    for _, row in ["a", "b"] =>
+      #block(direction: "row", gap: 2px){
+        for _, col in ["1", "2", "3"] => cell(col)
+        if state > 0 {
+          cell("pos")
+        } else {
+          cell("nonpos")
+        }
+      }
+    cell("end")
+  }

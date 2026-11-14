@@ -11,6 +11,9 @@ auto NodeVisitor::Render(expr::Expr* expr) -> VisitResult {
   dom::Builder builder(&tree, [this](LocalVariable* local) {
     return GetOwner()->FoldableLocal(local);
   });
+  builder.SetFunctionResolver([this](LocalVariable* local) {
+    return GetOwner()->FindFunction(local);
+  });
   builder.Build(expr);
   if (!builder.Ok()) {
     for (const auto& error : builder.GetErrors())
@@ -37,6 +40,18 @@ auto NodeVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
   return Render(expr);
 }
 
+// A call to a helper that returns nodes is rendered, as the nodes it returns; any other call is a value.
+auto NodeVisitor::VisitCall(expr::CallExpr* expr) -> VisitResult {
+  dom::Tree tree{};
+  dom::Builder probe(&tree);
+  probe.SetFunctionResolver([this](LocalVariable* local) {
+    return GetOwner()->FindFunction(local);
+  });
+  if (probe.IsHelperCall(expr))
+    return Render(expr);
+  return ValueVisitor::VisitCall(expr);
+}
+
 auto NodeVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) -> VisitResult {
   const auto iterable = Eval(expr->GetIterable());
   if (!iterable)
@@ -45,7 +60,11 @@ auto NodeVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) -> V
   Loop loop{};
   if (!BeginLoop(iterable, &loop))
     return false;
-  GetOwner()->Define(expr->GetLocal(), loop.item->GetDefinition());
+  // `for i in xs` skips the element, and `for _, x in xs` the index
+  if (expr->GetLocal() != nullptr)
+    GetOwner()->Define(expr->GetLocal(), loop.item->GetDefinition());
+  if (expr->GetIndex() != nullptr)
+    GetOwner()->Define(expr->GetIndex(), loop.index);
 
   const auto render = [&]() -> bool {
     NodeVisitor for_body(GetOwner());

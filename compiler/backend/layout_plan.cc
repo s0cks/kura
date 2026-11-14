@@ -209,12 +209,22 @@ auto LayoutPlan::Convert(dom::Node* node, layout::Style* style, const layout::No
 }
 
 auto LayoutPlan::Add(dom::Node* node, dom::Node* root, const layout::NodeId parent, std::string* error) -> bool {
+  // a dynamic hole is a slot: a box-less node that the nodes it makes at run time go under
+  if (node->IsDynamic()) {
+    const auto id = static_cast<layout::NodeId>(nodes_.size());
+    layout::Style style{};
+    style.display = layout::Display::kContents;
+    layout::AddNode(&nodes_, parent, style, false);
+    ids_[node] = id;
+    return true;
+  }
+
   if (!node->IsElement())
     return true;
 
   const auto id = static_cast<layout::NodeId>(nodes_.size());
   layout::Style style{};
-  style.display = node->IsFragment() && node != root ? layout::Display::kContents : layout::Display::kFlex;
+  style.display = node->IsFragment() && (node != root || template_) ? layout::Display::kContents : layout::Display::kFlex;
   if (!Convert(node, &style, id, error))
     return false;
 
@@ -229,6 +239,14 @@ auto LayoutPlan::Add(dom::Node* node, dom::Node* root, const layout::NodeId pare
 
 auto LayoutPlan::Build(dom::Node* root, std::string* error) -> std::shared_ptr<LayoutPlan> {
   std::shared_ptr<LayoutPlan> plan(new LayoutPlan(next_index++));
+  if (!plan->Add(root, root, layout::kNoNode, error))
+    return nullptr;
+  return plan;
+}
+
+auto LayoutPlan::BuildTemplate(dom::Node* root, std::string* error) -> std::shared_ptr<LayoutPlan> {
+  std::shared_ptr<LayoutPlan> plan(new LayoutPlan(next_index++));
+  plan->template_ = true;
   if (!plan->Add(root, root, layout::kNoNode, error))
     return nullptr;
   return plan;

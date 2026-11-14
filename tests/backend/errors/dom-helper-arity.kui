@@ -1,0 +1,12 @@
+// error: takes 1 argument(s), but was given 2
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn label(text: String) =>
+  #text(text)
+
+fn view(state: Int): Node =>
+  #block {
+    label("a", "b")
+  }

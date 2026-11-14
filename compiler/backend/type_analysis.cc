@@ -693,6 +693,9 @@ class Analyzer {
       return a;
 
     switch (instr->GetOp()) {
+      case UnaryOp::kStringify:
+        // the string is made when the program runs, so it is as tagged as what makes it
+        return CompileType::Any();
       case UnaryOp::kBang:
         if (!a->IsBool())
           Report(instr, "`!` needs a Bool, not " + a->ToString());

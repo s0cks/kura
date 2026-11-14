@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+#include "frontend/expr.h"
+#include "function.h"
+#include "local_scope.h"
 #include "object.h"
 
 namespace kura::dom {
@@ -25,6 +28,10 @@ inline auto ValueOf(Object* object) -> decltype(static_cast<T*>(object)->GetValu
 auto FoldUnary(const UnaryOp op, Object* value) -> Object* {
   if (!value)
     return nullptr;
+
+  // a string made of parts is made when the view runs, unless it is only a string
+  if (op == UnaryOp::kStringify)
+    return value->GetType() == kStringType ? value : nullptr;
 
   if (op == UnaryOp::kBang)
     return value->GetType() == kBoolType ? Bool::New(!ValueOf<Bool>(value)) : nullptr;
@@ -50,9 +57,64 @@ auto FoldUnary(const UnaryOp op, Object* value) -> Object* {
   }
 }
 
+auto IsUnitObject(Object* value) -> bool {
+  const auto type = value->GetType();
+  return type == kPxType || type == kPctType || type == kFrType;
+}
+
+auto UnitValue(Object* value) -> double {
+  switch (value->GetType()) {
+    case kPxType:
+      return ValueOf<Px>(value);
+    case kPctType:
+      return ValueOf<Pct>(value);
+    default:
+      return ValueOf<Fr>(value);
+  }
+}
+
+auto MakeUnit(Object* like, const double value) -> Object* {
+  switch (like->GetType()) {
+    case kPxType:
+      return Px::New(value);
+    case kPctType:
+      return Pct::New(value);
+    default:
+      return Fr::New(value);
+  }
+}
+
+auto NumberValue(Object* value, double* out) -> bool {
+  switch (value->GetType()) {
+    case kIntType:
+      *out = static_cast<double>(ValueOf<Int>(value));
+      return true;
+    case kFloatType:
+      *out = ValueOf<Float>(value);
+      return true;
+    case kNumberType:
+      *out = ValueOf<Number>(value);
+      return true;
+    default:
+      return false;
+  }
+}
+
 auto FoldBinary(const BinaryOp op, Object* lhs, Object* rhs) -> Object* {
-  if (!lhs || !rhs || lhs->GetType() != rhs->GetType())
+  if (!lhs || !rhs)
     return nullptr;
+
+  // a unit scaled by a number: `2 * 8px`, `8px * 2`, `8px / 2`
+  if (lhs->GetType() != rhs->GetType()) {
+    double n = 0;
+    if (IsUnitObject(lhs) && NumberValue(rhs, &n) && op == BinaryOp::kMultiply)
+      return MakeUnit(lhs, UnitValue(lhs) * n);
+    if (IsUnitObject(lhs) && NumberValue(rhs, &n) && op == BinaryOp::kDivide && n != 0)
+      return MakeUnit(lhs, UnitValue(lhs) / n);
+    if (NumberValue(lhs, &n) && IsUnitObject(rhs) && op == BinaryOp::kMultiply)
+      return MakeUnit(rhs, n * UnitValue(rhs));
+    return nullptr;
+  }
 
   switch (lhs->GetType()) {
     case kIntType: {
@@ -136,6 +198,21 @@ void CollectMetaTags(const expr::DirectiveList& directives, TagList* tags) {
     }
   }
 }
+
+// Whether a function returns a node. A declared result of `Node`, `Content`, `Optional<Node>` or `Node | None`
+// says so. Without one, a body that ends in a UI element does.
+auto ReturnsNode(Function* function) -> bool {
+  if (const auto type = function->GetReturnType()) {
+    std::string name = type->ToString();
+    name.erase(std::remove(name.begin(), name.end(), ' '), name.end());
+    return name == "Node" || name == "Content" || name == "Optional<Node>" || name == "Node|None" ||
+           name == "None|Node";
+  }
+
+  const auto body = function->GetBody();
+  const auto count = body ? body->GetNumberOfChildren() : 0;
+  return count > 0 && body->GetChildAt(count - 1)->AsNode() != nullptr;
+}
 }  // namespace
 
 void Builder::Error(const std::string& message) {
@@ -153,6 +230,8 @@ auto Builder::Fold(expr::Expr* expr) -> Object* {
     const auto it = constants_.find(load->GetLocal());
     if (it != constants_.end())
       return it->second;
+    if (bound_.contains(load->GetLocal()))
+      return nullptr;
     return resolver_ ? resolver_(load->GetLocal()) : nullptr;
   }
 
@@ -187,6 +266,12 @@ void Builder::BuildInto(Node* parent, expr::Expr* expr, const TagList& tags) {
 
   if (const auto store = expr->AsStoreLocal())
     return BuildBind(parent, store);
+
+  // a call to a helper that returns a node is that node: it is built here, in its caller's tree
+  if (const auto call = expr->AsCall()) {
+    if (const auto helper = FindHelper(call))
+      return InlineHelper(parent, helper, call, tags);
+  }
 
   // `None` is no node
   if (const auto literal = expr->AsLiteral(); literal && literal->GetValue()->GetType() == kNoneType)
@@ -239,6 +324,10 @@ void Builder::BuildProperties(Node* node, expr::NodeExpr* expr) {
 
     PropertyValue value{};
     value.def = def;
+    if (store->IsFromSet() && !Fold(store->GetValue())) {
+      Error(where + " '" + name + "': the value of a `set` rule has to be a compile-time constant");
+      continue;
+    }
     if (const auto folded = Fold(store->GetValue())) {
       if (const auto problem = CheckConstant(*def, folded)) {
         Error(where + " '" + name + "': " + *problem);
@@ -258,10 +347,56 @@ void Builder::BuildBind(Node* parent, expr::StoreLocalExpr* expr) {
   parent->Append(bind);
 
   // an annotation can change what the value is, so it isn't followed
-  if (!expr->GetAnnotation()) {
-    if (const auto constant = Fold(expr->GetValue()))
-      constants_[expr->GetLocal()] = constant;
+  const auto constant = expr->GetAnnotation() ? nullptr : Fold(expr->GetValue());
+  bound_.insert(expr->GetLocal());
+  if (constant)
+    constants_[expr->GetLocal()] = constant;
+  else
+    constants_.erase(expr->GetLocal());  // a helper's parameter holds a different value at each call
+}
+
+auto Builder::FindHelper(expr::CallExpr* call) -> Function* {
+  if (!functions_)
+    return nullptr;
+
+  const auto target = call->GetTarget() ? call->GetTarget()->AsLoadLocal() : nullptr;
+  if (!target)
+    return nullptr;
+
+  const auto function = functions_(target->GetLocal());
+  if (!function || !function->HasBody() || function->IsExtern() || function->IsCExport())
+    return nullptr;
+
+  // the entry points are called by the host, never by a view
+  const auto name = std::string(function->GetName()->GetData());
+  if (name == "view" || name == "init" || name == "update")
+    return nullptr;
+  return ReturnsNode(function) ? function : nullptr;
+}
+
+// A helper is built where it is called: its parameters are bound to the arguments, in the order they are
+// given, and then its body is built as if it were written at the call. Every call builds its own copy, so
+// what one call is given can't leak into the next. A `#fragment` the helper returns groups its children
+// without reserving space, so they lay out as the caller's own.
+void Builder::InlineHelper(Node* parent, Function* helper, expr::CallExpr* call, const TagList& tags) {
+  const auto name = std::string(helper->GetName()->GetData());
+  if (std::find(inlining_.begin(), inlining_.end(), helper) != inlining_.end()) {
+    Error("'" + name + "' calls itself: recursion isn't allowed");
+    return;
   }
+
+  const auto& params = helper->GetParameters();
+  if (params.size() != call->GetNumberOfArgs()) {
+    Error("'" + name + "' takes " + std::to_string(params.size()) + " argument(s), but was given " +
+          std::to_string(call->GetNumberOfArgs()));
+    return;
+  }
+
+  inlining_.push_back(helper);
+  for (size_t i = 0; i < params.size(); i++)
+    BuildBind(parent, new expr::StoreLocalExpr(params[i].local, call->GetArgAt(i)));
+  BuildInto(parent, helper->GetBody(), tags);
+  inlining_.pop_back();
 }
 
 void Builder::ReportUnknownProperty(Node* node, const std::string& name) {

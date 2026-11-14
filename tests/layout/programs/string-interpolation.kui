@@ -1,0 +1,15 @@
+// args: 7
+// Escapes, and interpolation in a text argument, as a child, nested, and with the index of a loop.
+type Message = Tick | Tock
+fn init(): Int => 7
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 2px){
+    #text("count is {state}")
+    "double is {state * 2} ok"
+    #text("flag {state > 3} {-state}")
+    #text("tab[\t] quote[\"] brace[\{x\}] back[\\] nested[{"in {state}"}]")
+    for i, w in ["a", "b"] => #text("{i}: {w}")
+    "{state}"
+  }

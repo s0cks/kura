@@ -1,0 +1,16 @@
+// args: 0
+// A for loop in a column: its items flow with the item before it, one gap apart.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn row(label: String) =>
+  #block(direction: "row", padding: 4px, fill: white){
+    #text(label)
+  }
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 2px){
+    row("first")
+    for _, item in ["a", "b", "c"] => row(item)
+  }

@@ -4,6 +4,12 @@
 // is used on a thread it is copied into a Context, which then keeps the tree's text, its boxes and
 // whether they are out of date. A frame only runs the layout kernel again when a text changed or
 // the viewport did, so an update that doesn't touch layout costs a handful of comparisons.
+//
+// A dynamic hole (`for`, `if`, `match`, a helper called in a view) is a `slot` node of its table, and the nodes it
+// makes are instances of other tables (templates), each kept in a Context of its own under the slot. A layout
+// copies the tree and all the instances under it into one table, runs the kernel once over it, and hands every
+// instance back its boxes, so that what a hole makes lays out as part of the tree around it. A template's table
+// means the instance that was made last from it (see `kura_rt_layout_slot_instance`).
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -21,32 +27,162 @@ namespace lay = kura::layout;
 
 constexpr float kDefaultFontSize = 16.0f;
 
+struct Context;
+
+// What a slot of a table holds: the instances that its hole made, in order.
+struct Slot {
+  std::vector<std::unique_ptr<Context>> instances{};
+  size_t cursor = 0;
+};
+
 struct Context {
+  const void* table = nullptr;
   std::vector<lay::Node> nodes{};
   std::vector<lay::Box> boxes{};
   std::vector<std::string> texts{};
   std::vector<float> sizes{};
   std::vector<std::string> families{};
+  std::unordered_map<uint64_t, Slot> slots{};
+  // the context this one is an instance in, or null for the tree's own
+  Context* owner = nullptr;
+  // where this context's nodes start in the table that is laid out, as of the last layout
+  size_t base = 0;
   lay::Engine engine{};
   lay::Size viewport{lay::kUndefined, lay::kUndefined};
   bool dirty = true;
 };
 
 thread_local std::unordered_map<const void*, std::unique_ptr<Context>> tl_contexts{};
+// The template tables that mean an instance right now.
+thread_local std::unordered_map<const void*, Context*> tl_bindings{};
+
+auto NewContext(const void* table, const uint64_t count) -> std::unique_ptr<Context> {
+  auto context = std::make_unique<Context>();
+  context->table = table;
+  context->nodes.resize(count);
+  if (count > 0)
+    std::memcpy(context->nodes.data(), table, count * sizeof(lay::Node));
+  context->boxes.resize(count);
+  context->texts.resize(count);
+  context->sizes.assign(count, kDefaultFontSize);
+  context->families.resize(count);
+  return context;
+}
 
 auto ContextFor(const void* table, const uint64_t count) -> Context& {
+  if (const auto bound = tl_bindings.find(table); bound != tl_bindings.end())
+    return *bound->second;
   auto& slot = tl_contexts[table];
   if (slot && slot->nodes.size() == count)
     return *slot;
-  slot = std::make_unique<Context>();
-  slot->nodes.resize(count);
-  if (count > 0)
-    std::memcpy(slot->nodes.data(), table, count * sizeof(lay::Node));
-  slot->boxes.resize(count);
-  slot->texts.resize(count);
-  slot->sizes.assign(count, kDefaultFontSize);
-  slot->families.resize(count);
+  slot = NewContext(table, count);
   return *slot;
+}
+
+// Something in the context changed in a way that needs a layout: so does every tree it is part of.
+void Touch(Context* context) {
+  for (; context != nullptr; context = context->owner)
+    context->dirty = true;
+}
+
+// Forgets what a context that is going away was bound to.
+void Forget(Context* context) {
+  for (auto it = tl_bindings.begin(); it != tl_bindings.end();) {
+    if (it->second == context)
+      it = tl_bindings.erase(it);
+    else
+      ++it;
+  }
+  for (auto& [id, slot] : context->slots) {
+    for (const auto& instance : slot.instances)
+      Forget(instance.get());
+  }
+}
+
+auto Equal(const lay::Length& a, const lay::Length& b) -> bool {
+  return a.value == b.value && a.unit == b.unit;
+}
+
+auto Equal(const lay::Edges& a, const lay::Edges& b) -> bool {
+  return Equal(a.top, b.top) && Equal(a.right, b.right) && Equal(a.bottom, b.bottom) && Equal(a.left, b.left);
+}
+
+auto Equal(const lay::Style& a, const lay::Style& b) -> bool {
+  return Equal(a.width, b.width) && Equal(a.height, b.height) && Equal(a.min_width, b.min_width) &&
+         Equal(a.min_height, b.min_height) && Equal(a.max_width, b.max_width) &&
+         Equal(a.max_height, b.max_height) && Equal(a.basis, b.basis) && Equal(a.padding, b.padding) &&
+         Equal(a.margin, b.margin) && Equal(a.gap, b.gap) && a.grow == b.grow && a.shrink == b.shrink &&
+         a.direction == b.direction && a.align == b.align && a.align_self == b.align_self &&
+         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display;
+}
+
+// Whether an instance was made from this table: tables are constant, so the same shape is the same values. They
+// are compared by value, not bytes (the padding of a struct isn't set), and not by address, because the same
+// template is a table of its own in each pass that runs the hole.
+auto Matches(const Context& instance, const void* table, const uint64_t count) -> bool {
+  if (instance.nodes.size() != count)
+    return false;
+  if (instance.table == table)
+    return true;
+
+  const auto a = static_cast<const lay::Node*>(instance.table);
+  const auto b = static_cast<const lay::Node*>(table);
+  for (uint64_t i = 0; i < count; i++) {
+    if (a[i].parent != b[i].parent || a[i].first_child != b[i].first_child ||
+        a[i].next_sibling != b[i].next_sibling || a[i].measured != b[i].measured || !Equal(a[i].style, b[i].style))
+      return false;
+  }
+  return true;
+}
+
+// The tree and its instances as one table for the kernel.
+struct Flat {
+  std::vector<lay::Node> nodes{};
+  std::vector<lay::Box> boxes{};
+  std::vector<std::string> texts{};
+  std::vector<float> sizes{};
+  std::vector<std::string> families{};
+};
+
+void Flatten(Context* context, Flat* flat) {
+  const auto base = flat->nodes.size();
+  context->base = base;
+  const auto shift = [base](const lay::NodeId id) { return id == lay::kNoNode ? id : id + base; };
+  for (size_t i = 0; i < context->nodes.size(); i++) {
+    auto node = context->nodes[i];
+    node.parent = shift(node.parent);
+    node.first_child = shift(node.first_child);
+    node.next_sibling = shift(node.next_sibling);
+    flat->nodes.push_back(node);
+    flat->texts.push_back(context->texts[i]);
+    flat->sizes.push_back(context->sizes[i]);
+    flat->families.push_back(context->families[i]);
+  }
+
+  // an instance's root is the next child of the slot it is in
+  for (auto& [slot_id, slot] : context->slots) {
+    const auto slot_flat = base + slot_id;
+    lay::NodeId last = lay::kNoNode;
+    for (const auto& instance : slot.instances) {
+      Flatten(instance.get(), flat);
+      const auto root = static_cast<lay::NodeId>(instance->base);
+      flat->nodes[root].parent = slot_flat;
+      if (last == lay::kNoNode)
+        flat->nodes[slot_flat].first_child = root;
+      else
+        flat->nodes[last].next_sibling = root;
+      last = root;
+    }
+  }
+}
+
+void Scatter(Context* context, const Flat& flat) {
+  for (size_t i = 0; i < context->boxes.size(); i++)
+    context->boxes[i] = flat.boxes[context->base + i];
+  for (auto& [slot_id, slot] : context->slots) {
+    for (const auto& instance : slot.instances)
+      Scatter(instance.get(), flat);
+  }
 }
 
 // What the renderer can't tell us, when there is no renderer to ask: enough to keep layout working.
@@ -98,9 +234,9 @@ auto Wrap(const std::string& text, const float size, const std::string& family, 
 
 // The size of a text node's content, wrapped at word boundaries to `max_width` when it is given.
 auto Measure(void* user, const lay::NodeId id, const lay::Scalar max_width) -> lay::Size {
-  const auto& context = *static_cast<Context*>(user);
+  const auto& flat = *static_cast<Flat*>(user);
   lay::Size size{};
-  for (const auto& line : Wrap(context.texts[id], context.sizes[id], context.families[id], max_width)) {
+  for (const auto& line : Wrap(flat.texts[id], flat.sizes[id], flat.families[id], max_width)) {
     size.width = std::max(size.width, line.width);
     size.height += line.height;
   }
@@ -284,7 +420,7 @@ void kura_rt_layout_set(const void* table, const uint64_t count, const uint64_t 
     return;
   auto ok = false;
   if (Apply(&context.nodes[node].style, static_cast<lay::Property>(property), tag, bits, &ok))
-    context.dirty = true;
+    Touch(&context);
   if (!ok)
     kura_rt_panic("a layout property was given a value it doesn't take");
 }
@@ -302,7 +438,7 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
   context.texts[node] = value;
   context.sizes[node] = font_size;
   context.families[node] = font_family;
-  context.dirty = true;
+  Touch(&context);
 }
 
 void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const uint64_t color) {
@@ -341,9 +477,55 @@ void kura_rt_layout_run(const void* table, const uint64_t count) {
   const lay::Size viewport{static_cast<float>(kura_rt_viewport_width()), static_cast<float>(kura_rt_viewport_height())};
   if (!context.dirty && viewport.width == context.viewport.width && viewport.height == context.viewport.height)
     return;
-  context.engine.Run(context.nodes, 0, viewport, context.boxes, &Measure, &context);
+
+  Flat flat{};
+  Flatten(&context, &flat);
+  flat.boxes.resize(flat.nodes.size());
+  context.engine.Run(flat.nodes, 0, viewport, flat.boxes, &Measure, &flat);
+  Scatter(&context, flat);
   context.viewport = viewport;
   context.dirty = false;
+}
+
+void kura_rt_layout_slot_begin(const void* table, const uint64_t count, const uint64_t slot) {
+  auto& context = ContextFor(table, count);
+  if (slot >= count)
+    return;
+  context.slots[slot].cursor = 0;
+}
+
+void kura_rt_layout_slot_instance(const void* table, const uint64_t count, const uint64_t slot, const void* instance,
+                                  const uint64_t instance_count) {
+  auto& context = ContextFor(table, count);
+  if (slot >= count)
+    return;
+  auto& target = context.slots[slot];
+  const auto index = target.cursor++;
+  if (index >= target.instances.size() || !Matches(*target.instances[index], instance, instance_count)) {
+    auto made = NewContext(instance, instance_count);
+    made->owner = &context;
+    if (index < target.instances.size()) {
+      Forget(target.instances[index].get());
+      target.instances[index] = std::move(made);
+    } else {
+      target.instances.push_back(std::move(made));
+    }
+    Touch(&context);
+  }
+  tl_bindings[instance] = target.instances[index].get();
+}
+
+void kura_rt_layout_slot_end(const void* table, const uint64_t count, const uint64_t slot) {
+  auto& context = ContextFor(table, count);
+  if (slot >= count)
+    return;
+  auto& target = context.slots[slot];
+  if (target.instances.size() <= target.cursor)
+    return;
+  for (size_t i = target.cursor; i < target.instances.size(); i++)
+    Forget(target.instances[i].get());
+  target.instances.resize(target.cursor);
+  Touch(&context);
 }
 
 double kura_rt_layout_get(const void* table, const uint64_t count, const uint64_t node, const uint64_t component) {

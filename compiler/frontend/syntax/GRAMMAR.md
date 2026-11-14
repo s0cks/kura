@@ -295,6 +295,10 @@ The parser accepts all of the above. `ExprBuilder` turns this much into Expr IR:
 * `static-assert` with a condition made of literals and of earlier `let`s that are themselves computable;
 * everything that was part of v1 before. `%` now builds a modulus; it used to be built as `||`.
 
-It reports "valid v1 syntax but the Expr IR has no node for it yet" for the rest: `set` rules, ranges outside
-patterns, slices, interpolation, `...rest` and type names in a destructuring `let`, `...rest` in a record
-pattern, and spacer and dynamic children.
+It reports "valid v1 syntax but the Expr IR has no node for it yet" for the rest: ranges outside
+patterns, slices, `...rest` and type names in a destructuring `let`, `...rest` in a record pattern, and spacer
+children.
+
+Strings with `{...}` are built as the pieces joined with `+`, each interpolated value turned into text as it is
+written (a string stays as it is). `set` rules are built into the properties of the elements below them, as the
+defaults they give: see the guide on UI elements.

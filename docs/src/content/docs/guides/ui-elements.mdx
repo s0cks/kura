@@ -86,20 +86,39 @@ Only kind-level matching is supported. Matching on node properties (for example
 
 ## Cascading properties with `set`
 
-<Aside type="caution" title="Planned">
-`set` rules are designed for v1 but not implemented yet.
-</Aside>
-
-A `set` rule, as in Typst, sets default properties for every matching node below it in
-the compilation unit:
+A `set` rule, as in Typst, sets default properties for every matching element below it:
 
 ```kura
 set text(size: default-font-size)
 ```
 
+A rule is in force from where it is written to the end of what it is written in, and in everything inside that:
+
+| Written in                  | It applies to                                            |
+| --------------------------- | -------------------------------------------------------- |
+| the top level of a file     | the functions below it                                   |
+| before a function's body    | all of that function                                     |
+| a `{ ... }` block           | the rest of the block                                    |
+| the children of an element  | the children after it, and what is inside them           |
+
+What an element sets itself wins over a rule, and of two rules the inner, later one wins. Rules are lexical: a
+helper that a view calls has the rules of where the helper is written, not those of where it is called.
+
+```kura
+set text(size: 12px)
+
+fn view(state: State): Node =>
+  #block {
+    set text(color: red)
+    #text("12px, red")
+    #text(size: 20px, "20px, red")
+  }
+```
+
 In v1 a `set` value must be a compile-time constant. That includes computed constants such as
-`let default-font-size = a + b` where `a` and `b` are constant. Anything that depends on
-runtime state is an error. Typst-style `show` rules are out of scope for v1.
+`let default-font-size = a + b` where `a` and `b` are constant, and a unit scaled by a number, like `4 * 8px`.
+Anything that depends on runtime state is an error. A rule takes named properties only. Typst-style `show` rules
+are out of scope for v1.
 
 ## Text
 

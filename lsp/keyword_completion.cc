@@ -119,7 +119,6 @@ auto GetDeclarationCompletions(const Document& doc, const uint32_t offset) -> st
         .kind = CompletionItem::kSnippet,
         .label = std::string(snippet.keyword),
         .detail = std::string(snippet.detail),
-        // an exact match goes first, so typing `fn` and pressing enter works
         .preselect = word.text == snippet.keyword,
         .sort = std::string(word.text == snippet.keyword ? "0" : "1") + std::string(snippet.keyword),
         .insertText = std::string(snippet.body),

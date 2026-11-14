@@ -60,6 +60,25 @@ auto LayoutRunInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto LayoutSlotBeginInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutSlotBegin(layout=" << GetPlan()->GetIndex() << ", slot=" << GetSlot() << ")";
+  return ss.str();
+}
+
+auto LayoutSlotInstanceInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutSlotInstance(layout=" << GetPlan()->GetIndex() << ", slot=" << GetSlot()
+     << ", template=" << GetTemplate()->GetIndex() << ", nodes=" << GetTemplate()->GetNumberOfNodes() << ")";
+  return ss.str();
+}
+
+auto LayoutSlotEndInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "LayoutSlotEnd(layout=" << GetPlan()->GetIndex() << ", slot=" << GetSlot() << ")";
+  return ss.str();
+}
+
 auto LayoutBoxInstr::ToString() const -> std::string {
   static constexpr const char* kNames[] = {"x", "y", "width", "height"};
   std::stringstream ss{};

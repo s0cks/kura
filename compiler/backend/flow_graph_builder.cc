@@ -9,6 +9,7 @@
 #include "backend/ir.h"
 #include "backend/value_visitor.h"
 #include "common.h"
+#include "dom/builder.h"
 #include "dom/printer.h"
 #include "frontend/expr.h"
 #include "function.h"
@@ -95,9 +96,27 @@ void FlowGraphBuilder::AddParameters(const std::vector<LocalVariable*>& params,
 }
 
 auto FlowGraphBuilder::FoldableLocal(LocalVariable* local) const -> Object* {
-  const auto defn = Lookup(local);
-  const auto constant = defn ? defn->AsConstant() : nullptr;
-  return constant ? constant->GetValue() : nullptr;
+  if (const auto defn = Lookup(local)) {
+    const auto constant = defn->AsConstant();
+    return constant ? constant->GetValue() : nullptr;
+  }
+
+  // A top-level `let` isn't in a function's own definitions: it is a constant if it is made of constants, such
+  // as `let size = a + 4px`, which is what lets a `set` rule use it and text be measured before the view runs.
+  if (const auto found = ctx_->constants.find(local); found != ctx_->constants.end())
+    return found->second;
+
+  const auto binding = std::find_if(ctx_->bindings.begin(), ctx_->bindings.end(),
+                                    [local](const expr::StoreLocalExpr* store) { return store->GetLocal() == local; });
+  if (binding == ctx_->bindings.end() || (*binding)->GetAnnotation() || !ctx_->folding.insert(local).second)
+    return nullptr;
+
+  dom::Tree tree{};
+  dom::Builder builder(&tree, [this](LocalVariable* other) { return FoldableLocal(other); });
+  const auto value = builder.FoldConstant((*binding)->GetValue());
+  ctx_->folding.erase(local);
+  ctx_->constants[local] = value;
+  return value;
 }
 
 void FlowGraphBuilder::AddPropertyConstraint(Value* value, const dom::PropertyDef* def, const std::string& where) {
@@ -408,6 +427,7 @@ auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>
   Context ctx{};
   ctx.graph = new ModuleGraph();
   ctx.dump_dom = dump_dom;
+  ctx.bindings = module->bindings;
   for (const auto func : module->functions)
     ctx.functions[std::string(func->GetName()->GetData())] = func;
 

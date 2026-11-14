@@ -1,0 +1,7 @@
+text x=0 y=0 size=16 family="" color=#000000ff value="count is 7"
+text x=0 y=22 size=16 family="" color=#000000ff value="double is 14 ok"
+text x=0 y=44 size=16 family="" color=#000000ff value="flag true -7"
+text x=0 y=66 size=16 family="" color=#000000ff value="tab[	] quote["] brace[{x}] back[\] nested[in 7]"
+text x=0 y=88 size=16 family="" color=#000000ff value="0: a"
+text x=0 y=110 size=16 family="" color=#000000ff value="1: b"
+text x=0 y=132 size=16 family="" color=#000000ff value="7"

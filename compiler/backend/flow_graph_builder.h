@@ -8,6 +8,7 @@
 
 #include "backend/flow_graph.h"
 #include "backend/ir.h"
+#include "backend/layout_plan.h"
 #include "common.h"
 #include "dom/node.h"
 #include "frontend/expr.h"
@@ -37,6 +38,10 @@ class FlowGraphBuilder {
     std::vector<std::string> errors{};
     // where to dump the virtual DOM of each view; null: don't
     std::ostream* dump_dom = nullptr;
+    // the top-level `let`s, and which of them are constants, as far as it has been worked out (null: not one)
+    std::vector<expr::StoreLocalExpr*> bindings{};
+    std::unordered_map<LocalVariable*, Object*> constants{};
+    std::unordered_set<LocalVariable*> folding{};
   };
 
  private:
@@ -58,6 +63,15 @@ class FlowGraphBuilder {
   Instruction* tail_ = nullptr;
 
   std::unordered_map<LocalVariable*, Definition*> env_{};
+
+  // Set while a dynamic hole of a DOM tree is being lowered: the slot of the plan that the nodes it makes go under,
+  // and whether it is the pass that makes them or the one that draws them. See DomLowering.
+  struct HoleScope {
+    std::shared_ptr<LayoutPlan> plan{};
+    layout::NodeId slot = layout::kNoNode;
+    bool draw = false;
+  };
+  const HoleScope* hole_ = nullptr;
 
   FlowGraphBuilder(Context* ctx, const std::string& name, Function* function);
 

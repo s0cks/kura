@@ -158,6 +158,36 @@ class ExprBuilder {
   auto Build(const syntax::Node* node) -> Expr*;
   auto BuildSeq(const syntax::Node* node) -> SeqExpr*;
   auto BuildBlock(const syntax::Block* block) -> SeqExpr*;
+  auto BuildStringTemplate(const syntax::StringTemplate* ctx) -> Expr*;
+
+  // A `set` rule gives the elements of a kind below it defaults for properties they don't set themselves. It is
+  // in force for the rest of the block, element, function or file it is written in, and for what is inside that.
+  // Its values are built where it is written, so what names mean in them is what it means there.
+  struct SetEntry {
+    NodeExpr::Kind kind;
+    std::string property;
+    Expr* value;
+  };
+  using SetEntries = std::vector<SetEntry>;
+  // the rules in force, outermost first; the entries of one are in the order written, the last of them winning
+  std::vector<SetEntries> set_scopes_{};
+
+  class SetScope {
+   private:
+    ExprBuilder* owner_;
+
+   public:
+    explicit SetScope(ExprBuilder* owner) :
+      owner_(owner) {
+      owner_->set_scopes_.emplace_back();
+    }
+    ~SetScope() {
+      owner_->set_scopes_.pop_back();
+    }
+  };
+
+  auto BuildSetRule(const syntax::SetRule* rule) -> SetEntries;
+  void AddSetRule(const syntax::SetRule* rule);
   auto BuildBinding(const syntax::Binding* binding) -> StoreLocalExpr*;
   auto BuildDirectives(const std::vector<syntax::Node*>& directives) -> DirectiveList;
   auto BuildType(const syntax::Node* node) -> TypeExpr*;

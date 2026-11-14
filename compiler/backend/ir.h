@@ -54,6 +54,9 @@ namespace kura {
   V(LayoutSetText)              \
   V(LayoutSetProperty)          \
   V(LayoutRun)                  \
+  V(LayoutSlotBegin)            \
+  V(LayoutSlotInstance)         \
+  V(LayoutSlotEnd)              \
   V(LayoutBox)                  \
   V(FillRect)                   \
   V(FillRoundRect)              \

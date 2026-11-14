@@ -8,7 +8,8 @@ namespace kura {
 #define FOR_EACH_UNARY_OP(V) \
   V(Plus)                    \
   V(Minus)                   \
-  V(Bang)
+  V(Bang)                    \
+  V(Stringify)
 
 enum UnaryOp {
 #define DEFINE_OP(Name) k##Name,

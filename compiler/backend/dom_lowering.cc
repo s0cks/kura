@@ -41,7 +41,7 @@ auto DomLowering::ResolveProperties(dom::Node* node, Resolved* resolved) -> bool
 // frame. The runtime only lays out again if one of them actually changed.
 void DomLowering::EmitLayoutProperties(dom::Node* node, const Resolved& resolved) {
   const auto id = plan_->FindId(node);
-  if (!id)
+  if (!id || drawing_hole_)
     return;
   for (const auto& [def, value] : resolved) {
     if (const auto property = LayoutPlan::PropertyOf(def->name))
@@ -50,15 +50,38 @@ void DomLowering::EmitLayoutProperties(dom::Node* node, const Resolved& resolved
 }
 
 auto DomLowering::Lower(dom::Node* root) -> bool {
+  const auto owner = host_->GetOwner();
+  // when this tree is what a hole makes, where: the hole's own scope must not reach what is lowered in here
+  const auto hole = owner->hole_;
+  struct Restore {
+    FlowGraphBuilder* owner;
+    const FlowGraphBuilder::HoleScope* hole;
+    ~Restore() {
+      owner->hole_ = hole;
+    }
+  } restore{owner, hole};
+  owner->hole_ = nullptr;
+
   std::string error{};
-  plan_ = LayoutPlan::Build(root, &error);
+  plan_ = hole ? LayoutPlan::BuildTemplate(root, &error) : LayoutPlan::Build(root, &error);
   if (!plan_)
     return Fail(error);
+
+  if (hole) {
+    drawing_hole_ = hole->draw;
+    host_->Emit(LayoutSlotInstanceInstr::New(hole->plan, hole->slot, plan_));
+  }
 
   if (!root->Accept(this))
     return false;
 
-  host_->Emit(LayoutRunInstr::New(plan_));
+  // what a hole makes is drawn when the hole is drawn, after the layout of the tree it is in
+  if (hole && !hole->draw)
+    return true;
+
+  // the tree a hole is in lays its instances out, with itself
+  if (!hole)
+    host_->Emit(LayoutRunInstr::New(plan_));
   for (const auto& op : ops_) {
     if (op.node->IsButton()) {
       if (!DrawButton(op.node))
@@ -70,7 +93,7 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
       if (!DrawBlock(op.node))
         return false;
     } else if (op.node->IsDynamic()) {
-      if (!LowerDynamic(op.node))
+      if (!RunHole(op.node, true))
         return false;
     }
   }
@@ -128,7 +151,7 @@ auto DomLowering::VisitText(dom::Node* node) -> bool {
 
   // Layout needs to know how big the text is going to be, so it has to be told before it runs.
   const auto id = plan_->FindId(node);
-  if (id)
+  if (id && !drawing_hole_)
     host_->Emit(LayoutSetTextInstr::New(plan_, *id, value, plan_->GetFontSize(*id), plan_->GetFontFamily(*id)));
 
   ops_.push_back(Op{node, value});
@@ -137,7 +160,10 @@ auto DomLowering::VisitText(dom::Node* node) -> bool {
 
 auto DomLowering::VisitDynamic(dom::Node* node) -> bool {
   ops_.push_back(Op{node, nullptr});
-  return true;
+  // its instances are made now, before the layout; when they are drawn, they are there already
+  if (drawing_hole_)
+    return true;
+  return RunHole(node, false);
 }
 
 auto DomLowering::VisitBind(dom::Node* node) -> bool {
@@ -217,8 +243,26 @@ auto DomLowering::DrawText(const Op& op) -> bool {
   return true;
 }
 
-auto DomLowering::LowerDynamic(dom::Node* node) -> bool {
-  NodeVisitor for_expr(host_->GetOwner());
-  return node->GetExpr()->Accept(&for_expr);
+// Runs a dynamic hole: the first time, to make its instances under its slot, and the second, to draw them.
+auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
+  const auto id = plan_->FindId(node);
+  if (!id)
+    return Fail("internal error: a dynamic node has no place in the layout");
+
+  const auto owner = host_->GetOwner();
+  FlowGraphBuilder::HoleScope scope{plan_, *id, draw};
+  const auto outer = owner->hole_;
+  owner->hole_ = &scope;
+
+  host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
+  NodeVisitor for_expr(owner);
+  const auto ok = node->GetExpr()->Accept(&for_expr);
+  owner->hole_ = outer;
+  if (!ok)
+    return false;
+
+  if (!draw)
+    host_->Emit(LayoutSlotEndInstr::New(plan_, *id));
+  return true;
 }
 }  // namespace kura

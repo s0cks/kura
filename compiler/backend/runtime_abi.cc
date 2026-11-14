@@ -810,6 +810,11 @@ KuraValue kura_rt_unop(const uint64_t op_code, const uint64_t tag, const uint64_
         Panic("`!` needs a Bool, not " + TagName(tag));
 
       return Bool(bits == 0);
+    case UnaryOp::kStringify:
+      // what `{...}` in a string puts there: a string is itself, and any other value as it is written
+      if (tag == kTagString)
+        return {tag, bits};
+      return MakeString(Format({tag, bits}));
     case UnaryOp::kPlus:
       if (!IsScalar(tag) && !IsUnit(tag))
         Panic("can't apply `+` to " + TagName(tag));

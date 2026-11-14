@@ -1,0 +1,4 @@
+text x=4 y=4 size=16 family="" color=#000000ff value="first"
+text x=4 y=34 size=16 family="" color=#000000ff value="a"
+text x=4 y=64 size=16 family="" color=#000000ff value="b"
+text x=4 y=94 size=16 family="" color=#000000ff value="c"

@@ -1,0 +1,8 @@
+// error: a `set` rule takes named properties
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  set text(12px)
+  #text("x")

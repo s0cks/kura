@@ -596,6 +596,106 @@ class LayoutRunInstr : public GraphicsInstr {
   }
 };
 
+// What a dynamic hole puts into its plan's layout. The hole is a slot node of the plan; the runtime keeps a list of
+// instances under it, each one a copy of a template plan, and lays the instances out as the slot's children.
+//
+// `Begin` starts the list over: the first instance made after it is the first one again. `Instance` makes the next
+// one, or reuses it if the same template was there last time, and points the template's table at it, so that what
+// is set and drawn through the template's table goes to that instance. `End` drops the instances that weren't
+// made this time. A hole is run twice in a view: once before the plan is laid out, to make the instances and say
+// what they hold, and once after, to draw them.
+class LayoutSlotBeginInstr : public GraphicsInstr {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId slot_;
+
+ public:
+  LayoutSlotBeginInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot) :
+    GraphicsInstr(),
+    plan_(std::move(plan)),
+    slot_(slot) {}
+  ~LayoutSlotBeginInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetSlot() const -> layout::NodeId {
+    return slot_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutSlotBegin);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot) -> LayoutSlotBeginInstr* {
+    return new LayoutSlotBeginInstr(std::move(plan), slot);
+  }
+};
+
+class LayoutSlotInstanceInstr : public GraphicsInstr {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId slot_;
+  std::shared_ptr<LayoutPlan> template_;
+
+ public:
+  LayoutSlotInstanceInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot,
+                          std::shared_ptr<LayoutPlan> instance) :
+    GraphicsInstr(),
+    plan_(std::move(plan)),
+    slot_(slot),
+    template_(std::move(instance)) {}
+  ~LayoutSlotInstanceInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetSlot() const -> layout::NodeId {
+    return slot_;
+  }
+
+  inline auto GetTemplate() const -> const std::shared_ptr<LayoutPlan>& {
+    return template_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutSlotInstance);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot,
+                         std::shared_ptr<LayoutPlan> instance) -> LayoutSlotInstanceInstr* {
+    return new LayoutSlotInstanceInstr(std::move(plan), slot, std::move(instance));
+  }
+};
+
+class LayoutSlotEndInstr : public GraphicsInstr {
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId slot_;
+
+ public:
+  LayoutSlotEndInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot) :
+    GraphicsInstr(),
+    plan_(std::move(plan)),
+    slot_(slot) {}
+  ~LayoutSlotEndInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetSlot() const -> layout::NodeId {
+    return slot_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(LayoutSlotEnd);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot) -> LayoutSlotEndInstr* {
+    return new LayoutSlotEndInstr(std::move(plan), slot);
+  }
+};
+
 // One coordinate of a node's laid out box: a Px, in the viewport's coordinates.
 class LayoutBoxInstr : public GraphicsInstr {
  public:

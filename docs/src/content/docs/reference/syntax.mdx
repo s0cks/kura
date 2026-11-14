@@ -125,11 +125,18 @@ They are used for slices and in patterns (`0..10 => ...`).
 
 ## Strings
 
-A `{` in a string interpolates one expression; `\{` and `\}` are literal braces.
+A `{` in a string interpolates one expression; `\{` and `\}` are literal braces. The escapes are `\n`, `\t`,
+`\"`, `\\`, `\{` and `\}`. A string is on one line: write `\n` for a line break.
 
 ```kura
 #text("{pos.x}, {pos.y}")
+#text("{count} items, {label}")
 ```
+
+The value is put in the string as it is written in a program: a string as it is, `7` as `7`, `1.5` as `1.5`, a
+`Float` with no fraction as `2.0`, `true` as `true`, `10px` as `10px`, and a variant by its name. An interpolation
+can hold any expression, including a string with interpolations of its own. Format specifiers, like `{x:.2}`,
+are reserved.
 
 ## Optional values
 

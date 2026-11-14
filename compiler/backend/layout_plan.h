@@ -20,8 +20,9 @@ namespace kura {
 // size of the viewport and the size of the text.
 //
 // `#fragment`s are in the table too, as `display: contents` nodes, so ids stay one-to-one with
-// elements. Dynamic (`for`/`if`) and bind nodes are not: they are rendered as trees of their own, which
-// are laid out on their own and don't take part in this tree's layout yet.
+// elements. So is each dynamic hole (`for`/`if`/`match`), as a `display: contents` slot: what the hole
+// makes when the view runs are instances of other plans (templates), which the runtime puts under the
+// slot before it lays the tree out, so they take part in this tree's layout. Bind nodes are not in the table.
 class LayoutPlan {
  private:
   uint64_t index_;
@@ -32,6 +33,8 @@ class LayoutPlan {
 
   explicit LayoutPlan(const uint64_t index) :
     index_(index) {}
+
+  bool template_ = false;
 
   auto Add(dom::Node* node, dom::Node* root, layout::NodeId parent, std::string* error) -> bool;
   auto Convert(dom::Node* node, layout::Style* style, layout::NodeId id, std::string* error) -> bool;
@@ -45,6 +48,10 @@ class LayoutPlan {
   static auto PropertyOf(std::string_view name) -> std::optional<layout::Property>;
 
   static auto Build(dom::Node* root, std::string* error) -> std::shared_ptr<LayoutPlan>;
+
+  // The plan of what a dynamic hole makes once. It is never laid out on its own: the runtime puts a copy of it
+  // under the hole's slot in the plan that holds the hole. A `#fragment` at its root takes no box, like any other.
+  static auto BuildTemplate(dom::Node* root, std::string* error) -> std::shared_ptr<LayoutPlan>;
 
   // A number that's unique to this plan in the process: it names the plan's table in generated code.
   inline auto GetIndex() const -> uint64_t {

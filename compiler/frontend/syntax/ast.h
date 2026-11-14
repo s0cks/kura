@@ -156,6 +156,8 @@ struct Name {
   }
 };
 
+#ifdef KURA_ENABLE_HEAP
+
 #define DEFINE_NODE(Name_)                            \
   static constexpr Kind kKind = k##Name_;             \
   Name_() :                                           \
@@ -167,6 +169,20 @@ struct Name {
     value->span = std::move(span);                    \
     return value;                                     \
   }
+
+#else
+
+#define DEFINE_NODE(Name_)                            \
+  static constexpr Kind kKind = k##Name_;             \
+  Name_() :                                           \
+    Node(kKind) {}                                    \
+  static inline auto New(const Span span) -> Name_* { \
+    Name_* value = new Name_();                       \
+    value->span = std::move(span);                    \
+    return value;                                     \
+  }
+
+#endif  // KURA_ENABLE_HEAP
 
 namespace detail {
 inline void Visit(const NodeFn& fn, const Node* node) {

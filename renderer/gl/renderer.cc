@@ -102,7 +102,7 @@ inline auto IsValid(const KuraTextStyle& value) -> bool {
 
 inline auto FamilyOf(const KuraTextStyle& style) -> std::string {
   return style.family == nullptr || style.family_length == 0 ? std::string{}
-                                                              : std::string(style.family, style.family_length);
+                                                             : std::string(style.family, style.family_length);
 }
 
 inline auto Coord(const float value) -> float {
@@ -502,11 +502,14 @@ class GlImpl {
     glBindBuffer(GL_ARRAY_BUFFER, text_vbo_);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, text_ibo_);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, x)));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex),
+                          reinterpret_cast<void*>(offsetof(TextVertex, x)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, u)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex),
+                          reinterpret_cast<void*>(offsetof(TextVertex, u)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TextVertex), reinterpret_cast<void*>(offsetof(TextVertex, r)));
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TextVertex),
+                          reinterpret_cast<void*>(offsetof(TextVertex, r)));
     glBindVertexArray(0);
     text_verts_.reserve(kMaxVertices);
     text_idx_.reserve(kMaxIndices);
@@ -629,6 +632,7 @@ class GlImpl {
       glGetProgramInfoLog(program_, sizeof(log) - 1, nullptr, log);
       throw std::runtime_error(std::string("kura gl renderer: program failed to link: ") + log);
     }
+
     u_res_ = glGetUniformLocation(program_, "u_res");
   }
 
@@ -777,6 +781,7 @@ class GlImpl {
   void Flush() {
     if (idx_.empty())
       return;
+
     glUseProgram(program_);
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
@@ -792,78 +797,46 @@ class GlImpl {
   }
 };
 
-namespace {
-template <typename F>
-inline auto Guard(F&& body) -> Status {
-  try {
-    return body();
-  } catch (...) {
-    return KURA_RENDERER_ERR_OUT_OF_RESOURCES;
-  }
-}
-
-inline auto Self(void* self) -> GlImpl* {
-  return static_cast<GlImpl*>(self);
-}
-
 auto OpBeginFrame(void* self, const uint32_t width, const uint32_t height) -> Status {
-  return Guard([&] {
-    return Self(self)->BeginFrame(width, height);
-  });
+  return reinterpret_cast<GlImpl*>(self)->BeginFrame(width, height);
 }
 
 auto OpEndFrame(void* self) -> Status {
-  return Guard([&] {
-    return Self(self)->EndFrame();
-  });
+  return reinterpret_cast<GlImpl*>(self)->EndFrame();
 }
 
 auto OpPushClip(void* self, const KuraRect rect) -> Status {
-  return Guard([&] {
-    return Self(self)->PushClip(rect);
-  });
+  return reinterpret_cast<GlImpl*>(self)->PushClip(std::move(rect));
 }
 
 auto OpPopClip(void* self) -> Status {
-  return Guard([&] {
-    return Self(self)->PopClip();
-  });
+  return reinterpret_cast<GlImpl*>(self)->PopClip();
 }
 
 auto OpFillRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] {
-    return Self(self)->FillRect(rect, color);
-  });
+  return reinterpret_cast<GlImpl*>(self)->FillRect(std::move(rect), std::move(color));
 }
 
 auto OpStrokeRect(void* self, const KuraRect rect, const KuraColor color) -> Status {
-  return Guard([&] {
-    return Self(self)->StrokeRect(rect, color);
-  });
+  return reinterpret_cast<GlImpl*>(self)->StrokeRect(rect, std::move(color));
 }
 
 auto OpDrawLine(void* self, const KuraVec2 from, const KuraVec2 to, const KuraColor color) -> Status {
-  return Guard([&] {
-    return Self(self)->DrawLine(from, to, color);
-  });
+  return reinterpret_cast<GlImpl*>(self)->DrawLine(std::move(from), std::move(to), std::move(color));
 }
 
 auto OpDrawText(void* self, const KuraVec2 pos, const char* utf8, const size_t length, const KuraTextStyle style,
                 const KuraColor color) -> Status {
-  return Guard([&] {
-    return Self(self)->DrawText(pos, utf8, length, style, color);
-  });
+  return reinterpret_cast<GlImpl*>(self)->DrawText(std::move(pos), utf8, length, style, std::move(color));
 }
 
 auto OpMeasureText(void* self, const char* utf8, const size_t length, const KuraTextStyle style, KuraTextMetrics* out)
     -> Status {
-  return Guard([&] {
-    return Self(self)->MeasureText(utf8, length, style, out);
-  });
+  return reinterpret_cast<GlImpl*>(self)->MeasureText(utf8, length, style, out);
 }
 
 void OpDestroy(void* self) {
-  delete Self(self);
+  delete reinterpret_cast<GlImpl*>(self);
 }
 
 constexpr auto MakeOps() -> KuraRendererOps {
@@ -884,16 +857,18 @@ constexpr auto MakeOps() -> KuraRendererOps {
 }
 
 constexpr KuraRendererOps kOps = MakeOps();
-}  // namespace
 }  // namespace kura::renderer
 
 extern "C" {
 KuraRendererStatus kura_gl_renderer_create(const KuraGlOptions* options, KuraRenderer* renderer) {
   using namespace kura::renderer;
+
   if (renderer == nullptr)
     return KURA_RENDERER_ERR_INVALID_ARG;
+
   if (options != nullptr && options->struct_size < sizeof(KuraGlOptions))
     return KURA_RENDERER_ERR_INVALID_ARG;
+
   // without a context there's nothing to ask the version of, and calling GL would be a crash
   if (epoxy_gl_version() < 33)
     return KURA_RENDERER_ERR_INVALID_ARG;
@@ -901,6 +876,7 @@ KuraRendererStatus kura_gl_renderer_create(const KuraGlOptions* options, KuraRen
   KuraGlOptions resolved{sizeof(KuraGlOptions), 1, {0.0f, 0.0f, 0.0f, 1.0f}};
   if (options != nullptr)
     resolved = *options;
+
   try {
     *renderer = KuraRenderer{&kOps, new GlImpl(resolved)};
   } catch (const std::exception& e) {
@@ -909,6 +885,7 @@ KuraRendererStatus kura_gl_renderer_create(const KuraGlOptions* options, KuraRen
   } catch (...) {
     return KURA_RENDERER_ERR_OUT_OF_RESOURCES;
   }
+
   return KURA_RENDERER_OK;
 }
 }

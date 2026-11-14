@@ -20,6 +20,7 @@ class NodeVisitor : public ValueVisitor {
 
   auto VisitNode(expr::NodeExpr* expr) -> VisitResult override;
   auto VisitSeq(expr::SeqExpr* expr) -> VisitResult override;
+  auto VisitCall(expr::CallExpr* expr) -> VisitResult override;
   auto VisitListComprehension(expr::ListComprehensionExpr* expr) -> VisitResult override;
 };
 }  // namespace kura

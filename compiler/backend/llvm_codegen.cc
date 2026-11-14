@@ -586,6 +586,26 @@ class Generator {
     CallRt("kura_rt_layout_run", void_ty_, {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes())});
   }
 
+  void EmitLayoutSlotBegin(LayoutSlotBeginInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    CallRt("kura_rt_layout_slot_begin", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot())});
+  }
+
+  void EmitLayoutSlotInstance(LayoutSlotInstanceInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    const auto instance = instr->GetTemplate().get();
+    CallRt("kura_rt_layout_slot_instance", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot()),
+            LayoutTable(instance), b_.getInt64(instance->GetNumberOfNodes())});
+  }
+
+  void EmitLayoutSlotEnd(LayoutSlotEndInstr* instr) {
+    const auto plan = instr->GetPlan().get();
+    CallRt("kura_rt_layout_slot_end", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot())});
+  }
+
   void EmitLayoutBox(LayoutBoxInstr* instr) {
     const auto plan = instr->GetPlan().get();
     Define(instr,
@@ -745,6 +765,12 @@ class Generator {
       return EmitLayoutSetProperty(d);
     if (const auto d = instr->AsLayoutRun())
       return EmitLayoutRun(d);
+    if (const auto d = instr->AsLayoutSlotBegin())
+      return EmitLayoutSlotBegin(d);
+    if (const auto d = instr->AsLayoutSlotInstance())
+      return EmitLayoutSlotInstance(d);
+    if (const auto d = instr->AsLayoutSlotEnd())
+      return EmitLayoutSlotEnd(d);
     if (const auto d = instr->AsLayoutBox())
       return EmitLayoutBox(d);
     if (const auto d = instr->AsEndFrame())

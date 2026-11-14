@@ -1,0 +1,14 @@
+// error: calls itself: recursion isn't allowed
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn nest(n: Int) =>
+  #block {
+    nest(n)
+  }
+
+fn view(state: Int): Node =>
+  #block {
+    nest(state)
+  }

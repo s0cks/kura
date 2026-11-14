@@ -1,0 +1,8 @@
+text x=0 y=0 size=24 family="" color=#ff0000ff value="fn rule"
+text x=0 y=32 size=30 family="" color=#ff0000ff value="explicit"
+text x=0 y=71.5 size=12 family="" color=#000000ff value="late"
+text x=0 y=88.5 size=20 family="" color=#ff0000ff value="child rule"
+text x=100 y=88.5 size=20 family="" color=#ff0000ff value="nested sees it"
+text x=240 y=88.5 size=16 family="" color=#ff0000ff value="later wins"
+text x=0 y=115.5 size=24 family="" color=#ff0000ff value="after the block"
+text x=0 y=147.5 size=16 family="" color=#000000ff value="early"

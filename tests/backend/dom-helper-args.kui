@@ -1,0 +1,18 @@
+// A helper is built where it is called, once per call: what one call is given doesn't leak into the next.
+type Message = Tick | Tock
+type State = { items: Seq<String>, big: Px }
+fn init(): State => { items: ["a", "b", "c"], big: 20px }
+fn update(msg: Message, state: State): State => state
+
+fn row(label: String, gap: Px) =>
+  #block(direction: "row", gap: gap){
+    #text(label)
+  }
+
+fn view(state: State): Node =>
+  #block(direction: "column"){
+    row("first", 10px)
+    row("second", state.big)
+    row("third", 12px)
+    for _, item in state.items => row(item, 12px)
+  }

@@ -1,0 +1,12 @@
+fill-rect x=0 y=0 w=70 h=1024
+fill-rect x=0 y=0 w=70 h=24
+fill-rect x=0 y=0 w=12 h=24
+fill-rect x=14 y=0 w=12 h=24
+fill-rect x=28 y=0 w=12 h=24
+fill-rect x=42 y=0 w=28 h=24
+fill-rect x=0 y=28 w=70 h=24
+fill-rect x=0 y=28 w=12 h=24
+fill-rect x=14 y=28 w=12 h=24
+fill-rect x=28 y=28 w=12 h=24
+fill-rect x=42 y=28 w=28 h=24
+fill-rect x=0 y=56 w=70 h=24
