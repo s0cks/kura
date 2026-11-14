@@ -104,6 +104,13 @@ class Session {
   // node with an `on-click`, that Message is sent, `*handled` is set, and the result is `Send`'s. A click that
   // landed on nothing isn't an error: `*handled` is false.
   auto Click(double x, double y, bool* handled, std::string* error) -> bool;
+
+  // UI => host. Says that the wheel (or a drag) moved by (dx, dy) pixels at (x, y), in the coordinates of the last
+  // frame, down and to the right being positive. The topmost `#scroll` or `#list` there that has room to move
+  // that way scrolls, and `*handled` is set: the host should `Render` again to see it. If that container has an
+  // `on-scroll`, its Message is sent too, as `Send` does. Nothing there to scroll isn't an error: `*handled` is
+  // false, and the wheel is the host's.
+  auto Scroll(double x, double y, double dx, double dy, bool* handled, std::string* error) -> bool;
 };
 }  // namespace kura
 

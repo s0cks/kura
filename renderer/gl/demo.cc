@@ -79,11 +79,32 @@ void OnGlfwError(const int code, const char* message) {
   std::fprintf(stderr, "glfw error %d: %s\n", code, message);
 }
 
-// What the window tells the host between two frames, for the loop to tell the UI about.
+// Deadzone in logical window points before a touch/click becomes a scroll drag
+constexpr double kDragThreshold = 8.0;
+
 struct WindowState {
   bool focus_changed = false;
   bool focused = false;
+  double wheel_x = 0;
+  double wheel_y = 0;
+
+  // Pointer / touch drag state
+  bool pointer_down = false;
+  bool is_dragging = false;
+  double press_x = 0.0;
+  double press_y = 0.0;
+  double last_x = 0.0;
+  double last_y = 0.0;
 };
+
+// How far a notch of the wheel scrolls, in pixels.
+constexpr double kPixelsPerNotch = 40.0;
+
+void OnScroll(GLFWwindow* window, const double x, const double y) {
+  const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
+  state->wheel_x += x;
+  state->wheel_y += y;
+}
 
 void OnFocus(GLFWwindow* window, const int focused) {
   const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
@@ -152,6 +173,7 @@ int main(const int argc, char** argv) {
   WindowState window_state{};
   glfwSetWindowUserPointer(window, &window_state);
   glfwSetWindowFocusCallback(window, &OnFocus);
+  glfwSetScrollCallback(window, &OnScroll);
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);
 
@@ -227,11 +249,78 @@ int main(const int argc, char** argv) {
       }
 
       static bool wasLeftDown = false;
-      bool isLeftDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+      const bool isLeftDown = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
 
-      if (isLeftDown && !wasLeftDown) {
-        bool handled = false;
+      double mx = 0.0;
+      double my = 0.0;
+      glfwGetCursorPos(window, &mx, &my);
 
+      int winW = 0, winH = 0;
+      int fbW = 0, fbH = 0;
+      glfwGetWindowSize(window, &winW, &winH);
+      glfwGetFramebufferSize(window, &fbW, &fbH);
+
+      if (winW > 0 && winH > 0) {
+        const double scaleX = static_cast<double>(fbW) / winW;
+        const double scaleY = static_cast<double>(fbH) / winH;
+        const double canvasTop = winH - (kura_rt_viewport_height() / scaleY);
+
+        if (isLeftDown && !window_state.pointer_down) {
+          // Touch / button press started
+          window_state.pointer_down = true;
+          window_state.is_dragging = false;
+          window_state.press_x = mx;
+          window_state.press_y = my;
+          window_state.last_x = mx;
+          window_state.last_y = my;
+        } else if (isLeftDown && window_state.pointer_down) {
+          // Finger / cursor moving while held down
+          const double totalDx = mx - window_state.press_x;
+          const double totalDy = my - window_state.press_y;
+
+          if (!window_state.is_dragging &&
+              (totalDx * totalDx + totalDy * totalDy) >= (kDragThreshold * kDragThreshold)) {
+            window_state.is_dragging = true;
+          }
+
+          if (window_state.is_dragging) {
+            const double dx = mx - window_state.last_x;
+            const double dy = my - window_state.last_y;
+            if (dx != 0.0 || dy != 0.0) {
+              bool handled = false;
+              // Match `session->Scroll` sign convention: dragging finger up (dy < 0)
+              // passes a positive scroll delta to move content down.
+              const double uiX = window_state.press_x * scaleX;
+              const double uiY = (window_state.press_y - canvasTop) * scaleY;
+              if (!session->Scroll(uiX, uiY, -dx * scaleX, -dy * scaleY, &handled, &error)) {
+                std::cerr << "failed to scroll: " << error << std::endl;
+                std::exit(1);
+              }
+            }
+          }
+
+          window_state.last_x = mx;
+          window_state.last_y = my;
+        } else if (!isLeftDown && window_state.pointer_down) {
+          // Released: only trigger a Click if the gesture never became a scroll drag
+          if (!window_state.is_dragging) {
+            bool handled = false;
+            const double uiX = mx * scaleX;
+            const double uiY = (my - canvasTop) * scaleY;
+            if (!session->Click(uiX, uiY, &handled, &error)) {
+              std::cerr << "failed to invoke click: " << error << std::endl;
+              std::exit(1);
+            }
+          }
+          window_state.pointer_down = false;
+          window_state.is_dragging = false;
+        }
+      }
+      wasLeftDown = isLeftDown;
+
+      // UI => host: the wheel over a `#scroll` or `#list` scrolls it, and the frame below shows it. GLFW's wheel
+      // is positive up and to the left, which is the way the content moves; the UI's is down and to the right.
+      if (window_state.wheel_x != 0.0 || window_state.wheel_y != 0.0) {
         double mx = 0.0;
         double my = 0.0;
         glfwGetCursorPos(window, &mx, &my);
@@ -240,23 +329,20 @@ int main(const int argc, char** argv) {
         int fbW = 0, fbH = 0;
         glfwGetWindowSize(window, &winW, &winH);
         glfwGetFramebufferSize(window, &fbW, &fbH);
-
         if (winW > 0 && winH > 0) {
-          double scaleX = static_cast<double>(fbW) / winW;
-          double scaleY = static_cast<double>(fbH) / winH;
-
-          double canvasTop = winH - (kura_rt_viewport_height() / scaleY);
-          double uiX = mx * scaleX;
-          double uiY = (my - canvasTop) * scaleY;
-
-          if (!session->Click(uiX, uiY, &handled, &error)) {
-            std::cerr << "failed to invoke click: " << error << std::endl;
+          const double scaleX = static_cast<double>(fbW) / winW;
+          const double scaleY = static_cast<double>(fbH) / winH;
+          const double canvasTop = winH - (kura_rt_viewport_height() / scaleY);
+          bool handled = false;
+          if (!session->Scroll(mx * scaleX, (my - canvasTop) * scaleY, -window_state.wheel_x * kPixelsPerNotch,
+                               -window_state.wheel_y * kPixelsPerNotch, &handled, &error)) {
+            std::cerr << "failed to scroll: " << error << std::endl;
             std::exit(1);
           }
         }
+        window_state.wheel_x = 0.0;
+        window_state.wheel_y = 0.0;
       }
-
-      wasLeftDown = isLeftDown;
     }
 
     PROFILE_BEGIN(render);

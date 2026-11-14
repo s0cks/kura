@@ -1,0 +1,24 @@
+// A column of six rows in a scroll container that shows about two and a half of them, with a row after it.
+// Every row is a button, and the state counts how many times the container has been scrolled.
+type Message = Scrolled | Clicked
+
+fn init(): Int => 0
+
+fn update(msg: Message, state: Int): Int =>
+  match msg {
+    Scrolled => state + 1
+    _ => state
+  }
+
+fn row(label: String) =>
+  #button(padding: 2px, on-click: Clicked){
+    #text(label)
+  }
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 4px){
+    #scroll(height: 60px, direction: "column", gap: 2px, on-scroll: Scrolled){
+      for _, item in ["a", "b", "c", "d", "e", "f"] => row(item)
+    }
+    #text("after")
+  }

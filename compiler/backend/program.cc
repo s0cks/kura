@@ -220,6 +220,10 @@ auto Program::Load(const std::string& path, const Options& options, std::string*
   return std::unique_ptr<Program>(new Program(module, graphs, std::move(jit)));
 }
 
+Program::~Program() {
+  kura_rt_layout_reset();
+}
+
 auto Program::Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
                    std::string* error) -> bool {
   return CheckArguments(module_, graphs_, function, args, error) && jit_->Call(function, args, result, error);

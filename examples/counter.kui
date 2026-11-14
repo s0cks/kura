@@ -1,49 +1,91 @@
-type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size)
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int)
 
 type State = {
   value: Int,
   width: Float,
   height: Float,
+  items: Seq<String>,
 }
  
-fn init(): State => { value: 1, width: 0.0, height: 0.0 }
+fn init(): State =>
+  {
+    value: 1,
+    width: 0.0,
+    height: 0.0,
+    items: [  ],
+  }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment => { value: state.value + 1, width: state.width, height: state.height }
-    Decrement => { value: state.value - 1, width: state.width, height: state.height }
-    Reset => { value: 0, width: state.width, height: state.height }
-    Set(n) => { value: n, width: state.width, height: state.height }
-    Resized(size) => { value: state.value, width: size.width, height: size.height }
+    Increment =>
+      {
+        value: state.value + 1,
+        width: state.width,
+        height: state.height,
+        items: state.items,
+      }
+    Decrement =>
+      {
+        value: state.value - 1,
+        width: state.width,
+        height: state.height,
+        items: state.items,
+      }
+    Reset =>
+      {
+        value: 0,
+        width: state.width,
+        height: state.height,
+        items: [ ],
+      }
+    Set(n) =>
+      {
+        value: n,
+        width: state.width,
+        height: state.height,
+        items: state.items,
+      }
+    Resized(size) =>
+      {
+        value: state.value,
+        width: size.width,
+        height: size.height,
+        items: state.items,
+      }
+    Append(n) => 
+      {
+        value: state.value,
+        width: state.width,
+        height: state.height,
+        items: state.items + [ "{n}"],
+      }
     _ => state
   }
 
 fn counter-buttons() =>
+  set text(size: 24px, 
+           text-align: "center")
+  set button(justify: "center", padding: 16px, fill: white)
   #fragment{
-    #button(on-click: Increment,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Increment")
+    #button(on-click: Increment){
+      #text("Increment")
     }
 
-    #button(fill: white,
-            on-click: Decrement,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Decrement")
+    #button(on-click: Decrement){
+      #text("Decrement")
     }
+  }
+
+
+fn row(label: String) =>
+  set text(size: 24px)
+  #block(direction: "row", justify: "center", padding: 4px, fill: white){
+    #text(label)
   }
 
 fn view(state: State): Node => {
-  let label = match state.value {
-    n if n > 0 => "Positive",
-    n if n < 0 => "Negative",
-    _ => "Zero",
-  }
+  set text(size: 24px)
+  set button(justify: "center", padding: 16px, fill: white)
 
   let wide = state.width > 700.0
   #block(direction: "column",
@@ -57,11 +99,26 @@ fn view(state: State): Node => {
                 n if n < 0 => red,
                 _ => white,
               }){
-    #block(direction: "row",
-         justify: "center"){
-      #text(size: 24px, label)
+    #block(direction: "column",
+           grow: 1,
+           justify: "center"){
+      #block(direction: "row",
+             justify: "center"){
+        #text("value: {state.value}")
+      }
+
+      #button(on-click: Append(state.value)){
+        #text("Append")
+      }
+
+      counter-buttons()
     }
 
-    counter-buttons()
+    #scroll(){
+      #list(){
+        for _, item in state.items =>
+          row(item)
+      }
+    }
   }
 }

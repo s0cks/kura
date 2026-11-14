@@ -225,8 +225,43 @@ auto LayoutPlan::Add(dom::Node* node, dom::Node* root, const layout::NodeId pare
   const auto id = static_cast<layout::NodeId>(nodes_.size());
   layout::Style style{};
   style.display = node->IsFragment() && (node != root || template_) ? layout::Display::kContents : layout::Display::kFlex;
+  // a list goes down the page unless it says otherwise
+  if (node->IsList())
+    style.direction = layout::Direction::kColumn;
   if (!Convert(node, &style, id, error))
     return false;
+
+  if (node->IsScroll() || node->IsList()) {
+    // The viewport is the box the node's own properties are about, and what it scrolls is a node in it: that is
+    // laid out as large as its children want, never smaller, and it takes what makes the node a container. The
+    // viewport's own direction is the content's, so that the content goes the way the node does.
+    layout::Style content = style;
+    content.width = layout::Length::Auto();
+    content.height = layout::Length::Auto();
+    content.min_width = content.min_height = content.max_width = content.max_height = layout::Length::Auto();
+    content.basis = layout::Length::Auto();
+    content.margin = layout::Edges{};
+    content.grow = 0;
+    content.shrink = 0;
+    content.align_self = layout::Align::kAuto;
+    content.overflow = layout::Overflow::kVisible;
+
+    style.padding = layout::Edges{};
+    style.gap = layout::Length::Px(0);
+    style.align = layout::Align::kStretch;
+    style.justify = layout::Justify::kStart;
+    style.wrap = false;
+    style.overflow = layout::Overflow::kScroll;
+
+    layout::AddNode(&nodes_, parent, style, false);
+    ids_[node] = id;
+    layout::AddNode(&nodes_, id, content, false);
+    for (const auto child : node->GetChildren()) {
+      if (!Add(child, root, id + 1, error))
+        return false;
+    }
+    return true;
+  }
 
   layout::AddNode(&nodes_, parent, style, node->IsText());
   ids_[node] = id;

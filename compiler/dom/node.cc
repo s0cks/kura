@@ -75,9 +75,9 @@ auto Node::Accept(Visitor* vis) -> bool {
   }
 }
 
-Tree::Tree() :
+Tree::Tree(const Kind root) :
   root_(nullptr) {
-  root_ = New(Kind::kFragment);
+  root_ = New(root);
 }
 
 auto Tree::New(const Kind kind) -> Node* {

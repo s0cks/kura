@@ -105,6 +105,19 @@ void kura_rt_fill_rect(const uint64_t xbits, const uint64_t ybits, const uint64_
   Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, rect, UnpackColor(color)));
 }
 
+void kura_rt_push_clip(const uint64_t xbits, const uint64_t ybits, const uint64_t wbits, const uint64_t hbits) {
+  const auto& ops = Current("kura_rt_push_clip");
+  const KuraRect rect{Coordinate(xbits), Coordinate(ybits), Coordinate(wbits), Coordinate(hbits)};
+  Record("kura_rt_push_clip", ops.push_clip(tl_renderer.self, rect));
+  kura_rt_event_clip_push(rect.x, rect.y, rect.width, rect.height);
+}
+
+void kura_rt_pop_clip() {
+  const auto& ops = Current("kura_rt_pop_clip");
+  Record("kura_rt_pop_clip", ops.pop_clip(tl_renderer.self));
+  kura_rt_event_clip_pop();
+}
+
 void kura_rt_set_viewport(const uint32_t width, const uint32_t height) {
   tl_viewport_width = width;
   tl_viewport_height = height;

@@ -13,7 +13,7 @@ constexpr auto kInfinity = std::numeric_limits<double>::infinity();
 constexpr KindMask kElements = (KindMask{1} << static_cast<unsigned>(Kind::kDynamic)) - 1;
 constexpr KindMask kBoxes = kElements & ~MaskOf(Kind::kFragment);
 constexpr KindMask kContainers =
-    MaskOf(Kind::kBlock) | MaskOf(Kind::kSurface) | MaskOf(Kind::kList) | MaskOf(Kind::kScroll) | MaskOf(Kind::kButton);
+    MaskOf(Kind::kView) | MaskOf(Kind::kBlock) | MaskOf(Kind::kSurface) | MaskOf(Kind::kList) | MaskOf(Kind::kScroll) | MaskOf(Kind::kButton);
 constexpr KindMask kFields = MaskOf(Kind::kText) | MaskOf(Kind::kInput);
 
 constexpr TypeMask kBool = TypeBit(CompileType::kBool);

@@ -118,6 +118,14 @@ enum class Display : uint8_t {
   kContents,
 };
 
+// A node that scrolls is two nodes in a table: the viewport, which has this, and right after it its content, which
+// is laid out at the size it wants and so may be larger than the viewport. The kernel lays both out like any other
+// nodes; it is whoever runs it that moves the content by how far the viewport has been scrolled.
+enum class Overflow : uint8_t {
+  kVisible = 0,
+  kScroll,
+};
+
 // The style properties that can change at run time. The compiler emits them as numbers, and the runtime
 // applies them to the node table before a layout.
 enum class Property : uint64_t {
@@ -159,6 +167,7 @@ struct Style {
   Justify justify = Justify::kStart;
   bool wrap = false;
   Display display = Display::kFlex;
+  Overflow overflow = Overflow::kVisible;
 };
 
 struct Node {

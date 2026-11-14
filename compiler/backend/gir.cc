@@ -109,6 +109,17 @@ auto FillRectInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto PushClipInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "PushClip(" << Name(GetX()) << ", " << Name(GetY()) << ", " << Name(GetWidth()) << ", " << Name(GetHeight())
+     << ")";
+  return ss.str();
+}
+
+auto PopClipInstr::ToString() const -> std::string {
+  return "PopClip()";
+}
+
 auto DrawRectInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawRect(";
@@ -134,20 +145,6 @@ auto DrawTextInstr::ToString() const -> std::string {
   ss << "node=" << GetNode() << ", ";
   ss << "text=" << Name(GetValue()) << ", ";
   ss << "color=" << Name(GetColor());
-  ss << ")";
-  return ss.str();
-}
-
-auto PushClipInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "PushClip(";
-  ss << ")";
-  return ss.str();
-}
-
-auto PopClipInstr::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "PopClip(";
   ss << ")";
   return ss.str();
 }

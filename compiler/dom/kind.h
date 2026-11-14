@@ -8,6 +8,7 @@
 // clang-format off
 #define FOR_EACH_ELEMENT_NODE(V)  \
   V(Fragment, "fragment")         \
+  V(View,     "view")             \
   V(Block,    "block")            \
   V(Surface,  "surface")          \
   V(List,     "list")             \
@@ -88,6 +89,7 @@ static inline constexpr auto IsElement(const Kind kind) -> bool {
 static inline constexpr auto CanHaveChildren(const Kind kind) -> bool {
   switch (kind) {
     case Kind::kFragment:
+    case Kind::kView:
     case Kind::kBlock:
     case Kind::kSurface:
     case Kind::kList:

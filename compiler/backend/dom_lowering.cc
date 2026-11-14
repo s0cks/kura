@@ -43,8 +43,19 @@ void DomLowering::EmitLayoutProperties(dom::Node* node, const Resolved& resolved
   const auto id = plan_->FindId(node);
   if (!id || drawing_hole_)
     return;
+  // A scroll container is a viewport and the content in it (the next node): what makes it a container is the
+  // content's, and what the viewport has is what makes it a box. The direction is both's.
+  const auto scrolls = node->IsScroll() || node->IsList();
   for (const auto& [def, value] : resolved) {
-    if (const auto property = LayoutPlan::PropertyOf(def->name))
+    const auto property = LayoutPlan::PropertyOf(def->name);
+    if (!property)
+      continue;
+
+    const std::string_view name = def->name;
+    const auto container = name == "padding" || name == "gap" || name == "align" || name == "justify" || name == "wrap";
+    if (scrolls && (container || name == "direction"))
+      host_->Emit(LayoutSetPropertyInstr::New(plan_, *id + 1, *property, value));
+    if (!scrolls || !container)
       host_->Emit(LayoutSetPropertyInstr::New(plan_, *id, *property, value));
   }
 }
@@ -92,6 +103,12 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
     } else if (op.node->IsBlock()) {
       if (!DrawBlock(op.node))
         return false;
+    } else if (op.node->IsView()) {
+      if (!DrawView(op.node))
+        return false;
+    } else if (op.node->IsScroll() || op.node->IsList()) {
+      if (!DrawScroll(op))
+        return false;
     } else if (op.node->IsDynamic()) {
       if (!RunHole(op.node, true))
         return false;
@@ -115,6 +132,35 @@ auto DomLowering::VisitBlock(dom::Node* node) -> bool {
   EmitLayoutProperties(node, resolved_[node]);
   ops_.push_back(Op{node, nullptr});
   return VisitChildren(node);
+}
+
+auto DomLowering::VisitView(dom::Node* node) -> bool {
+  if (!ResolveProperties(node, &resolved_[node]))
+    return false;
+
+  EmitLayoutProperties(node, resolved_[node]);
+  ops_.push_back(Op{node, nullptr});
+  return VisitChildren(node);
+}
+
+auto DomLowering::VisitScrollable(dom::Node* node) -> bool {
+  if (!ResolveProperties(node, &resolved_[node]))
+    return false;
+
+  EmitLayoutProperties(node, resolved_[node]);
+  ops_.push_back(Op{node, nullptr, false});
+  if (!VisitChildren(node))
+    return false;
+  ops_.push_back(Op{node, nullptr, true});
+  return true;
+}
+
+auto DomLowering::VisitScroll(dom::Node* node) -> bool {
+  return VisitScrollable(node);
+}
+
+auto DomLowering::VisitList(dom::Node* node) -> bool {
+  return VisitScrollable(node);
 }
 
 auto DomLowering::VisitButton(dom::Node* node) -> bool {
@@ -187,12 +233,24 @@ void DomLowering::EmitEvents(dom::Node* node) {
   if (!id)
     return;
   const auto& resolved = resolved_[node];
+  auto scroll_message = false;
   for (const auto& property : node->GetProperties()) {
-    if (!property.def->event || std::string_view(property.def->name) != "on-click")
+    if (!property.def->event)
       continue;
-    if (const auto it = resolved.find(property.def); it != resolved.end())
-      host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventClick, it->second));
+
+    const std::string_view name = property.def->name;
+    const auto kind = name == "on-click" ? rt::kEventClick : name == "on-scroll" ? rt::kEventScroll : 0;
+    if (kind == 0)
+      continue;
+    if (const auto it = resolved.find(property.def); it != resolved.end()) {
+      host_->Emit(RegisterEventInstr::New(plan_, *id, kind, it->second));
+      scroll_message |= kind == rt::kEventScroll;
+    }
   }
+
+  // a container scrolls with or without a Message for it
+  if ((node->IsScroll() || node->IsList()) && !scroll_message)
+    host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventScroll, host_->Bind(ConstantInstr::New(None::Get()))));
 }
 
 auto DomLowering::DrawBlock(dom::Node* node) -> bool {
@@ -209,6 +267,45 @@ auto DomLowering::DrawBlock(dom::Node* node) -> bool {
 
   EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
   EmitEvents(node);
+  return true;
+}
+
+// The View is the window: it paints its `fill` over all of it, if it has one, and takes the clicks nothing in it does.
+auto DomLowering::DrawView(dom::Node* node) -> bool {
+  if (const auto color = ResolvePropertyByName(node, "fill", resolved_[node])) {
+    Value* x = Box(node, LayoutBoxInstr::kX);
+    Value* y = Box(node, LayoutBoxInstr::kY);
+    Value* w = Box(node, LayoutBoxInstr::kWidth);
+    Value* h = Box(node, LayoutBoxInstr::kHeight);
+    if (!x || !y || !w || !h)
+      return false;
+    EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+  }
+
+  EmitEvents(node);
+  return true;
+}
+
+// A scroll container paints its `fill`, says where the wheel and clicks mean something, and then clips what is in it
+// to its box until the mark that ends it.
+auto DomLowering::DrawScroll(const Op& op) -> bool {
+  Value* x = Box(op.node, LayoutBoxInstr::kX);
+  Value* y = Box(op.node, LayoutBoxInstr::kY);
+  Value* w = Box(op.node, LayoutBoxInstr::kWidth);
+  Value* h = Box(op.node, LayoutBoxInstr::kHeight);
+  if (!x || !y || !w || !h)
+    return false;
+
+  if (op.end) {
+    EmitRenderCall(PopClipInstr::New());
+    return true;
+  }
+
+  if (const auto color = ResolvePropertyByName(op.node, "fill", resolved_[op.node]))
+    EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+
+  EmitEvents(op.node);
+  EmitRenderCall(PushClipInstr::New(x, y, w, h));
   return true;
 }
 

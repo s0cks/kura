@@ -125,4 +125,13 @@ auto Session::Click(const double x, const double y, bool* handled, std::string* 
     *handled = hit;
   return !hit || Send(message, error);
 }
+
+auto Session::Scroll(const double x, const double y, const double dx, const double dy, bool* handled,
+                     std::string* error) -> bool {
+  rt::KuraValue message{};
+  const auto result = kura_rt_event_scroll(x, y, dx, dy, &message);
+  if (handled != nullptr)
+    *handled = (result & 1) != 0;
+  return (result & 2) == 0 || Send(message, error);
+}
 }  // namespace kura

@@ -7,7 +7,8 @@
 
 namespace kura {
 auto NodeVisitor::Render(expr::Expr* expr) -> VisitResult {
-  dom::Tree tree{};
+  // the view's own tree is in a View, the window; what a hole makes goes under the hole in a tree that has one
+  dom::Tree tree(GetOwner()->hole_ ? dom::Kind::kFragment : dom::Kind::kView);
   dom::Builder builder(&tree, [this](LocalVariable* local) {
     return GetOwner()->FoldableLocal(local);
   });

@@ -284,8 +284,21 @@ void Builder::BuildInto(Node* parent, expr::Expr* expr, const TagList& tags) {
 }
 
 void Builder::BuildElement(Node* parent, expr::NodeExpr* expr, const TagList& inherited) {
-  const auto node = tree_->New(ToDomKind(expr->GetKind()));
-  parent->Append(node);
+  // The View is the root of the tree and is already there: a `#view` written in the view says how it looks, so
+  // it is built into the root rather than under it. There is only one, and only at the top.
+  const auto root = tree_->GetRoot();
+  const auto is_view = expr->GetKind() == expr::NodeExpr::Kind::kView;
+  const auto only_binds = std::all_of(root->GetChildren().begin(), root->GetChildren().end(),
+                                      [](const Node* child) { return child->IsBind(); });
+  if (is_view && (parent != root || !root->IsView() || !only_binds || !root->GetProperties().empty())) {
+    Error(root->IsView() ? "#view is the root of the view: it has to be the outermost element, and there is only one"
+                         : "#view can only be the root of a view");
+    return;
+  }
+
+  const auto node = is_view ? root : tree_->New(ToDomKind(expr->GetKind()));
+  if (!is_view)
+    parent->Append(node);
 
   TagList tags = inherited;
   CollectMetaTags(expr->GetDirectives(), &tags);

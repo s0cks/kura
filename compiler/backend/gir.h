@@ -193,6 +193,54 @@ class FillRectInstr : public TemplateGraphicsInstr<5> {
   }
 };
 
+// What is drawn until the matching PopClip is only drawn inside the rect (and the clips around it).
+class PushClipInstr : public TemplateGraphicsInstr<4> {
+ public:
+  PushClipInstr(Value* x, Value* y, Value* w, Value* h) {
+    SetInputAt(0, x);
+    SetInputAt(1, y);
+    SetInputAt(2, w);
+    SetInputAt(3, h);
+  }
+  ~PushClipInstr() override = default;
+
+  inline auto GetX() const -> Value* {
+    return GetInputAt(0);
+  }
+
+  inline auto GetY() const -> Value* {
+    return GetInputAt(1);
+  }
+
+  inline auto GetWidth() const -> Value* {
+    return GetInputAt(2);
+  }
+
+  inline auto GetHeight() const -> Value* {
+    return GetInputAt(3);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(PushClip);
+
+ public:
+  static inline auto New(Value* x, Value* y, Value* w, Value* h) -> PushClipInstr* {
+    return new PushClipInstr(x, y, w, h);
+  }
+};
+
+class PopClipInstr : public GraphicsInstr {
+ public:
+  PopClipInstr() = default;
+  ~PopClipInstr() override = default;
+
+  DECLARE_INSTRUCTION_TYPE(PopClip);
+
+ public:
+  static inline auto New() -> PopClipInstr* {
+    return new PopClipInstr();
+  }
+};
+
 class DrawRectInstr : public GraphicsInstr {
  private:
  public:
@@ -297,32 +345,6 @@ class RegisterEventInstr : public TemplateGraphicsInstr<1> {
   static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const uint64_t kind,
                          Value* message) -> RegisterEventInstr* {
     return new RegisterEventInstr(std::move(plan), node, kind, message);
-  }
-};
-
-class PushClipInstr : public GraphicsInstr {
- public:
-  PushClipInstr() = default;
-  ~PushClipInstr() override = default;
-
-  DECLARE_INSTRUCTION_TYPE(PushClip);
-
- public:
-  static inline auto New() -> PushClipInstr* {
-    return new PushClipInstr();
-  }
-};
-
-class PopClipInstr : public GraphicsInstr {
- public:
-  PopClipInstr() = default;
-  ~PopClipInstr() override = default;
-
-  DECLARE_INSTRUCTION_TYPE(PopClip);
-
- public:
-  static inline auto New() -> PopClipInstr* {
-    return new PopClipInstr();
   }
 };
 

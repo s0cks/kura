@@ -644,6 +644,18 @@ class Generator {
     CallRt("kura_rt_fill_rect", void_ty_, {x, y, w, h, c});
   }
 
+  void EmitPushClip(PushClipInstr* clip) {
+    llvm::Value* x = CoordinateBits(clip->GetX());
+    llvm::Value* y = CoordinateBits(clip->GetY());
+    llvm::Value* w = CoordinateBits(clip->GetWidth());
+    llvm::Value* h = CoordinateBits(clip->GetHeight());
+    CallRt("kura_rt_push_clip", void_ty_, {x, y, w, h});
+  }
+
+  void EmitPopClip(PopClipInstr*) {
+    CallRt("kura_rt_pop_clip", void_ty_, {});
+  }
+
   void EmitDrawText(DrawTextInstr* draw) {
     // What's drawn, and where, is the layout's: it has the node's text, box and font.
     const auto plan = draw->GetPlan().get();
@@ -753,6 +765,10 @@ class Generator {
       return EmitDrawRect(d);
     if (const auto d = instr->AsFillRect())
       return EmitFillRect(d);
+    if (const auto d = instr->AsPushClip())
+      return EmitPushClip(d);
+    if (const auto d = instr->AsPopClip())
+      return EmitPopClip(d);
     if (const auto d = instr->AsDrawText())
       return EmitDrawText(d);
     if (const auto r = instr->AsRegisterEvent())

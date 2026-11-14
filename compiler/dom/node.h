@@ -180,7 +180,9 @@ class Tree {
   Node* root_;
 
  public:
-  Tree();
+  // `root` is what the tree starts as. The tree of a view starts as a View, the window everything in the view is in;
+  // the tree of what a dynamic hole makes starts as a Fragment, as it has no box of its own.
+  explicit Tree(Kind root = Kind::kFragment);
   ~Tree() = default;
 
   inline auto GetRoot() const -> Node* {

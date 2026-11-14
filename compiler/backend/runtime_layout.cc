@@ -35,8 +35,18 @@ struct Slot {
   size_t cursor = 0;
 };
 
+// How far a scroll container is scrolled, and how far it can be as of the last layout.
+struct ScrollState {
+  float x = 0;
+  float y = 0;
+  float max_x = 0;
+  float max_y = 0;
+};
+
 struct Context {
   const void* table = nullptr;
+  // by the id of the viewport node
+  std::unordered_map<uint64_t, ScrollState> scrolls{};
   std::vector<lay::Node> nodes{};
   std::vector<lay::Box> boxes{};
   std::vector<std::string> texts{};
@@ -55,6 +65,15 @@ struct Context {
 thread_local std::unordered_map<const void*, std::unique_ptr<Context>> tl_contexts{};
 // The template tables that mean an instance right now.
 thread_local std::unordered_map<const void*, Context*> tl_bindings{};
+
+// The scroll containers drawn this frame, in drawing order, with where they are on the screen.
+struct Scroller {
+  Context* context;
+  uint64_t node;
+  lay::Box box;
+  kura::rt::KuraValue message;
+};
+thread_local std::vector<Scroller> tl_scrollers{};
 
 auto NewContext(const void* table, const uint64_t count) -> std::unique_ptr<Context> {
   auto context = std::make_unique<Context>();
@@ -113,7 +132,7 @@ auto Equal(const lay::Style& a, const lay::Style& b) -> bool {
          Equal(a.max_height, b.max_height) && Equal(a.basis, b.basis) && Equal(a.padding, b.padding) &&
          Equal(a.margin, b.margin) && Equal(a.gap, b.gap) && a.grow == b.grow && a.shrink == b.shrink &&
          a.direction == b.direction && a.align == b.align && a.align_self == b.align_self &&
-         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display;
+         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display && a.overflow == b.overflow;
 }
 
 // Whether an instance was made from this table: tables are constant, so the same shape is the same values. They
@@ -173,6 +192,45 @@ void Flatten(Context* context, Flat* flat) {
         flat->nodes[last].next_sibling = root;
       last = root;
     }
+  }
+}
+
+void Translate(Flat* flat, const lay::NodeId root, const float dx, const float dy) {
+  if (dx == 0 && dy == 0)
+    return;
+
+  std::vector<lay::NodeId> pending{root};
+  while (!pending.empty()) {
+    const auto id = pending.back();
+    pending.pop_back();
+    flat->boxes[id].x += dx;
+    flat->boxes[id].y += dy;
+    for (auto child = flat->nodes[id].first_child; child != lay::kNoNode; child = flat->nodes[child].next_sibling)
+      pending.push_back(child);
+  }
+}
+
+// A scroll container's content was laid out at its own size, from the viewport's corner. Now that the viewport's size
+// is known, say how far it can scroll, keep the offset in that, and move the content by it: the boxes everything
+// below it is drawn and hit at are the ones it has been scrolled to. A container inside another is moved by the
+// outer one first, which is the order the nodes are in.
+void ApplyScroll(Context* context, Flat* flat) {
+  for (size_t i = 0; i < context->nodes.size(); i++) {
+    if (context->nodes[i].style.overflow != lay::Overflow::kScroll)
+      continue;
+
+    const auto viewport = flat->boxes[context->base + i];
+    const auto content = flat->boxes[context->base + i + 1];
+    auto& scroll = context->scrolls[i];
+    scroll.max_x = std::max(0.0f, content.width - viewport.width);
+    scroll.max_y = std::max(0.0f, content.height - viewport.height);
+    scroll.x = std::clamp(scroll.x, 0.0f, scroll.max_x);
+    scroll.y = std::clamp(scroll.y, 0.0f, scroll.max_y);
+    Translate(flat, static_cast<lay::NodeId>(context->base + i + 1), -scroll.x, -scroll.y);
+  }
+  for (auto& [slot_id, slot] : context->slots) {
+    for (const auto& instance : slot.instances)
+      ApplyScroll(instance.get(), flat);
   }
 }
 
@@ -482,6 +540,7 @@ void kura_rt_layout_run(const void* table, const uint64_t count) {
   Flatten(&context, &flat);
   flat.boxes.resize(flat.nodes.size());
   context.engine.Run(flat.nodes, 0, viewport, flat.boxes, &Measure, &flat);
+  ApplyScroll(&context, &flat);
   Scatter(&context, flat);
   context.viewport = viewport;
   context.dirty = false;
@@ -555,5 +614,41 @@ void kura_rt_register_event(const void* table, const uint64_t count, const uint6
   // the place is the node's box as laid out this frame, which is what was just drawn
   const auto& box = context.boxes[node];
   kura_rt_event_add(box.x, box.y, box.width, box.height, kind, tag, bits);
+  if (kind == kura::rt::kEventScroll)
+    tl_scrollers.push_back(Scroller{&context, node, {box.x, box.y, box.width, box.height}, {tag, bits}});
+}
+
+void kura_rt_layout_reset() {
+  tl_scrollers.clear();
+  tl_bindings.clear();
+  tl_contexts.clear();
+}
+
+void kura_rt_scrollers_clear() {
+  tl_scrollers.clear();
+}
+
+int kura_rt_event_scroll(const double x, const double y, const double dx, const double dy, KuraValue* message) {
+  // the last registered is the topmost, and the one inside is registered after the one it is in
+  for (auto it = tl_scrollers.rbegin(); it != tl_scrollers.rend(); ++it) {
+    const auto& box = it->box;
+    if (x < box.x || x >= box.x + box.width || y < box.y || y >= box.y + box.height)
+      continue;
+
+    auto& scroll = it->context->scrolls[it->node];
+    const auto to_x = std::clamp(scroll.x + static_cast<float>(dx), 0.0f, scroll.max_x);
+    const auto to_y = std::clamp(scroll.y + static_cast<float>(dy), 0.0f, scroll.max_y);
+    if (to_x == scroll.x && to_y == scroll.y)
+      continue;  // it is as far as it goes that way: the one it is in gets the wheel
+
+    scroll.x = to_x;
+    scroll.y = to_y;
+    Touch(it->context);
+    if (it->message.tag == kura::rt::kTagNone || message == nullptr)
+      return 1;
+    *message = it->message;
+    return 3;
+  }
+  return 0;
 }
 }

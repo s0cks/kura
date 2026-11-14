@@ -31,7 +31,7 @@ class Program {
     jit_(std::move(jit)) {}
 
  public:
-  ~Program() = default;
+  ~Program();
   Program(const Program&) = delete;
   Program& operator=(const Program&) = delete;
 

@@ -40,6 +40,8 @@ class DomLowering : public dom::Visitor {
   struct Op {
     dom::Node* node = nullptr;
     Value* text = nullptr;  // a text's content
+    // the mark after what is inside a scroll container, where its clip ends
+    bool end = false;
   };
 
   NodeVisitor* host_;
@@ -59,6 +61,8 @@ class DomLowering : public dom::Visitor {
   void EmitEvents(dom::Node* node);
   auto DrawButton(dom::Node* node) -> bool;
   auto DrawBlock(dom::Node* node) -> bool;
+  auto DrawView(dom::Node* node) -> bool;
+  auto DrawScroll(const Op& op) -> bool;
   auto DrawText(const Op& op) -> bool;
   auto RunHole(dom::Node* node, bool draw) -> bool;
 
@@ -71,6 +75,10 @@ class DomLowering : public dom::Visitor {
   auto VisitNode(dom::Node* node) -> bool override;
   auto VisitButton(dom::Node* node) -> bool override;
   auto VisitBlock(dom::Node* node) -> bool override;
+  auto VisitView(dom::Node* node) -> bool override;
+  auto VisitScroll(dom::Node* node) -> bool override;
+  auto VisitList(dom::Node* node) -> bool override;
+  auto VisitScrollable(dom::Node* node) -> bool;
   auto VisitText(dom::Node* node) -> bool override;
   auto VisitDynamic(dom::Node* node) -> bool override;
   auto VisitBind(dom::Node* node) -> bool override;

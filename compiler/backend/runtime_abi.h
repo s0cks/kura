@@ -78,6 +78,9 @@ auto IsBuiltinMessage(const KuraValue& message) -> bool;
 // What a place on the screen can mean to the view. Only clicks are routed so far.
 enum EventKind : uint64_t {
   kEventClick = 1,
+  // The node is a scroll container: the wheel moves its content (see `kura_rt_event_scroll`), and the Message, if
+  // it has one, is what it means that the content moved.
+  kEventScroll = 2,
 };
 
 auto MakeString(const std::string& value) -> KuraValue;
@@ -124,6 +127,8 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_begin_frame)          \
   V(kura_rt_end_frame)            \
   V(kura_rt_fill_rect)            \
+  V(kura_rt_push_clip)            \
+  V(kura_rt_pop_clip)             \
   V(kura_rt_draw_rect)            \
   V(kura_rt_draw_text)            \
   V(kura_rt_viewport_width)       \
@@ -168,6 +173,9 @@ void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
 void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color);
+// What is drawn until `pop_clip` stays inside the rect (the bits of f64s, like `fill_rect`).
+void kura_rt_push_clip(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits);
+void kura_rt_pop_clip();
 
 // Called by the host, not by compiled code. Sets the renderer this thread draws with; the host
 // creates it, owns it and destroys it, and the runtime keeps only a copy of the handle. The
@@ -213,6 +221,10 @@ void kura_rt_layout_set_text(const void* table, uint64_t count, uint64_t node, v
 void kura_rt_layout_set(const void* table, uint64_t count, uint64_t node, uint64_t property, uint64_t tag,
                         uint64_t bits);
 void kura_rt_layout_run(const void* table, uint64_t count);
+// Forgets everything the runtime kept of the layouts on this thread: the texts, the instances and how far each
+// container is scrolled. A table is known by its address, and a program that is unloaded gives its addresses to
+// the next, so the program does this when it goes.
+void kura_rt_layout_reset();
 // A dynamic hole is a `slot` node of a table. `slot_begin` starts its list of instances over, `slot_instance` makes
 // the next one (a copy of the template table `instance`, or the one that was there last time if it is the same table)
 // and makes the template's table mean that instance until the next call, and `slot_end` drops the instances that
@@ -271,10 +283,24 @@ void kura_rt_register_event(const void* table, uint64_t count, uint64_t node, ui
 // was drawn in.
 void kura_rt_event_add(double x, double y, double width, double height, uint64_t kind, uint64_t tag, uint64_t bits);
 void kura_rt_events_clear();
+// What is drawn inside a clip can only be hit inside it. The renderer's clips are the ones to follow: see
+// `kura_rt_push_clip`, which calls these.
+void kura_rt_event_clip_push(double x, double y, double width, double height);
+void kura_rt_event_clip_pop();
 uint64_t kura_rt_event_count();
 // The Message of the last place of `kind` drawn that contains (x, y), which is the topmost one: a parent is
 // drawn before its children. Returns 1 and sets `message`, or 0 and sets nothing if there is none.
 int kura_rt_event_hit(uint64_t kind, double x, double y, KuraValue* message);
+
+// UI => host. The wheel (or a drag) moved by (dx, dy) pixels at (x, y), in the coordinates of the last frame, down
+// and to the right being positive. The topmost scroll container at that point that can move that way does, by as
+// much as it has room for, and the next frame is laid out with its content moved. Returns a bit set:
+//   1  something scrolled: the host should render again
+//   2  `message` is set, because what scrolled has an `on-scroll`: the host sends it (the Session does that)
+// 0 means nothing moved, and the wheel is the host's.
+int kura_rt_event_scroll(double x, double y, double dx, double dy, KuraValue* message);
+// The containers a frame's drawing registered, forgotten with the places.
+void kura_rt_scrollers_clear();
 }
 
 #endif  // KURA_RUNTIME_ABI_H

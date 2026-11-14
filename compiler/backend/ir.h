@@ -48,8 +48,6 @@ namespace kura {
   V(CheckRendererStatus)        \
   V(BeginFrame)                 \
   V(EndFrame)                   \
-  V(PushClip)                   \
-  V(PopClip)                    \
   V(MeasureText)                \
   V(LayoutSetText)              \
   V(LayoutSetProperty)          \
@@ -59,6 +57,8 @@ namespace kura {
   V(LayoutSlotEnd)              \
   V(LayoutBox)                  \
   V(FillRect)                   \
+  V(PushClip)                   \
+  V(PopClip)                    \
   V(FillRoundRect)              \
   V(FillCircle)                 \
   V(FillPolygon)                \
