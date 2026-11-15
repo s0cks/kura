@@ -40,6 +40,15 @@ auto CompileType::Intern(CompileType* proto) -> CompileType* {
     case kColor:
       ss << "Color";
       break;
+    case kVec2:
+      ss << "Vec2";
+      break;
+    case kVec3:
+      ss << "Vec3";
+      break;
+    case kRect:
+      ss << "Rect";
+      break;
     case kPx:
       ss << "Px";
       break;
@@ -114,6 +123,9 @@ DEFINE_SIMPLE(Float)
 DEFINE_SIMPLE(Number)
 DEFINE_SIMPLE(String)
 DEFINE_SIMPLE(Color)
+DEFINE_SIMPLE(Vec2)
+DEFINE_SIMPLE(Vec3)
+DEFINE_SIMPLE(Rect)
 DEFINE_SIMPLE(Px)
 DEFINE_SIMPLE(Pct)
 DEFINE_SIMPLE(Fr)

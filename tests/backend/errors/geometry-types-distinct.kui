@@ -1,0 +1,8 @@
+// error: returns Vec2 but is declared to return Vec3
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn widen(v: Vec2): Vec3 => v
+
+fn view(state: Int): Node => #text("x")

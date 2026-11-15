@@ -57,13 +57,13 @@ class DomLowering : public dom::Visitor {
   void EmitRenderCall(Definition* defn);
   auto ResolveProperties(dom::Node* node, Resolved* resolved) -> bool;
   void EmitLayoutProperties(dom::Node* node, const Resolved& resolved);
-  auto Box(dom::Node* node, int component) -> Value*;
+  auto BoxOf(dom::Node* node) -> Value*;
   void EmitEvents(dom::Node* node);
   auto DrawButton(dom::Node* node) -> bool;
   auto DrawBlock(dom::Node* node) -> bool;
   auto DrawView(dom::Node* node) -> bool;
   auto DrawScroll(const Op& op) -> bool;
-  void EmitBox(dom::Node* node, Value* x, Value* y, Value* w, Value* h, bool always);
+  auto EmitBox(dom::Node* node, bool always, Value* rect = nullptr) -> bool;
   auto DrawLine(dom::Node& op) -> bool;
   auto DrawText(const Op& op) -> bool;
   auto RunHole(dom::Node* node, bool draw) -> bool;

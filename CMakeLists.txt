@@ -25,6 +25,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 include(FetchContent)
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
+add_subdirectory(libs)
 add_subdirectory(heap)
 add_subdirectory(runtime)
 add_subdirectory(layout)

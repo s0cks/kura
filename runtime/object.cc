@@ -131,6 +131,16 @@ DEFINE_UNIT_OBJECT_IMPL(Pct)
 DEFINE_UNIT_OBJECT_IMPL(Fr)
 #undef DEFINE_UNIT_OBJECT_IMPL
 
+#define DEFINE_GEOMETRY_OBJECT_IMPL(Name)      \
+  void Name::Init() {}                         \
+  auto Name::ToString() const -> std::string { \
+    return GetValue().ToString();              \
+  }
+DEFINE_GEOMETRY_OBJECT_IMPL(Vec2)
+DEFINE_GEOMETRY_OBJECT_IMPL(Vec3)
+DEFINE_GEOMETRY_OBJECT_IMPL(Rect)
+#undef DEFINE_GEOMETRY_OBJECT_IMPL
+
 #define DEFINE_BUILTIN_COLOR(Name) Color* Color::k##Name = nullptr;
 FOR_EACH_BUILTIN_COLOR(DEFINE_BUILTIN_COLOR)
 #undef DEFINE_BUILTIN_COLOR
@@ -141,12 +151,19 @@ void Color::Init() {
   Color::kBlue = Color::New(0, 0, 255);
   Color::kBlack = Color::New(0, 0, 0);
   Color::kWhite = Color::New(255, 255, 255);
+  Color::kPurple = Color::New(128, 0, 128);
+  Color::kDarkPurple = Color::New(48, 25, 52);
+  Color::kBrightPurple = Color::New(191, 64, 191);
+  Color::kGray = Color::New(128, 128, 128);
+  Color::kLightGray = Color::New(211, 211, 211);
+  Color::kDarkGray = Color::New(169, 169, 169);
+  Color::kSlateGray = Color::New(112, 128, 144);
 }
 
 auto Color::ToString() const -> std::string {
-  std::stringstream ss{};
-  ss << "Color()";  // TODO(@s0cks): better printing for colors
-  return ss.str();
+  return std::format("Color(r={:.2f}, g={:.2f}, b={:.2f}), a={:.2f}", static_cast<float>(red_) / 255,
+                     static_cast<float>(green_) / 255, static_cast<float>(blue_) / 255,
+                     static_cast<float>(alpha_) / 255);
 }
 
 static inline constexpr std::optional<uint8_t> HexCharToInt(char c) noexcept {
@@ -219,6 +236,14 @@ static inline constexpr Color* ParseNamedColor(std::string rhs) {
     return Color::White();
   else if (rhs == "black")
     return Color::Black();
+  else if (rhs == "gray")
+    return Color::Gray();
+  else if (rhs == "purple")
+    return Color::Purple();
+  else if (rhs == "dark-purple")
+    return Color::DarkPurple();
+  else if (rhs == "bright-purple")
+    return Color::BrightPurple();
 
   return nullptr;
 }

@@ -72,8 +72,8 @@ inline auto UnpackColor(const uint64_t packed) -> KuraColor {
 }  // namespace
 
 namespace {
-// A box that is `w` by `h` with its corners rounded by `radius`, a row of pixels at a time, with `inset` measured from the
-// middle of the row: how far in from the left (and right) the shape starts. `top` is the distance of the row's
+// A box that is `w` by `h` with its corners rounded by `radius`, a row of pixels at a time, with `inset` measured from
+// the middle of the row: how far in from the left (and right) the shape starts. `top` is the distance of the row's
 // middle from the nearest of the top and the bottom.
 inline auto RoundedInset(const float radius, const float row_middle, const float height) -> float {
   const auto edge = std::min(row_middle, height - row_middle);
@@ -135,11 +135,10 @@ inline auto Scaled(KuraColor color, const float opacity) -> KuraColor {
 }  // namespace
 
 extern "C" {
-void kura_rt_paint_box(const uint64_t xbits, const uint64_t ybits, const uint64_t wbits, const uint64_t hbits,
-                       const uint64_t fill, const uint64_t border_color, const uint64_t border_width_bits,
-                       const uint64_t radius_bits, const uint64_t opacity_bits) {
+void kura_rt_paint_box(const KuraRect* rect, const uint64_t fill, const uint64_t border_color,
+                       const uint64_t border_width_bits, const uint64_t radius_bits, const uint64_t opacity_bits) {
   const auto& ops = Current("kura_rt_paint_box");
-  const KuraRect box{Coordinate(xbits), Coordinate(ybits), Coordinate(wbits), Coordinate(hbits)};
+  const auto box = *rect;
   if (box.width <= 0 || box.height <= 0)
     return;
 
@@ -223,11 +222,9 @@ void kura_rt_end_frame() {
   Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
 }
 
-void kura_rt_fill_rect(const uint64_t xbits, const uint64_t ybits, const uint64_t wbits, const uint64_t hbits,
-                       const uint64_t color) {
+void kura_rt_fill_rect(const KuraRect* rect, const uint64_t color) {
   const auto& ops = Current("kura_rt_fill_rect");
-  const KuraRect rect{Coordinate(xbits), Coordinate(ybits), Coordinate(wbits), Coordinate(hbits)};
-  Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, rect, UnpackColor(color)));
+  Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, *rect, UnpackColor(color)));
 }
 
 void kura_rt_draw_line(uint64_t x1bits, uint64_t y1bits, uint64_t x2bits, uint64_t y2bits, uint64_t color) {
@@ -237,11 +234,10 @@ void kura_rt_draw_line(uint64_t x1bits, uint64_t y1bits, uint64_t x2bits, uint64
   Record("kura_rt_draw_line", ops.draw_line(tl_renderer.self, start, end, UnpackColor(color)));
 }
 
-void kura_rt_push_clip(const uint64_t xbits, const uint64_t ybits, const uint64_t wbits, const uint64_t hbits) {
+void kura_rt_push_clip(const KuraRect* rect) {
   const auto& ops = Current("kura_rt_push_clip");
-  const KuraRect rect{Coordinate(xbits), Coordinate(ybits), Coordinate(wbits), Coordinate(hbits)};
-  Record("kura_rt_push_clip", ops.push_clip(tl_renderer.self, rect));
-  kura_rt_event_clip_push(rect.x, rect.y, rect.width, rect.height);
+  Record("kura_rt_push_clip", ops.push_clip(tl_renderer.self, *rect));
+  kura_rt_event_clip_push(rect->x, rect->y, rect->width, rect->height);
 }
 
 void kura_rt_pop_clip() {

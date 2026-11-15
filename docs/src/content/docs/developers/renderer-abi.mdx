@@ -23,6 +23,11 @@ A renderer implements one table of function pointers, `KuraRendererOps`, defined
 | `draw_text(self, pos, utf8, length, style, color)` | Text            |
 | `measure_text(self, utf8, length, style, out)`     | Text metrics, used by layout |
 
+Points, sizes and rectangles are `KuraVec2`, `KuraVec3` and `KuraRect`: plain structs of 32-bit floats (`x, y`;
+`x, y, z`; `x, y, width, height`), with y growing downward. They are the same floats, in the same order, as the
+compiler's own `Vec2`, `Vec3` and `Rect` types (see [Types](/kura/reference/types/#geometry)), so a rectangle
+needs no conversion on its way to a renderer.
+
 Every operation returns a `KuraRendererStatus`. In debug builds the generated code checks that
 status after each draw call (`kura_rt_check_renderer`).
 

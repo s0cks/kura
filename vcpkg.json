@@ -13,6 +13,7 @@
     "benchmark",
     "freetype",
     "tracy",
+    "argparse",
     {
       "name": "harfbuzz",
       "features": ["freetype"]

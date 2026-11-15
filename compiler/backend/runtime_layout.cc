@@ -598,23 +598,14 @@ void kura_rt_layout_slot_end(const void* table, const uint64_t count, const uint
   Touch(&context);
 }
 
-double kura_rt_layout_get(const void* table, const uint64_t count, const uint64_t node, const uint64_t component) {
+void kura_rt_layout_rect(const void* table, const uint64_t count, const uint64_t node, KuraRect* out) {
   auto& context = ContextFor(table, count);
-  if (node >= count)
-    return 0;
-  const auto& box = context.boxes[node];
-  switch (component) {
-    case 0:
-      return box.x;
-    case 1:
-      return box.y;
-    case 2:
-      return box.width;
-    case 3:
-      return box.height;
-    default:
-      return 0;
+  if (node >= count) {
+    *out = KuraRect{0, 0, 0, 0};
+    return;
   }
+  const auto& box = context.boxes[node];
+  *out = KuraRect{box.x, box.y, box.width, box.height};
 }
 
 void kura_rt_register_event(const void* table, const uint64_t count, const uint64_t node, const uint64_t kind,

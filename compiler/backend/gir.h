@@ -127,54 +127,25 @@ class EndFrameInstr : public GraphicsInstr {
   }
 };
 
-class FillRectInstr : public TemplateGraphicsInstr<5> {
+// Fills a rectangle, a Rect, with a color (packed 0xRRGGBBAA).
+class FillRectInstr : public TemplateGraphicsInstr<2> {
  public:
-  static const auto kXPos = 0;
-  static const auto kYPos = 1;
-  static const auto kWidthPos = 2;
-  static const auto kHeightPos = 3;
-  static const auto kColorPos = 4;
+  static const auto kRectPos = 0;
+  static const auto kColorPos = 1;
 
  public:
-  FillRectInstr(Value* x, Value* y, Value* w, Value* h, Value* c) {
-    SetX(x);
-    SetY(y);
-    SetWidth(w);
-    SetHeight(h);
+  FillRectInstr(Value* rect, Value* c) {
+    SetRect(rect);
     SetColor(c);
   }
   ~FillRectInstr() override = default;
 
-  inline auto GetX() const -> Value* {
-    return GetInputAt(kXPos);
+  inline auto GetRect() const -> Value* {
+    return GetInputAt(kRectPos);
   }
 
-  inline void SetX(Value* rhs) {
-    return SetInputAt(kXPos, rhs);
-  }
-
-  inline auto GetY() const -> Value* {
-    return GetInputAt(kYPos);
-  }
-
-  inline void SetY(Value* rhs) {
-    return SetInputAt(kYPos, rhs);
-  }
-
-  inline auto GetWidth() const -> Value* {
-    return GetInputAt(kWidthPos);
-  }
-
-  inline void SetWidth(Value* rhs) {
-    return SetInputAt(kWidthPos, rhs);
-  }
-
-  inline auto GetHeight() const -> Value* {
-    return GetInputAt(kHeightPos);
-  }
-
-  inline void SetHeight(Value* rhs) {
-    return SetInputAt(kHeightPos, rhs);
+  inline void SetRect(Value* rhs) {
+    return SetInputAt(kRectPos, rhs);
   }
 
   inline auto GetColor() const -> Value* {
@@ -188,34 +159,28 @@ class FillRectInstr : public TemplateGraphicsInstr<5> {
   DECLARE_INSTRUCTION_TYPE(FillRect);
 
  public:
-  static inline auto New(Value* x, Value* y, Value* w, Value* h, Value* color) -> FillRectInstr* {
-    return new FillRectInstr(x, y, w, h, color);
+  static inline auto New(Value* rect, Value* color) -> FillRectInstr* {
+    return new FillRectInstr(rect, color);
   }
 };
 
 // A box as a whole: what it is filled with, a border inside its edge, and its corners rounded, all made lighter by
 // its opacity. It is drawn with the renderer's rectangles, so any renderer can: see `kura_rt_paint_box`.
 //
-// The colors are packed 0xRRGGBBAA, the rest numbers. A border with no width, or no alpha, is not there.
-class PaintBoxInstr : public TemplateGraphicsInstr<9> {
+// The box is a Rect. The colors are packed 0xRRGGBBAA, the rest numbers. A border with no width, or no alpha, is not
+// there.
+class PaintBoxInstr : public TemplateGraphicsInstr<6> {
  public:
-  static const auto kXPos = 0;
-  static const auto kYPos = 1;
-  static const auto kWidthPos = 2;
-  static const auto kHeightPos = 3;
-  static const auto kFillPos = 4;
-  static const auto kBorderColorPos = 5;
-  static const auto kBorderWidthPos = 6;
-  static const auto kRadiusPos = 7;
-  static const auto kOpacityPos = 8;
+  static const auto kRectPos = 0;
+  static const auto kFillPos = 1;
+  static const auto kBorderColorPos = 2;
+  static const auto kBorderWidthPos = 3;
+  static const auto kRadiusPos = 4;
+  static const auto kOpacityPos = 5;
 
  public:
-  PaintBoxInstr(Value* x, Value* y, Value* w, Value* h, Value* fill, Value* border_color, Value* border_width,
-                Value* radius, Value* opacity) {
-    SetInputAt(kXPos, x);
-    SetInputAt(kYPos, y);
-    SetInputAt(kWidthPos, w);
-    SetInputAt(kHeightPos, h);
+  PaintBoxInstr(Value* rect, Value* fill, Value* border_color, Value* border_width, Value* radius, Value* opacity) {
+    SetInputAt(kRectPos, rect);
     SetInputAt(kFillPos, fill);
     SetInputAt(kBorderColorPos, border_color);
     SetInputAt(kBorderWidthPos, border_width);
@@ -224,20 +189,8 @@ class PaintBoxInstr : public TemplateGraphicsInstr<9> {
   }
   ~PaintBoxInstr() override = default;
 
-  inline auto GetX() const -> Value* {
-    return GetInputAt(kXPos);
-  }
-
-  inline auto GetY() const -> Value* {
-    return GetInputAt(kYPos);
-  }
-
-  inline auto GetWidth() const -> Value* {
-    return GetInputAt(kWidthPos);
-  }
-
-  inline auto GetHeight() const -> Value* {
-    return GetInputAt(kHeightPos);
+  inline auto GetRect() const -> Value* {
+    return GetInputAt(kRectPos);
   }
 
   inline auto GetFill() const -> Value* {
@@ -263,44 +216,29 @@ class PaintBoxInstr : public TemplateGraphicsInstr<9> {
   DECLARE_INSTRUCTION_TYPE(PaintBox);
 
  public:
-  static inline auto New(Value* x, Value* y, Value* w, Value* h, Value* fill, Value* border_color,
-                         Value* border_width, Value* radius, Value* opacity) -> PaintBoxInstr* {
-    return new PaintBoxInstr(x, y, w, h, fill, border_color, border_width, radius, opacity);
+  static inline auto New(Value* rect, Value* fill, Value* border_color, Value* border_width, Value* radius,
+                         Value* opacity) -> PaintBoxInstr* {
+    return new PaintBoxInstr(rect, fill, border_color, border_width, radius, opacity);
   }
 };
 
 // What is drawn until the matching PopClip is only drawn inside the rect (and the clips around it).
-class PushClipInstr : public TemplateGraphicsInstr<4> {
+class PushClipInstr : public TemplateGraphicsInstr<1> {
  public:
-  PushClipInstr(Value* x, Value* y, Value* w, Value* h) {
-    SetInputAt(0, x);
-    SetInputAt(1, y);
-    SetInputAt(2, w);
-    SetInputAt(3, h);
+  explicit PushClipInstr(Value* rect) {
+    SetInputAt(0, rect);
   }
   ~PushClipInstr() override = default;
 
-  inline auto GetX() const -> Value* {
+  inline auto GetRect() const -> Value* {
     return GetInputAt(0);
-  }
-
-  inline auto GetY() const -> Value* {
-    return GetInputAt(1);
-  }
-
-  inline auto GetWidth() const -> Value* {
-    return GetInputAt(2);
-  }
-
-  inline auto GetHeight() const -> Value* {
-    return GetInputAt(3);
   }
 
   DECLARE_INSTRUCTION_TYPE(PushClip);
 
  public:
-  static inline auto New(Value* x, Value* y, Value* w, Value* h) -> PushClipInstr* {
-    return new PushClipInstr(x, y, w, h);
+  static inline auto New(Value* rect) -> PushClipInstr* {
+    return new PushClipInstr(rect);
   }
 };
 
@@ -872,28 +810,19 @@ class LayoutSlotEndInstr : public GraphicsInstr {
   }
 };
 
-// One coordinate of a node's laid out box: a Px, in the viewport's coordinates.
-class LayoutBoxInstr : public GraphicsInstr {
- public:
-  enum Component : uint64_t {
-    kX = 0,
-    kY = 1,
-    kWidth = 2,
-    kHeight = 3,
-  };
-
+// The box a node was laid out in, as a Rect, in the viewport's coordinates. It is made when the instruction runs, so
+// it is the layout as of the last `LayoutRun` before it.
+class LayoutRectInstr : public GraphicsInstr {
  private:
   std::shared_ptr<LayoutPlan> plan_;
   layout::NodeId node_;
-  Component component_;
 
  public:
-  LayoutBoxInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const Component component) :
+  LayoutRectInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node) :
     GraphicsInstr(),
     plan_(std::move(plan)),
-    node_(node),
-    component_(component) {}
-  ~LayoutBoxInstr() override = default;
+    node_(node) {}
+  ~LayoutRectInstr() override = default;
 
   inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
     return plan_;
@@ -903,16 +832,11 @@ class LayoutBoxInstr : public GraphicsInstr {
     return node_;
   }
 
-  inline auto GetComponent() const -> Component {
-    return component_;
-  }
-
-  DECLARE_INSTRUCTION_TYPE(LayoutBox);
+  DECLARE_INSTRUCTION_TYPE(LayoutRect);
 
  public:
-  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const Component component)
-      -> LayoutBoxInstr* {
-    return new LayoutBoxInstr(std::move(plan), node, component);
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node) -> LayoutRectInstr* {
+    return new LayoutRectInstr(std::move(plan), node);
   }
 };
 }  // namespace kura

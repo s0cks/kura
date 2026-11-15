@@ -22,6 +22,12 @@ auto F(const double value) -> uint64_t {
   return bits;
 }
 
+// A rectangle, filled: the runtime takes it as the renderer ABI's struct.
+void FillRect(const double x, const double y, const double w, const double h, const uint32_t color) {
+  const KuraRect rect{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
+  kura_rt_fill_rect(&rect, color);
+}
+
 class RuntimeRendererTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -45,7 +51,7 @@ TEST_F(RuntimeRendererTest, DrawCallsReachTheRenderer) {
   EXPECT_EQ(renderer_->GetWidth(), 640u);
   EXPECT_EQ(renderer_->GetHeight(), 480u);
 
-  kura_rt_fill_rect(F(10), F(20.5), F(30), F(40), 0xFF0000FFu);
+  FillRect(10, 20.5, 30, 40, 0xFF0000FFu);
   kura_rt_check_renderer();
   ASSERT_EQ(renderer_->GetCommands().size(), 1u);
   const auto& command = renderer_->GetCommands()[0];
@@ -63,7 +69,7 @@ TEST_F(RuntimeRendererTest, DrawCallsReachTheRenderer) {
 
 TEST_F(RuntimeRendererTest, ColorIsPackedRgba8) {
   kura_rt_begin_frame(16, 16);
-  kura_rt_fill_rect(F(0), F(0), F(1), F(1), 0x336699CCu);
+  FillRect(0, 0, 1, 1, 0x336699CCu);
   const auto color = renderer_->GetCommands().at(0).color;
   EXPECT_FLOAT_EQ(color.r, 0x33 / 255.0f);
   EXPECT_FLOAT_EQ(color.g, 0x66 / 255.0f);
@@ -110,7 +116,7 @@ TEST_F(RuntimeRendererTest, MeasuringTakesTheFamily) {
 
 TEST_F(RuntimeRendererTest, CheckRendererPassesWhenTheLastCallWorked) {
   kura_rt_begin_frame(16, 16);
-  kura_rt_fill_rect(F(0), F(0), F(1), F(1), 0);
+  FillRect(0, 0, 1, 1, 0);
   kura_rt_check_renderer();
   kura_rt_end_frame();
   kura_rt_check_renderer();
@@ -159,7 +165,7 @@ using RuntimeRendererDeathTest = RuntimeRendererTest;
 
 TEST_F(RuntimeRendererDeathTest, CheckRendererPanicsWhenTheLastCallFailed) {
   // outside of a frame
-  kura_rt_fill_rect(F(0), F(0), F(1), F(1), 0);
+  FillRect(0, 0, 1, 1, 0);
   EXPECT_EXIT(kura_rt_check_renderer(), ::testing::ExitedWithCode(101), "rejected kura_rt_fill_rect");
 }
 

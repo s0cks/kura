@@ -114,6 +114,12 @@ auto Matches(CompileType* type, const uint64_t tag) -> bool {
         ok |= tag == rt::kTagColor;
         break;
 
+      case CompileType::kVec2:
+      case CompileType::kVec3:
+      case CompileType::kRect:
+        // geometry has no tag: nothing a host can send is one
+        break;
+
       case CompileType::kNode:
         ok |= tag == rt::kTagNode;
         break;

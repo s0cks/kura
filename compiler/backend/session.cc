@@ -22,8 +22,6 @@ auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Se
 
     if (!program->Call("init", {}, &session->state_, error))
       return nullptr;
-
-    std::println("init state => {}", kura::rt::Format(session->state_));
   }
 
   if (session->has_update_ && program->GetArity("update") != 2) {

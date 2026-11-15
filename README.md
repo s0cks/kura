@@ -38,65 +38,89 @@ Kura is engineered to solve these friction points by providing:
 A complete counter implementation in Kura follows the Model-View-Update (MVU) pattern:
 
 ```kura
-type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size)
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int)
 
 type State = {
   value: Int,
   width: Float,
   height: Float,
+  items: Seq<String>,
 }
  
-fn init(): State => { value: 1, width: 0.0, height: 0.0 }
+fn init(): State =>
+  {
+    value: 1,
+    width: 0.0,
+    height: 0.0,
+    items: [  ],
+  }
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment => { value: state.value + 1, width: state.width, height: state.height }
-    Decrement => { value: state.value - 1, width: state.width, height: state.height }
-    Reset => { value: 0, width: state.width, height: state.height }
-    Set(n) => { value: n, width: state.width, height: state.height }
-    Resized(size) => { value: state.value, width: size.width, height: size.height }
+    Increment => { state | value += 1 }
+    Decrement => { state | value -= 1 }
+    Reset => { state | value: 0, items: [] }
+    Set(n) => { state | value: n }
+    Resized(size) =>
+      {
+        state |
+        width: size.width,
+        height: size.height,
+      }
+    Append(n) => { state | items += [ "{n}"] }
     _ => state
   }
 
-fn view(state: State): Node => {
-  let label = match state.value {
-    n if n > 0 => "Positive",
-    n if n < 0 => "Negative",
-    0 => "Zero",
+fn counter-buttons() =>
+  set text(size: 24px, 
+           text-align: "center")
+  set button(justify: "center", padding: 16px, fill: white, radius: 16px)
+  #fragment{
+    #button(on-click: Increment){
+      #text("Increment")
+    }
+
+    #button(on-click: Decrement){
+      #text("Decrement")
+    }
   }
 
-  let wide = state.width > 700.0
+
+fn row(label: String) =>
+  set text(size: 24px)
+  #block(direction: "row", justify: "center", padding: 4px, fill: white){
+    #text(label)
+  }
+
+fn view(state: State): Node => {
+  set text(size: 24px)
+  set button(justify: "center", padding: 16px, fill: white)
+  set block(gap: 16px, padding: 32px, justify: "center")
+
   #block(direction: "column",
-         justify: "center",
          width: 1fr,
          height: 1fr,
-         padding: 10px,
-         gap: 10px,
          fill: match state.value {
                 n if n > 0 => green,
                 n if n < 0 => red,
                 _ => white,
               }){
-    #block(direction: "row",
-         justify: "center"){
-      #text(size: 24px, label)
+    #block(direction: "column",
+           grow: 1){
+      #block(direction: "row"){
+        #text("value: {state.value}")
+      }
+
+      #button(on-click: Append(state.value), radius: 16px){
+        #text("Append")
+      }
+
+      counter-buttons()
     }
 
-    #button(on-click: Increment,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Increment")
-    }
-
-    #button(fill: white,
-            on-click: Decrement,
-            justify: "center",
-            padding: 16px){
-      #text(size: 24px,
-            text-align: "center",
-            "Decrement")
+    #list(){
+      for _, item in state.items =>
+        row(item)
     }
   }
 }

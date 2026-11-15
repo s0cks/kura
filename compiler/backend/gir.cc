@@ -79,14 +79,9 @@ auto LayoutSlotEndInstr::ToString() const -> std::string {
   return ss.str();
 }
 
-auto LayoutBoxInstr::ToString() const -> std::string {
-  static constexpr const char* kNames[] = {"x", "y", "width", "height"};
+auto LayoutRectInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "LayoutBox(";
-  ss << "layout=" << GetPlan()->GetIndex() << ", ";
-  ss << "node=" << GetNode() << ", ";
-  ss << kNames[GetComponent()];
-  ss << ")";
+  ss << "LayoutRect(layout=" << GetPlan()->GetIndex() << ", node=" << GetNode() << ")";
   return ss.str();
 }
 
@@ -99,28 +94,20 @@ auto EndFrameInstr::ToString() const -> std::string {
 
 auto FillRectInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "FillRect(";
-  ss << "x=" << Name(GetX()) << ", ";
-  ss << "y=" << Name(GetY()) << ", ";
-  ss << "width=" << Name(GetWidth()) << ", ";
-  ss << "height=" << Name(GetHeight()) << ", ";
-  ss << "color=" << Name(GetColor());
-  ss << ")";
+  ss << "FillRect(" << Name(GetRect()) << ", color=" << Name(GetColor()) << ")";
   return ss.str();
 }
 
 auto PaintBoxInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "PaintBox(" << Name(GetX()) << ", " << Name(GetY()) << ", " << Name(GetWidth()) << ", " << Name(GetHeight())
-     << ", fill=" << Name(GetFill()) << ", border=" << Name(GetBorderColor()) << " " << Name(GetBorderWidth())
-     << ", radius=" << Name(GetRadius()) << ", opacity=" << Name(GetOpacity()) << ")";
+  ss << "PaintBox(" << Name(GetRect()) << ", fill=" << Name(GetFill()) << ", border=" << Name(GetBorderColor()) << " "
+     << Name(GetBorderWidth()) << ", radius=" << Name(GetRadius()) << ", opacity=" << Name(GetOpacity()) << ")";
   return ss.str();
 }
 
 auto PushClipInstr::ToString() const -> std::string {
   std::stringstream ss{};
-  ss << "PushClip(" << Name(GetX()) << ", " << Name(GetY()) << ", " << Name(GetWidth()) << ", " << Name(GetHeight())
-     << ")";
+  ss << "PushClip(" << Name(GetRect()) << ")";
   return ss.str();
 }
 

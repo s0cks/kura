@@ -1,0 +1,10 @@
+// The geometry types can be named: Vec2, Vec3 and Rect are three different types, and a function can take and return them.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn keep-rect(r: Rect): Rect => r
+fn keep-point(p: Vec2): Vec2 => p
+fn keep-vector(v: Vec3): Vec3 => v
+
+fn view(state: Int): Node => #text("x")

@@ -141,7 +141,7 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_layout_slot_begin)    \
   V(kura_rt_layout_slot_instance) \
   V(kura_rt_layout_slot_end)      \
-  V(kura_rt_layout_get)           \
+  V(kura_rt_layout_rect)          \
   V(kura_rt_register_event)
 // clang-format on
 
@@ -174,14 +174,14 @@ void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bit
 void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
-void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color);
-// A box: the rect (the bits of f64s) filled with `fill`, with a border of `border_width` inside its edge and corners
+void kura_rt_fill_rect(const KuraRect* rect, uint64_t color);
+// A box: the rect filled with `fill`, with a border of `border_width` inside its edge and corners
 // rounded by `radius`, both in pixels, all with `opacity` (0 to 1) multiplied into their alpha. Colors are 0xRRGGBBAA.
 // It is made of the renderer's `fill_rect`s, a row of the rounded part at a time, so it has hard edges.
-void kura_rt_paint_box(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t fill,
-                       uint64_t border_color, uint64_t border_width_bits, uint64_t radius_bits, uint64_t opacity_bits);
-// What is drawn until `pop_clip` stays inside the rect (the bits of f64s, like `fill_rect`).
-void kura_rt_push_clip(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits);
+void kura_rt_paint_box(const KuraRect* rect, uint64_t fill, uint64_t border_color, uint64_t border_width_bits,
+                       uint64_t radius_bits, uint64_t opacity_bits);
+// What is drawn until `pop_clip` stays inside the rect.
+void kura_rt_push_clip(const KuraRect* rect);
 void kura_rt_pop_clip();
 
 // Called by the host, not by compiled code. Sets the renderer this thread draws with; the host
@@ -242,7 +242,9 @@ void kura_rt_layout_slot_begin(const void* table, uint64_t count, uint64_t slot)
 void kura_rt_layout_slot_instance(const void* table, uint64_t count, uint64_t slot, const void* instance,
                                   uint64_t instance_count);
 void kura_rt_layout_slot_end(const void* table, uint64_t count, uint64_t slot);
-double kura_rt_layout_get(const void* table, uint64_t count, uint64_t node, uint64_t component);
+// The box the node `node` of the table was laid out in, as of the last `kura_rt_layout_run`, in the viewport's
+// coordinates. A node that isn't there has an empty box at the origin.
+void kura_rt_layout_rect(const void* table, uint64_t count, uint64_t node, KuraRect* out);
 
 void* kura_rt_record_new();
 void kura_rt_record_set(void* object, uint64_t hash, const char* name, uint64_t tag, uint64_t bits);

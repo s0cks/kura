@@ -10,10 +10,10 @@
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <cstdio>
-#include <numeric>
 #include <cstdlib>
 #include <cstring>
 #include <format>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -357,8 +357,8 @@ int main(const int argc, char** argv) {
     frame++;
   }
 
-  const auto render_sample_sum = std::accumulate(render_samples.begin(), render_samples.end(), 0.0);
-  const auto render_sample_avg = render_sample_sum / render_samples.size();
+  const auto render_sample_sum = std::accumulate(render_samples.begin() + 10, render_samples.end(), 0.0);
+  const auto render_sample_avg = render_sample_sum / (render_samples.size() - 10);
 
   std::println("render avg {:.2f}us over {} frames", render_sample_avg, render_samples.size());
 

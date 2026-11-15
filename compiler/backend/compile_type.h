@@ -17,6 +17,9 @@ class CompileType {
     kNumber,
     kString,
     kColor,
+    kVec2,
+    kVec3,
+    kRect,
     kPx,
     kPct,
     kFr,
@@ -76,6 +79,9 @@ class CompileType {
   DEFINE_KIND_CHECK(Number)
   DEFINE_KIND_CHECK(String)
   DEFINE_KIND_CHECK(Color)
+  DEFINE_KIND_CHECK(Vec2)
+  DEFINE_KIND_CHECK(Vec3)
+  DEFINE_KIND_CHECK(Rect)
   DEFINE_KIND_CHECK(Px)
   DEFINE_KIND_CHECK(Pct)
   DEFINE_KIND_CHECK(Fr)
@@ -160,6 +166,10 @@ class CompileType {
   static auto Number() -> CompileType*;
   static auto String() -> CompileType*;
   static auto Color() -> CompileType*;
+  // Geometry: the compiler holds these unboxed, as vectors of floats, and they have no tagged form (see geometry.h).
+  static auto Vec2() -> CompileType*;
+  static auto Vec3() -> CompileType*;
+  static auto Rect() -> CompileType*;
   static auto Px() -> CompileType*;
   static auto Pct() -> CompileType*;
   static auto Fr() -> CompileType*;

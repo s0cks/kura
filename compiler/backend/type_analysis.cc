@@ -120,6 +120,12 @@ class Analyzer {
         return simple(CompileType::String());
       if (name == "Color")
         return simple(CompileType::Color());
+      if (name == "Vec2")
+        return simple(CompileType::Vec2());
+      if (name == "Vec3")
+        return simple(CompileType::Vec3());
+      if (name == "Rect")
+        return simple(CompileType::Rect());
       if (name == "Px")
         return simple(CompileType::Px());
       if (name == "Pct")
@@ -726,6 +732,12 @@ class Analyzer {
         return CompileType::String();
       case kColorType:
         return CompileType::Color();
+      case kVec2Type:
+        return CompileType::Vec2();
+      case kVec3Type:
+        return CompileType::Vec3();
+      case kRectType:
+        return CompileType::Rect();
       case kPxType:
         return CompileType::Px();
       case kPctType:
@@ -966,8 +978,8 @@ class Analyzer {
     if (const auto c = instr->AsConstant())
       return Set(def, ConstantType(c->GetValue()));
 
-    if (instr->IsLayoutBox())
-      return Set(def, CompileType::Px());
+    if (instr->IsLayoutRect())
+      return Set(def, CompileType::Rect());
 
     if (const auto p = instr->AsParameter())
       return Set(def, p->GetIndex() < params.size() ? params[p->GetIndex()] : CompileType::Any());

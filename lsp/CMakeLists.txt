@@ -1,5 +1,6 @@
 find_package(jansson CONFIG REQUIRED)
 find_package(libuv CONFIG REQUIRED)
+find_package(argparse CONFIG REQUIRED)
 
 add_library(kura-lsp-common STATIC
   code_action.cc
@@ -20,7 +21,8 @@ target_link_libraries(kura-lsp-common
 
 add_executable(kura-lsp main.cc)
 target_link_libraries(kura-lsp
-  PUBLIC kura-lsp-common)
+  PUBLIC kura-lsp-common
+         argparse::argparse)
 
 add_subdirectory(server)
 add_subdirectory(task)

@@ -55,7 +55,7 @@ namespace kura {
   V(LayoutSlotBegin)            \
   V(LayoutSlotInstance)         \
   V(LayoutSlotEnd)              \
-  V(LayoutBox)                  \
+  V(LayoutRect)                 \
   V(FillRect)                   \
   V(PaintBox)                   \
   V(PushClip)                   \

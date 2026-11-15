@@ -17,7 +17,10 @@ namespace kura {
   V(Px)                  \
   V(Pct)                 \
   V(Fr)                  \
-  V(Color)
+  V(Color)               \
+  V(Vec2)                \
+  V(Vec3)                \
+  V(Rect)
 
 using TypeId = uint64_t;
 

@@ -18,3 +18,9 @@ if(KURA_BUILD_GL_DEMO)
             kura-compiler
             PkgConfig::GLFW)
 endif()
+
+option(KURA_BUILD_GL_BENCHMARKS "Build the benchmarks for the gl renderer" ON)
+if(KURA_BUILD_GL_BENCHMARKS)
+  message(STATUS "building gl renderer benchmarks")
+  add_subdirectory(benchmark)
+endif()

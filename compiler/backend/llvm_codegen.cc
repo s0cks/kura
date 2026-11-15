@@ -43,7 +43,8 @@ auto EntryPointName(const std::string& function) -> std::string {
 }
 
 namespace {
-enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged };
+// kVec is the geometry (Vec2, Vec3, Rect): a vector of 32-bit floats, in a register or on the stack, never tagged.
+enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged, kVec };
 
 auto RepOf(CompileType* type) -> Rep {
   switch (type->GetKind()) {
@@ -67,8 +68,24 @@ auto RepOf(CompileType* type) -> Rep {
     case CompileType::kRecord:
     case CompileType::kFunction:
       return Rep::kPtr;
+    case CompileType::kVec2:
+    case CompileType::kVec3:
+    case CompileType::kRect:
+      return Rep::kVec;
     default:
       return Rep::kTagged;
+  }
+}
+
+// How many floats a geometry type is.
+auto LanesOf(CompileType* type) -> unsigned {
+  switch (type->GetKind()) {
+    case CompileType::kVec2:
+      return 2;
+    case CompileType::kVec3:
+      return 3;
+    default:
+      return 4;
   }
 }
 
@@ -127,6 +144,7 @@ class Generator {
   llvm::IntegerType* i8_;
   llvm::IntegerType* i1_;
   llvm::Type* f64_;
+  llvm::Type* f32_;
   llvm::Type* void_ty_;
 
   std::unordered_map<FlowGraph*, llvm::Function*> natives_{};
@@ -159,6 +177,8 @@ class Generator {
         return ptr_ty_;
       case Rep::kTagged:
         return value_ty_;
+      case Rep::kVec:
+        return llvm::FixedVectorType::get(f32_, LanesOf(type));
     }
     return i8_;
   }
@@ -188,6 +208,9 @@ class Generator {
         return b_.CreateZExt(value, i64_);
       case Rep::kPtr:
         return b_.CreatePtrToInt(value, i64_);
+      case Rep::kVec:
+        Fail("internal error: a " + type->ToString() + " can't be put where any value goes: geometry is never boxed");
+        return b_.getInt64(0);
       default:
         return b_.getInt64(0);
     }
@@ -203,6 +226,9 @@ class Generator {
         return b_.CreateICmpNE(bits, b_.getInt64(0));
       case Rep::kPtr:
         return b_.CreateIntToPtr(bits, ptr_ty_);
+      case Rep::kVec:
+        Fail("internal error: a " + type->ToString() + " can't be taken out of a value of any type: geometry is never boxed");
+        return llvm::PoisonValue::get(Lower(type));
       default:
         return b_.getInt8(0);
     }
@@ -223,6 +249,12 @@ class Generator {
 
     const auto rf = RepOf(from);
     const auto rt = RepOf(to);
+    if (rf == Rep::kVec || rt == Rep::kVec) {
+      // a Vec2 is only a Vec2: it isn't a number, or tagged, or another geometry
+      Fail("internal error: can't convert " + from->ToString() + " to " + to->ToString());
+      return llvm::PoisonValue::get(Lower(to));
+    }
+
     if (rt == Rep::kTagged) {
       if (rf == Rep::kTagged)
         return value;
@@ -606,13 +638,32 @@ class Generator {
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot())});
   }
 
-  void EmitLayoutBox(LayoutBoxInstr* instr) {
+  // A stack slot, made where the function starts so that a loop doesn't make a new one each time round.
+  auto EntryAlloca(llvm::Type* type) -> llvm::Value* {
+    auto& entry = fn_->native->getEntryBlock();
+    llvm::IRBuilder<> at_entry(&entry, entry.getFirstInsertionPt());
+    return at_entry.CreateAlloca(type);
+  }
+
+  // The address of geometry in memory, for the runtime, which takes it as a pointer to the renderer ABI's struct.
+  auto Spill(Value* value) -> llvm::Value* {
+    const auto vec = Val(value);
+    if (!vec->getType()->isVectorTy()) {
+      Fail("internal error: a rect must be geometry");
+      return llvm::ConstantPointerNull::get(ptr_ty_);
+    }
+    const auto slot = EntryAlloca(vec->getType());
+    b_.CreateStore(vec, slot);
+    return slot;
+  }
+
+  void EmitLayoutRect(LayoutRectInstr* instr) {
     const auto plan = instr->GetPlan().get();
-    Define(instr,
-           CallRt("kura_rt_layout_get", f64_,
-                  {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
-                   b_.getInt64(static_cast<uint64_t>(instr->GetComponent()))}),
-           CompileType::Px());
+    const auto rect_ty = llvm::FixedVectorType::get(f32_, 4);
+    const auto slot = EntryAlloca(rect_ty);
+    CallRt("kura_rt_layout_rect", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()), slot});
+    Define(instr, b_.CreateLoad(rect_ty, slot), CompileType::Rect());
   }
 
   void EmitEndFrame(EndFrameInstr* draw) {
@@ -645,28 +696,18 @@ class Generator {
   }
 
   void EmitFillRect(FillRectInstr* draw) {
-    llvm::Value* x = CoordinateBits(draw->GetX());
-    llvm::Value* y = CoordinateBits(draw->GetY());
-    llvm::Value* w = CoordinateBits(draw->GetWidth());
-    llvm::Value* h = CoordinateBits(draw->GetHeight());
-    llvm::Value* c = Val(draw->GetColor());
-    CallRt("kura_rt_fill_rect", void_ty_, {x, y, w, h, c});
+    CallRt("kura_rt_fill_rect", void_ty_, {Spill(draw->GetRect()), Val(draw->GetColor())});
   }
 
   void EmitPaintBox(PaintBoxInstr* paint) {
     CallRt("kura_rt_paint_box", void_ty_,
-           {CoordinateBits(paint->GetX()), CoordinateBits(paint->GetY()), CoordinateBits(paint->GetWidth()),
-            CoordinateBits(paint->GetHeight()), Val(paint->GetFill()), Val(paint->GetBorderColor()),
+           {Spill(paint->GetRect()), Val(paint->GetFill()), Val(paint->GetBorderColor()),
             CoordinateBits(paint->GetBorderWidth()), CoordinateBits(paint->GetRadius()),
             CoordinateBits(paint->GetOpacity())});
   }
 
   void EmitPushClip(PushClipInstr* clip) {
-    llvm::Value* x = CoordinateBits(clip->GetX());
-    llvm::Value* y = CoordinateBits(clip->GetY());
-    llvm::Value* w = CoordinateBits(clip->GetWidth());
-    llvm::Value* h = CoordinateBits(clip->GetHeight());
-    CallRt("kura_rt_push_clip", void_ty_, {x, y, w, h});
+    CallRt("kura_rt_push_clip", void_ty_, {Spill(clip->GetRect())});
   }
 
   void EmitPopClip(PopClipInstr*) {
@@ -748,6 +789,20 @@ class Generator {
         return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
       case kColorType:
         return Define(instr, b_.getInt64(static_cast<Color*>(value)->ToRGBA()), CompileType::Int());
+      case kVec2Type: {
+        const auto& v = static_cast<Vec2*>(value)->GetValue();
+        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y}), CompileType::Vec2());
+      }
+      case kVec3Type: {
+        const auto& v = static_cast<Vec3*>(value)->GetValue();
+        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y, v.z}),
+                      CompileType::Vec3());
+      }
+      case kRectType: {
+        const auto& r = static_cast<Rect*>(value)->GetValue();
+        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{r.x, r.y, r.width, r.height}),
+                      CompileType::Rect());
+      }
       case kFloatType:
         return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()), CompileType::Float());
       case kPxType:
@@ -808,8 +863,8 @@ class Generator {
       return EmitLayoutSlotInstance(d);
     if (const auto d = instr->AsLayoutSlotEnd())
       return EmitLayoutSlotEnd(d);
-    if (const auto d = instr->AsLayoutBox())
-      return EmitLayoutBox(d);
+    if (const auto d = instr->AsLayoutRect())
+      return EmitLayoutRect(d);
     if (const auto d = instr->AsEndFrame())
       return EmitEndFrame(d);
     if (const auto d = instr->AsCheckRendererStatus())
@@ -1604,6 +1659,7 @@ class Generator {
     i8_(llvm::Type::getInt8Ty(ctx)),
     i1_(llvm::Type::getInt1Ty(ctx)),
     f64_(llvm::Type::getDoubleTy(ctx)),
+    f32_(llvm::Type::getFloatTy(ctx)),
     void_ty_(llvm::Type::getVoidTy(ctx)) {
     ptr_ty_ = llvm::PointerType::get(ctx, 0);
     value_ty_ = llvm::StructType::get(ctx, {i64_, i64_});

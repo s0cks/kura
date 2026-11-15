@@ -26,6 +26,12 @@ typedef struct KuraVec2 {
   float y;
 } KuraVec2;
 
+typedef struct KuraVec3 {
+  float x;
+  float y;
+  float z;
+} KuraVec3;
+
 typedef struct KuraRect {
   float x;
   float y;

@@ -1,10 +1,10 @@
 // A Kura program, from source to pixels: examples/hello-world.kui is parsed, compiled and loaded into
 // the JIT, its view is called, and what the compiled code asked the runtime to draw is drawn by the
 // OpenGL renderer into an offscreen framebuffer.
-#include <gtest/gtest.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <algorithm>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -23,6 +23,8 @@ constexpr uint32_t kViewSize = 1024;
 
 class GlProgramTest : public ::testing::Test {
  protected:
+  KuraRenderer renderer_{};
+
   void SetUp() override {
     if (!Context().ok())
       GTEST_SKIP() << "no EGL/OpenGL 3.3 context available";
@@ -35,8 +37,6 @@ class GlProgramTest : public ::testing::Test {
     if (renderer_.ops != nullptr)
       renderer_.ops->destroy(renderer_.self);
   }
-
-  KuraRenderer renderer_{};
 };
 
 TEST_F(GlProgramTest, HelloWorldDrawsItsButton) {

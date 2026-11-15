@@ -2,6 +2,7 @@
 #define KURA_OBJECT_H
 
 #include "common.h"
+#include "geometry.h"
 #include "type.h"
 
 namespace kura {
@@ -297,7 +298,14 @@ class Color : public TemplateObject<kColorType> {
   V(Blue)                         \
   V(Green)                        \
   V(White)                        \
-  V(Black)
+  V(Black)                        \
+  V(Purple)                       \
+  V(DarkPurple)                   \
+  V(BrightPurple)                 \
+  V(Gray)                         \
+  V(LightGray)                    \
+  V(DarkGray)                     \
+  V(SlateGray)
 
 #define DECLARE_BUILTIN_COLOR(Name) static Color* k##Name;
 
@@ -320,6 +328,42 @@ class Color : public TemplateObject<kColorType> {
   FOR_EACH_BUILTIN_COLOR(DEFINE_COLOR_GETTER)
 #undef DEFINE_COLOR_GETTER
 };
+
+// The geometry (see geometry.h), as constants in the IR. The compiler keeps them unboxed, as vectors of floats, so
+// there is no value of them at runtime that is tagged: they can't be put in a Seq, a Record, a Message, or anything
+// else that holds a value of any type.
+#define DEFINE_GEOMETRY_OBJECT(Name, ...)                              \
+  class Name : public TemplateValueObject<k##Name##Type, geom::Name> { \
+   public:                                                             \
+    explicit Name(const geom::Name value) :                            \
+      TemplateValueObject(value) {}                                    \
+    ~Name() override = default;                                        \
+                                                                       \
+    DECLARE_TYPE(Name);                                                \
+                                                                       \
+   public:                                                             \
+    static inline auto New(const geom::Name value) -> Name* {          \
+      return new Name(value);                                          \
+    }                                                                  \
+                                                                       \
+    static inline auto New(__VA_ARGS__) -> Name*;                      \
+  };
+DEFINE_GEOMETRY_OBJECT(Vec2, float x, float y);
+DEFINE_GEOMETRY_OBJECT(Vec3, float x, float y, float z);
+DEFINE_GEOMETRY_OBJECT(Rect, float x, float y, float width, float height);
+#undef DEFINE_GEOMETRY_OBJECT
+
+inline auto Vec2::New(const float x, const float y) -> Vec2* {
+  return New(geom::Vec2{x, y});
+}
+
+inline auto Vec3::New(const float x, const float y, const float z) -> Vec3* {
+  return New(geom::Vec3{x, y, z});
+}
+
+inline auto Rect::New(const float x, const float y, const float width, const float height) -> Rect* {
+  return New(geom::Rect{x, y, width, height});
+}
 }  // namespace kura
 
 #endif  // KURA_OBJECT_H

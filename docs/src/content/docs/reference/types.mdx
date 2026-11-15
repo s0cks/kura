@@ -71,6 +71,21 @@ When a value crosses the C boundary, Kura converts it to the C type automaticall
 unit, and you cast explicitly to get the underlying number. See
 [Measurements](/kura/reference/primitives/#measurements).
 
+## Geometry
+
+`Vec2`, `Vec3` and `Rect` are the basic geometry the compiler, the runtime and the renderers share: a point or a
+size in the plane, a point in space, and a rectangle by its top left corner and size. They are made of 32-bit
+floats, laid out exactly like the renderer ABI's `KuraVec2`, `KuraVec3` and `KuraRect`, so a `Rect` is handed to a
+renderer as it is.
+
+They are for the compiler's own use: there is no literal for them and no built-in that makes one yet, and the
+compiler holds them unboxed, as vectors of floats. That means they have no tagged form: none can be an entry
+point's argument or result, a field of a record, an element of a `Seq`, or part of a `Message`. They are three
+distinct types, and a function can take and return them.
+
+For example, the draw calls the compiler makes for a box take the box as a `Rect`, read once from the layout, where
+they used to take its four coordinates one by one.
+
 ## Type declarations
 
 `type` declares record shapes, aliases and algebraic types:
