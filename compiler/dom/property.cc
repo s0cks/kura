@@ -12,8 +12,8 @@ constexpr auto kInfinity = std::numeric_limits<double>::infinity();
 
 constexpr KindMask kElements = (KindMask{1} << static_cast<unsigned>(Kind::kDynamic)) - 1;
 constexpr KindMask kBoxes = kElements & ~MaskOf(Kind::kFragment);
-constexpr KindMask kContainers =
-    MaskOf(Kind::kView) | MaskOf(Kind::kBlock) | MaskOf(Kind::kSurface) | MaskOf(Kind::kList) | MaskOf(Kind::kScroll) | MaskOf(Kind::kButton);
+constexpr KindMask kContainers = MaskOf(Kind::kView) | MaskOf(Kind::kBlock) | MaskOf(Kind::kSurface) |
+                                 MaskOf(Kind::kList) | MaskOf(Kind::kScroll) | MaskOf(Kind::kButton);
 constexpr KindMask kFields = MaskOf(Kind::kText) | MaskOf(Kind::kInput);
 
 constexpr TypeMask kBool = TypeBit(CompileType::kBool);
@@ -77,6 +77,9 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("value", MaskOf(Kind::kText), kString);
   add("value", MaskOf(Kind::kInput), kString);
   add("value", MaskOf(Kind::kProgress), kNumbers, {}, 0, 1);
+
+  add("length", MaskOf(Kind::kLine), kSizes, kAuto);
+
   add("color", kFields, kColor);
   add("size", kFields, kPx, {}, 0);
   add("font-family", kFields, kString);

@@ -127,10 +127,12 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_begin_frame)          \
   V(kura_rt_end_frame)            \
   V(kura_rt_fill_rect)            \
+  V(kura_rt_paint_box)            \
   V(kura_rt_push_clip)            \
   V(kura_rt_pop_clip)             \
   V(kura_rt_draw_rect)            \
   V(kura_rt_draw_text)            \
+  V(kura_rt_draw_line)            \
   V(kura_rt_viewport_width)       \
   V(kura_rt_viewport_height)      \
   V(kura_rt_layout_set_text)      \
@@ -173,6 +175,11 @@ void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
 void kura_rt_fill_rect(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t color);
+// A box: the rect (the bits of f64s) filled with `fill`, with a border of `border_width` inside its edge and corners
+// rounded by `radius`, both in pixels, all with `opacity` (0 to 1) multiplied into their alpha. Colors are 0xRRGGBBAA.
+// It is made of the renderer's `fill_rect`s, a row of the rounded part at a time, so it has hard edges.
+void kura_rt_paint_box(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits, uint64_t fill,
+                       uint64_t border_color, uint64_t border_width_bits, uint64_t radius_bits, uint64_t opacity_bits);
 // What is drawn until `pop_clip` stays inside the rect (the bits of f64s, like `fill_rect`).
 void kura_rt_push_clip(uint64_t xbits, uint64_t ybits, uint64_t wbits, uint64_t hbits);
 void kura_rt_pop_clip();
@@ -188,11 +195,13 @@ const KuraRenderer* kura_rt_get_renderer();
 void kura_rt_draw_rect();
 // Draws the text node `node` of the layout `table` (see below): its content, in the font and size it was given
 // with `kura_rt_layout_set_text`, wrapped to its box and placed in it. `color` is a packed RGBA8.
-void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_t color);
+void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_t color, uint64_t opacity_bits,
+                       uint64_t align);
 // The renderer call under `kura_rt_draw_text`: draws one run of text with the top-left of its box at (x, y).
 // `family` is the `font-family`, NULL (or a zero length) for the default font. Not called by compiled code.
 void kura_rt_render_text(double x, double y, const char* utf8, uint64_t length, float size, const char* family,
                          uint64_t family_length, uint64_t color);
+void kura_rt_draw_line(uint64_t x1bits, uint64_t y1bits, uint64_t x2bits, uint64_t y2bits, uint64_t color);
 // ── viewport and layout ────────────────────────────────────────────────────
 // The size of the surface a view lays out in and draws into. The host sets it (a window's size, say)
 // and a view reads it at the start of every frame, so changing it reflows the next frame. It is

@@ -1,0 +1,18 @@
+// args: 0
+// A scroll container with more in it than fits, and a list with a gap; the content is as large as it wants.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn row(label: String) =>
+  #block(padding: 2px, fill: white){
+    #text(label)
+  }
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 4px){
+    #scroll(height: 60px, direction: "column", gap: 2px, fill: blue){
+      for _, item in ["a", "b", "c", "d", "e"] => row(item)
+    }
+    row("after")
+  }

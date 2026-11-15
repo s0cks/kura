@@ -1,0 +1,8 @@
+fn view() =>
+  #block(justify: "center",
+         direction: "column",
+         gap: 32px){
+    #line(fill: red)
+    #line(fill: white)
+    #line(fill: blue)
+  }

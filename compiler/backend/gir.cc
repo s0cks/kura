@@ -109,6 +109,14 @@ auto FillRectInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto PaintBoxInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "PaintBox(" << Name(GetX()) << ", " << Name(GetY()) << ", " << Name(GetWidth()) << ", " << Name(GetHeight())
+     << ", fill=" << Name(GetFill()) << ", border=" << Name(GetBorderColor()) << " " << Name(GetBorderWidth())
+     << ", radius=" << Name(GetRadius()) << ", opacity=" << Name(GetOpacity()) << ")";
+  return ss.str();
+}
+
 auto PushClipInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "PushClip(" << Name(GetX()) << ", " << Name(GetY()) << ", " << Name(GetWidth()) << ", " << Name(GetHeight())
@@ -144,7 +152,9 @@ auto DrawTextInstr::ToString() const -> std::string {
   ss << "layout=" << GetPlan()->GetIndex() << ", ";
   ss << "node=" << GetNode() << ", ";
   ss << "text=" << Name(GetValue()) << ", ";
-  ss << "color=" << Name(GetColor());
+  ss << "color=" << Name(GetColor()) << ", ";
+  ss << "opacity=" << Name(GetOpacity()) << ", ";
+  ss << "align=" << GetAlign();
   ss << ")";
   return ss.str();
 }
@@ -180,6 +190,11 @@ auto FillBezierInstr::ToString() const -> std::string {
 auto DrawLineInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawLine(";
+  ss << "x1=" << Name(GetX1()) << ", ";
+  ss << "y1=" << Name(GetY1()) << ", ";
+  ss << "x2=" << Name(GetX2()) << ", ";
+  ss << "y2=" << Name(GetY2()) << ", ";
+  ss << "color=" << Name(GetColor());
   ss << ")";
   return ss.str();
 }

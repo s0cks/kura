@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 #include <cstdint>
 #include <cstdio>
+#include <numeric>
 #include <cstdlib>
 #include <cstring>
 #include <format>

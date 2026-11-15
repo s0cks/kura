@@ -1,0 +1,9 @@
+// error: #view is the root of the view: it has to be the outermost element, and there is only one
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  #view(fill: white) {
+    #view(fill: red)
+  }

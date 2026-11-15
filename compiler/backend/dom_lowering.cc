@@ -109,6 +109,9 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
     } else if (op.node->IsScroll() || op.node->IsList()) {
       if (!DrawScroll(op))
         return false;
+    } else if (op.node->IsLine()) {
+      if (!DrawLine(*op.node))
+        return false;
     } else if (op.node->IsDynamic()) {
       if (!RunHole(op.node, true))
         return false;
@@ -123,6 +126,16 @@ auto DomLowering::VisitNode(dom::Node* node) -> bool {
 
   EmitLayoutProperties(node, resolved_[node]);
   return VisitChildren(node);
+}
+
+auto DomLowering::VisitLine(dom::Node* node) -> bool {
+  auto& resolved = resolved_[node];
+  if (!ResolveProperties(node, &resolved))
+    return false;
+
+  EmitLayoutProperties(node, resolved);
+  ops_.push_back(Op{node, nullptr, true});
+  return true;
 }
 
 auto DomLowering::VisitBlock(dom::Node* node) -> bool {
@@ -253,6 +266,39 @@ void DomLowering::EmitEvents(dom::Node* node) {
     host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventScroll, host_->Bind(ConstantInstr::New(None::Get()))));
 }
 
+// Paints the box of a node: its `fill`, and what makes it more than a rectangle, which is `border-width`,
+// `border-color`, `radius` and `opacity`. A box with none of those is the plain rectangle it always was. A box that
+// isn't `always` painted, because it has no color of its own, paints nothing without them.
+//
+// A border takes its width and color from what the node says, and where only one is said: a color alone is a
+// 1px border, and a width alone is black.
+void DomLowering::EmitBox(dom::Node* node, Value* x, Value* y, Value* w, Value* h, const bool always) {
+  auto& resolved = resolved_[node];
+  Value* fill = ResolvePropertyByName(node, "fill", resolved);
+  Value* border_color = ResolvePropertyByName(node, "border-color", resolved);
+  Value* border_width = ResolvePropertyByName(node, "border-width", resolved);
+  Value* radius = ResolvePropertyByName(node, "radius", resolved);
+  Value* opacity = ResolvePropertyByName(node, "opacity", resolved);
+  const auto constant = [this](Object* value) { return host_->Bind(ConstantInstr::New(value)); };
+
+  if (!border_color && !border_width && !radius && !opacity) {
+    if (!fill && !always)
+      return;
+    EmitRenderCall(FillRectInstr::New(x, y, w, h, fill ? fill : constant(Int::New(0))));
+    return;
+  }
+
+  if (border_width && !border_color)
+    border_color = constant(Int::New(0x000000FF));
+  if (border_color && !border_width)
+    border_width = constant(Float::New(1.0));
+  EmitRenderCall(PaintBoxInstr::New(x, y, w, h, fill ? fill : constant(Int::New(0)),
+                                    border_color ? border_color : constant(Int::New(0)),
+                                    border_width ? border_width : constant(Float::New(0.0)),
+                                    radius ? radius : constant(Float::New(0.0)),
+                                    opacity ? opacity : constant(Float::New(1.0))));
+}
+
 auto DomLowering::DrawBlock(dom::Node* node) -> bool {
   Value* x = Box(node, LayoutBoxInstr::kX);
   Value* y = Box(node, LayoutBoxInstr::kY);
@@ -261,28 +307,47 @@ auto DomLowering::DrawBlock(dom::Node* node) -> bool {
   if (!x || !y || !w || !h)
     return false;
 
-  Value* color = ResolvePropertyByName(node, "fill", resolved_[node]);
-  if (!color)
-    color = host_->Bind(ConstantInstr::New(Int::New(0)));
-
-  EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+  EmitBox(node, x, y, w, h, true);
   EmitEvents(node);
   return true;
 }
 
 // The View is the window: it paints its `fill` over all of it, if it has one, and takes the clicks nothing in it does.
 auto DomLowering::DrawView(dom::Node* node) -> bool {
-  if (const auto color = ResolvePropertyByName(node, "fill", resolved_[node])) {
-    Value* x = Box(node, LayoutBoxInstr::kX);
-    Value* y = Box(node, LayoutBoxInstr::kY);
-    Value* w = Box(node, LayoutBoxInstr::kWidth);
-    Value* h = Box(node, LayoutBoxInstr::kHeight);
-    if (!x || !y || !w || !h)
-      return false;
-    EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
-  }
+  Value* x = Box(node, LayoutBoxInstr::kX);
+  Value* y = Box(node, LayoutBoxInstr::kY);
+  Value* w = Box(node, LayoutBoxInstr::kWidth);
+  Value* h = Box(node, LayoutBoxInstr::kHeight);
+  if (!x || !y || !w || !h)
+    return false;
 
+  EmitBox(node, x, y, w, h, false);
   EmitEvents(node);
+  return true;
+}
+
+auto DomLowering::DrawLine(dom::Node& node) -> bool {
+  Value* x = Box(&node, LayoutBoxInstr::kX);
+  Value* y = Box(&node, LayoutBoxInstr::kY);
+  Value* w = Box(&node, LayoutBoxInstr::kWidth);
+  Value* h = Box(&node, LayoutBoxInstr::kHeight);
+  if (!x || !y || !w || !h)
+    return false;
+
+  Value* half = host_->Bind(ConstantInstr::New(Float::New(0.5f)));
+
+  Value* x1 = x;
+  Value* y1 = host_->Bind(BinaryOpInstr::New(BinaryOp::kMultiply, h, half));
+  y1 = host_->Bind(BinaryOpInstr::New(BinaryOp::kAdd, y, y1));
+
+  Value* x2 = host_->Bind(BinaryOpInstr::New(BinaryOp::kAdd, x, w));
+  Value* y2 = y1;
+
+  Value* color = ResolvePropertyByName(&node, "fill", resolved_[&node]);
+  if (!color)
+    color = host_->Bind(ConstantInstr::New(Int::New(0)));
+
+  EmitRenderCall(DrawLineInstr::New(x1, y1, x2, y2, color));
   return true;
 }
 
@@ -301,9 +366,7 @@ auto DomLowering::DrawScroll(const Op& op) -> bool {
     return true;
   }
 
-  if (const auto color = ResolvePropertyByName(op.node, "fill", resolved_[op.node]))
-    EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
-
+  EmitBox(op.node, x, y, w, h, false);
   EmitEvents(op.node);
   EmitRenderCall(PushClipInstr::New(x, y, w, h));
   return true;
@@ -317,11 +380,7 @@ auto DomLowering::DrawButton(dom::Node* node) -> bool {
   if (!x || !y || !w || !h)
     return false;
 
-  Value* color = ResolvePropertyByName(node, "fill", resolved_[node]);
-  if (!color)
-    color = host_->Bind(ConstantInstr::New(Int::New(0)));
-
-  EmitRenderCall(FillRectInstr::New(x, y, w, h, color));
+  EmitBox(node, x, y, w, h, true);
   EmitEvents(node);
   return true;
 }
@@ -336,7 +395,21 @@ auto DomLowering::DrawText(const Op& op) -> bool {
   if (!color)
     color = host_->Bind(ConstantInstr::New(Int::New(0x000000FF)));
 
-  EmitRenderCall(DrawTextInstr::New(plan_, *id, op.text, color));
+  Value* opacity = ResolvePropertyByName(op.node, "opacity", resolved_[op.node]);
+  if (!opacity)
+    opacity = host_->Bind(ConstantInstr::New(Float::New(1.0)));
+
+  // Where each line of the text is in its room is worked out when it is drawn, from a word that is known now.
+  auto align = DrawTextInstr::kAlignStart;
+  if (const auto property = op.node->FindProperty("text-align")) {
+    if (!property->IsConstant())
+      return Fail("#text 'text-align' has to be a constant for now: it is a word like \"center\", not a value that changes");
+    const auto word = static_cast<String*>(property->constant)->GetValue();
+    align = word == "center" ? DrawTextInstr::kAlignCenter : word == "right" ? DrawTextInstr::kAlignEnd
+                                                                              : DrawTextInstr::kAlignStart;
+  }
+
+  EmitRenderCall(DrawTextInstr::New(plan_, *id, op.text, color, opacity, align));
   return true;
 }
 

@@ -623,6 +623,15 @@ class Generator {
     CallRt("kura_rt_draw_rect", void_ty_, {});
   }
 
+  void EmitDrawLine(DrawLineInstr* draw) {
+    llvm::Value* x1 = CoordinateBits(draw->GetX1());
+    llvm::Value* y1 = CoordinateBits(draw->GetY1());
+    llvm::Value* x2 = CoordinateBits(draw->GetX2());
+    llvm::Value* y2 = CoordinateBits(draw->GetY2());
+    llvm::Value* c = Val(draw->GetColor());
+    CallRt("kura_rt_fill_rect", void_ty_, {x1, y1, x2, y2, c});
+  }
+
   // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
   auto CoordinateBits(Value* value) -> llvm::Value* {
     auto v = Val(value);
@@ -644,6 +653,14 @@ class Generator {
     CallRt("kura_rt_fill_rect", void_ty_, {x, y, w, h, c});
   }
 
+  void EmitPaintBox(PaintBoxInstr* paint) {
+    CallRt("kura_rt_paint_box", void_ty_,
+           {CoordinateBits(paint->GetX()), CoordinateBits(paint->GetY()), CoordinateBits(paint->GetWidth()),
+            CoordinateBits(paint->GetHeight()), Val(paint->GetFill()), Val(paint->GetBorderColor()),
+            CoordinateBits(paint->GetBorderWidth()), CoordinateBits(paint->GetRadius()),
+            CoordinateBits(paint->GetOpacity())});
+  }
+
   void EmitPushClip(PushClipInstr* clip) {
     llvm::Value* x = CoordinateBits(clip->GetX());
     llvm::Value* y = CoordinateBits(clip->GetY());
@@ -661,7 +678,7 @@ class Generator {
     const auto plan = draw->GetPlan().get();
     CallRt("kura_rt_draw_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
-            Val(draw->GetColor())});
+            Val(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign())});
   }
 
   // ── calls ────────────────────────────────────────────────────────────────
@@ -765,6 +782,10 @@ class Generator {
       return EmitDrawRect(d);
     if (const auto d = instr->AsFillRect())
       return EmitFillRect(d);
+    if (const auto d = instr->AsPaintBox())
+      return EmitPaintBox(d);
+    if (const auto d = instr->AsDrawLine())
+      return EmitDrawLine(d);
     if (const auto d = instr->AsPushClip())
       return EmitPushClip(d);
     if (const auto d = instr->AsPopClip())

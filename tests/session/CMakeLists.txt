@@ -6,6 +6,7 @@ add_executable(kura-session-tests
   test_session.cc
   test_builtin_messages.cc
   test_scroll.cc
+  test_paint.cc
   environment.cc)
 target_compile_definitions(kura-session-tests
   PRIVATE KURA_EXAMPLES_DIR="${PROJECT_SOURCE_DIR}/examples"

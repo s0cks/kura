@@ -57,6 +57,7 @@ namespace kura {
   V(LayoutSlotEnd)              \
   V(LayoutBox)                  \
   V(FillRect)                   \
+  V(PaintBox)                   \
   V(PushClip)                   \
   V(PopClip)                    \
   V(FillRoundRect)              \

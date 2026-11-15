@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <epoxy/gl.h>
 #include <new>
+#include <print>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -822,6 +823,7 @@ auto OpStrokeRect(void* self, const KuraRect rect, const KuraColor color) -> Sta
 }
 
 auto OpDrawLine(void* self, const KuraVec2 from, const KuraVec2 to, const KuraColor color) -> Status {
+  std::println("drawing line");
   return reinterpret_cast<GlImpl*>(self)->DrawLine(std::move(from), std::move(to), std::move(color));
 }
 

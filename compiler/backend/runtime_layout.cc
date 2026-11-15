@@ -499,7 +499,8 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
   Touch(&context);
 }
 
-void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const uint64_t color) {
+void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const uint64_t color,
+                       const uint64_t opacity_bits, const uint64_t align) {
   auto& context = ContextFor(table, count);
   if (node >= count)
     return;
@@ -519,12 +520,22 @@ void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t n
   // a hair of slack, so that a box that is exactly as wide as its text doesn't wrap it for rounding
   const auto room = box.width - left - pixels(padding.right) + 0.01f;
 
+  // `opacity` is how much of the color's alpha is kept
+  double opacity = 1.0;
+  std::memcpy(&opacity, &opacity_bits, sizeof(opacity));
+  opacity = std::clamp(opacity, 0.0, 1.0);
+  const auto alpha = static_cast<uint64_t>(std::lround(static_cast<double>(color & 0xFF) * opacity));
+  const auto faded = (color & ~uint64_t{0xFF}) | alpha;
+
   const auto& family = context.families[node];
   auto y = box.y + top;
   for (const auto& line : Wrap(text, context.sizes[node], family, room)) {
     if (!line.text.empty()) {
-      kura_rt_render_text(box.x + left, y, line.text.data(), line.text.size(), context.sizes[node],
-                          family.empty() ? nullptr : family.data(), family.size(), color);
+      // each line is by itself in the room the text has: at its start, in the middle or at its end
+      const auto slack = std::max(0.0f, room - 0.01f - line.width);
+      const auto shift = align == 1 ? slack / 2 : align == 2 ? slack : 0.0f;
+      kura_rt_render_text(box.x + left + shift, y, line.text.data(), line.text.size(), context.sizes[node],
+                          family.empty() ? nullptr : family.data(), family.size(), faded);
     }
     y += line.height;
   }

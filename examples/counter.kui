@@ -17,48 +17,17 @@ fn init(): State =>
 
 fn update(msg: Message, state: State): State =>
   match msg {
-    Increment =>
-      {
-        value: state.value + 1,
-        width: state.width,
-        height: state.height,
-        items: state.items,
-      }
-    Decrement =>
-      {
-        value: state.value - 1,
-        width: state.width,
-        height: state.height,
-        items: state.items,
-      }
-    Reset =>
-      {
-        value: 0,
-        width: state.width,
-        height: state.height,
-        items: [ ],
-      }
-    Set(n) =>
-      {
-        value: n,
-        width: state.width,
-        height: state.height,
-        items: state.items,
-      }
+    Increment => { state | value += 1 }
+    Decrement => { state | value -= 1 }
+    Reset => { state | value: 0, items: [] }
+    Set(n) => { state | value: n }
     Resized(size) =>
       {
-        value: state.value,
+        state |
         width: size.width,
         height: size.height,
-        items: state.items,
       }
-    Append(n) => 
-      {
-        value: state.value,
-        width: state.width,
-        height: state.height,
-        items: state.items + [ "{n}"],
-      }
+    Append(n) => { state | items += [ "{n}"] }
     _ => state
   }
 
@@ -67,7 +36,7 @@ fn counter-buttons() =>
            text-align: "center")
   set button(justify: "center", padding: 16px, fill: white)
   #fragment{
-    #button(on-click: Increment){
+    #button(on-click: Increment, border){
       #text("Increment")
     }
 
@@ -86,24 +55,19 @@ fn row(label: String) =>
 fn view(state: State): Node => {
   set text(size: 24px)
   set button(justify: "center", padding: 16px, fill: white)
+  set block(gap: 16px, padding: 32px, justify: "center")
 
-  let wide = state.width > 700.0
   #block(direction: "column",
-         justify: "center",
          width: 1fr,
          height: 1fr,
-         padding: 10px,
-         gap: 10px,
          fill: match state.value {
                 n if n > 0 => green,
                 n if n < 0 => red,
                 _ => white,
               }){
     #block(direction: "column",
-           grow: 1,
-           justify: "center"){
-      #block(direction: "row",
-             justify: "center"){
+           grow: 1){
+      #block(direction: "row"){
         #text("value: {state.value}")
       }
 
@@ -114,11 +78,9 @@ fn view(state: State): Node => {
       counter-buttons()
     }
 
-    #scroll(){
-      #list(){
-        for _, item in state.items =>
-          row(item)
-      }
+    #list(){
+      for _, item in state.items =>
+        row(item)
     }
   }
 }

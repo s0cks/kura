@@ -14,6 +14,7 @@
   V(List,     "list")             \
   V(Scroll,   "scroll")           \
   V(Button,   "button")           \
+  V(Line,     "line")             \
   V(Text,     "text")             \
   V(Image,    "image")            \
   V(Input,    "input")            \

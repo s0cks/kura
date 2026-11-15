@@ -1,0 +1,323 @@
+running kurac v0.0.1
+Module: Module(name=Kuraview=,, functions=[Function(name=init, body=Seq),Function(name=update, body=Seq),Function(name=counter-buttons, body=Seq),Function(name=row, body=Seq),Function(name=view, body=Seq)])
+fn init() => None:
+  B0 entry.0:
+    %3 = Constant(none) : None
+    Return(%3)
+
+fn init() => { height: Float, items: Seq<String>, value: Int, width: Float }:
+  B0 entry.0:
+    %7 = NewRecord() : { height: Float, items: Seq<Never>, value: Int, width: Float }
+    %8 = Constant(Int(value=1)) : Int
+    StoreProperty(%7, value, %8)
+    %10 = Constant(Float(value=0)) : Float
+    StoreProperty(%7, width, %10)
+    %12 = Constant(Float(value=0)) : Float
+    StoreProperty(%7, height, %12)
+    %14 = NewList() : Seq<Never>
+    StoreProperty(%7, items, %14)
+    Return(%7)
+
+fn update(Append(Int) | Decrement | Increment | Reset | Resized({ height: Float, width: Float }) | Set(Int), { height: Float, items: Seq<String>, value: Int, width: Float }) => { height: Float, items: Seq<String>, value: Int, width: Float }:
+  B0 entry.0:
+    %19 = Parameter(0, msg) : Append(Int) | Decrement | Increment | Reset | Resized({ height: Float, width: Float }) | Set(Int)
+    %20 = Parameter(1, state) : { height: Float, items: Seq<String>, value: Int, width: Float }
+    %23 = TestVariant(%19, Increment) : Bool
+    Branch(%23, then=B4, else=B3, join=<none>)
+  B3 match.next.3:  ; preds: B0
+    %34 = TestVariant(%19, Decrement) : Bool
+    Branch(%34, then=B6, else=B5, join=<none>)
+  B5 match.next.5:  ; preds: B3
+    %45 = TestVariant(%19, Reset) : Bool
+    Branch(%45, then=B8, else=B7, join=<none>)
+  B7 match.next.7:  ; preds: B5
+    %56 = TestVariant(%19, Set) : Bool
+    Branch(%56, then=B10, else=B9, join=<none>)
+  B9 match.next.9:  ; preds: B7
+    %65 = TestVariant(%19, Resized) : Bool
+    Branch(%65, then=B12, else=B11, join=<none>)
+  B11 match.next.11:  ; preds: B9
+    %77 = TestVariant(%19, Append) : Bool
+    Branch(%77, then=B14, else=B13, join=<none>)
+  B13 match.next.13:  ; preds: B11
+    Goto(B2)
+  B14 pattern.next.14:  ; preds: B11
+    %80 = LoadVariantPayload(%19, Append) : Int
+    %81 = NewRecord() : { height: Float, items: Seq<Any>, value: Int, width: Float }
+    Spread(%81, %20)
+    %83 = LoadProperty(%20, items) : Seq<String>
+    %84 = UnaryOp(Stringify, %80) : Any
+    %85 = NewList(%84) : Seq<Any>
+    %86 = BinaryOp(Add, %83, %85) : Seq<Any>
+    StoreProperty(%81, items, %86)
+    Goto(B2)
+  B12 pattern.next.12:  ; preds: B9
+    %68 = LoadVariantPayload(%19, Resized) : { height: Float, width: Float }
+    %69 = NewRecord() : { height: Float, items: Seq<String>, value: Int, width: Float }
+    Spread(%69, %20)
+    %71 = LoadProperty(%68, width) : Float
+    StoreProperty(%69, width, %71)
+    %73 = LoadProperty(%68, height) : Float
+    StoreProperty(%69, height, %73)
+    Goto(B2)
+  B10 pattern.next.10:  ; preds: B7
+    %59 = LoadVariantPayload(%19, Set) : Int
+    %60 = NewRecord() : { height: Float, items: Seq<String>, value: Int, width: Float }
+    Spread(%60, %20)
+    StoreProperty(%60, value, %59)
+    Goto(B2)
+  B8 pattern.next.8:  ; preds: B5
+    %48 = NewRecord() : { height: Float, items: Seq<Never>, value: Int, width: Float }
+    Spread(%48, %20)
+    %50 = Constant(Int(value=0)) : Int
+    StoreProperty(%48, value, %50)
+    %52 = NewList() : Seq<Never>
+    StoreProperty(%48, items, %52)
+    Goto(B2)
+  B6 pattern.next.6:  ; preds: B3
+    %37 = NewRecord() : { height: Float, items: Seq<String>, value: Int, width: Float }
+    Spread(%37, %20)
+    %39 = LoadProperty(%20, value) : Int
+    %40 = Constant(Int(value=1)) : Int
+    %41 = BinaryOp(Subtract, %39, %40) : Int
+    StoreProperty(%37, value, %41)
+    Goto(B2)
+  B4 pattern.next.4:  ; preds: B0
+    %26 = NewRecord() : { height: Float, items: Seq<String>, value: Int, width: Float }
+    Spread(%26, %20)
+    %28 = LoadProperty(%20, value) : Int
+    %29 = Constant(Int(value=1)) : Int
+    %30 = BinaryOp(Add, %28, %29) : Int
+    StoreProperty(%26, value, %30)
+    Goto(B2)
+  B2 match.join.2:  ; preds: B4 B6 B8 B10 B12 B14 B13
+    %90 = Phi(B4:%26, B6:%37, B8:%48, B10:%60, B12:%69, B14:%81, B13:%20) : { height: Float, items: Seq<Any>, value: Int, width: Float }
+    Return(%90)
+
+fn counter-buttons() => Node:
+  B0 entry.0:
+    %94 = NewNode(Fragment) : Node
+    %95 = NewNode(Button) : Node
+    %96 = NewVariant(Increment) : Increment
+    StoreProperty(%95, on-click, %96)
+    %98 = Constant(Color()) : Color
+    StoreProperty(%95, fill, %98)
+    %100 = Constant(Px(value=16)) : Px
+    StoreProperty(%95, padding, %100)
+    %102 = Constant(String(value=center)) : String
+    StoreProperty(%95, justify, %102)
+    %104 = NewNode(Text) : Node
+    %105 = Constant(String(value=Increment)) : String
+    StoreProperty(%104, value, %105)
+    %107 = Constant(String(value=center)) : String
+    StoreProperty(%104, text-align, %107)
+    %109 = Constant(Px(value=24)) : Px
+    StoreProperty(%104, size, %109)
+    %111 = Constant(Int(value=0)) : Int
+    StoreIndex(%95, %111, %104)
+    %113 = Constant(Int(value=0)) : Int
+    StoreIndex(%94, %113, %95)
+    %115 = NewNode(Button) : Node
+    %116 = NewVariant(Decrement) : Decrement
+    StoreProperty(%115, on-click, %116)
+    %118 = Constant(Color()) : Color
+    StoreProperty(%115, fill, %118)
+    %120 = Constant(Px(value=16)) : Px
+    StoreProperty(%115, padding, %120)
+    %122 = Constant(String(value=center)) : String
+    StoreProperty(%115, justify, %122)
+    %124 = NewNode(Text) : Node
+    %125 = Constant(String(value=Decrement)) : String
+    StoreProperty(%124, value, %125)
+    %127 = Constant(String(value=center)) : String
+    StoreProperty(%124, text-align, %127)
+    %129 = Constant(Px(value=24)) : Px
+    StoreProperty(%124, size, %129)
+    %131 = Constant(Int(value=0)) : Int
+    StoreIndex(%115, %131, %124)
+    %133 = Constant(Int(value=1)) : Int
+    StoreIndex(%94, %133, %115)
+    Return(%94)
+
+fn row(String) => Node:
+  B0 entry.0:
+    %138 = Parameter(0, label) : String
+    %139 = NewNode(Block) : Node
+    %140 = Constant(String(value=row)) : String
+    StoreProperty(%139, direction, %140)
+    %142 = Constant(String(value=center)) : String
+    StoreProperty(%139, justify, %142)
+    %144 = Constant(Px(value=4)) : Px
+    StoreProperty(%139, padding, %144)
+    %146 = Constant(Color()) : Color
+    StoreProperty(%139, fill, %146)
+    %148 = NewNode(Text) : Node
+    StoreProperty(%148, value, %138)
+    %150 = Constant(Px(value=24)) : Px
+    StoreProperty(%148, size, %150)
+    %152 = Constant(Int(value=0)) : Int
+    StoreIndex(%139, %152, %148)
+    Return(%139)
+
+fn view({ height: Float, items: Seq<String>, value: Int, width: Float }) => Node:
+  B0 entry.0:
+    %157 = Parameter(0, state) : { height: Float, items: Seq<String>, value: Int, width: Float }
+    %158 = BeginFrame(viewport)
+    CheckRendererStatus(%158)
+    TracyBeginZoneInstr()
+    %161 = LoadProperty(%157, value) : Int
+    %164 = Constant(Int(value=0)) : Int
+    %165 = BinaryOp(GreaterThan, %161, %164) : Bool
+    Branch(%165, then=B4, else=B3, join=<none>)
+  B3 match.next.3:  ; preds: B0
+    %171 = Constant(Int(value=0)) : Int
+    %172 = BinaryOp(LessThan, %161, %171) : Bool
+    Branch(%172, then=B6, else=B5, join=<none>)
+  B5 match.next.5:  ; preds: B3
+    %177 = Constant(Color()) : Color
+    Goto(B2)
+  B6 guard.keep.6:  ; preds: B3
+    %175 = Constant(Color()) : Color
+    Goto(B2)
+  B4 guard.keep.4:  ; preds: B0
+    %168 = Constant(Color()) : Color
+    Goto(B2)
+  B2 match.join.2:  ; preds: B4 B6 B5
+    %179 = Phi(B4:%168, B6:%175, B5:%177) : Color
+    %180 = Constant(String(value=value: )) : String
+    %181 = LoadProperty(%157, value) : Int
+    %182 = UnaryOp(Stringify, %181) : Any
+    %183 = BinaryOp(Add, %180, %182) : Any
+    %184 = LayoutSetText(layout=0, node=4, text=%183, size=24)
+    %185 = LoadProperty(%157, value) : Int
+    %186 = NewVariant(Append, %185) : Append(Int)
+    %187 = Constant(String(value=Append)) : String
+    %188 = LayoutSetText(layout=0, node=6, text=%187, size=24)
+    %189 = NewVariant(Increment) : Increment
+    %190 = Constant(String(value=Increment)) : String
+    %191 = LayoutSetText(layout=0, node=9, text=%190, size=24)
+    %192 = NewVariant(Decrement) : Decrement
+    %193 = Constant(String(value=Decrement)) : String
+    %194 = LayoutSetText(layout=0, node=11, text=%193, size=24)
+    %195 = LayoutSlotBegin(layout=0, slot=14)
+    %196 = LoadProperty(%157, items) : Seq<String>
+    %197 = LoadLength(%196) : Int
+    %198 = Constant(Int(value=0)) : Int
+    Goto(B7)
+  B7 loop.header.7:  ; preds: B2 B9
+    %203 = Phi(B2:%198, B9:%210) : Int
+    %204 = BinaryOp(LessThan, %203, %197) : Bool
+    Branch(%204, then=B9, else=B8, join=<none>)
+  B8 loop.exit.8:  ; preds: B7
+    %212 = Constant(none) : None
+    %213 = LayoutSlotEnd(layout=0, slot=14)
+    %214 = LayoutRun(layout=0, nodes=15)
+    %215 = LayoutBox(layout=0, node=1, x) : Px
+    %216 = LayoutBox(layout=0, node=1, y) : Px
+    %217 = LayoutBox(layout=0, node=1, width) : Px
+    %218 = LayoutBox(layout=0, node=1, height) : Px
+    %219 = FillRect(x=%215, y=%216, width=%217, height=%218, color=%179)
+    CheckRendererStatus(%219)
+    %221 = LayoutBox(layout=0, node=2, x) : Px
+    %222 = LayoutBox(layout=0, node=2, y) : Px
+    %223 = LayoutBox(layout=0, node=2, width) : Px
+    %224 = LayoutBox(layout=0, node=2, height) : Px
+    %225 = Constant(Int(value=0)) : Int
+    %226 = FillRect(x=%221, y=%222, width=%223, height=%224, color=%225)
+    CheckRendererStatus(%226)
+    %228 = LayoutBox(layout=0, node=3, x) : Px
+    %229 = LayoutBox(layout=0, node=3, y) : Px
+    %230 = LayoutBox(layout=0, node=3, width) : Px
+    %231 = LayoutBox(layout=0, node=3, height) : Px
+    %232 = Constant(Int(value=0)) : Int
+    %233 = FillRect(x=%228, y=%229, width=%230, height=%231, color=%232)
+    CheckRendererStatus(%233)
+    %235 = Constant(Int(value=255)) : Int
+    %236 = DrawText(layout=0, node=4, text=%183, color=%235)
+    CheckRendererStatus(%236)
+    %238 = LayoutBox(layout=0, node=5, x) : Px
+    %239 = LayoutBox(layout=0, node=5, y) : Px
+    %240 = LayoutBox(layout=0, node=5, width) : Px
+    %241 = LayoutBox(layout=0, node=5, height) : Px
+    %242 = Constant(Color()) : Color
+    %243 = FillRect(x=%238, y=%239, width=%240, height=%241, color=%242)
+    CheckRendererStatus(%243)
+    %245 = RegisterEvent(layout=0, node=5, kind=1, message=%186)
+    %246 = Constant(Int(value=255)) : Int
+    %247 = DrawText(layout=0, node=6, text=%187, color=%246)
+    CheckRendererStatus(%247)
+    %249 = LayoutBox(layout=0, node=8, x) : Px
+    %250 = LayoutBox(layout=0, node=8, y) : Px
+    %251 = LayoutBox(layout=0, node=8, width) : Px
+    %252 = LayoutBox(layout=0, node=8, height) : Px
+    %253 = Constant(Color()) : Color
+    %254 = FillRect(x=%249, y=%250, width=%251, height=%252, color=%253)
+    CheckRendererStatus(%254)
+    %256 = RegisterEvent(layout=0, node=8, kind=1, message=%189)
+    %257 = Constant(Int(value=255)) : Int
+    %258 = DrawText(layout=0, node=9, text=%190, color=%257)
+    CheckRendererStatus(%258)
+    %260 = LayoutBox(layout=0, node=10, x) : Px
+    %261 = LayoutBox(layout=0, node=10, y) : Px
+    %262 = LayoutBox(layout=0, node=10, width) : Px
+    %263 = LayoutBox(layout=0, node=10, height) : Px
+    %264 = Constant(Color()) : Color
+    %265 = FillRect(x=%260, y=%261, width=%262, height=%263, color=%264)
+    CheckRendererStatus(%265)
+    %267 = RegisterEvent(layout=0, node=10, kind=1, message=%192)
+    %268 = Constant(Int(value=255)) : Int
+    %269 = DrawText(layout=0, node=11, text=%193, color=%268)
+    CheckRendererStatus(%269)
+    %271 = LayoutBox(layout=0, node=12, x) : Px
+    %272 = LayoutBox(layout=0, node=12, y) : Px
+    %273 = LayoutBox(layout=0, node=12, width) : Px
+    %274 = LayoutBox(layout=0, node=12, height) : Px
+    %275 = Constant(none) : None
+    %276 = RegisterEvent(layout=0, node=12, kind=2, message=%275)
+    %277 = PushClip(%271, %272, %273, %274)
+    CheckRendererStatus(%277)
+    %279 = LayoutSlotBegin(layout=0, slot=14)
+    %280 = LoadProperty(%157, items) : Seq<String>
+    %281 = LoadLength(%280) : Int
+    %282 = Constant(Int(value=0)) : Int
+    Goto(B10)
+  B10 loop.header.10:  ; preds: B8 B12
+    %287 = Phi(B8:%282, B12:%303) : Int
+    %288 = BinaryOp(LessThan, %287, %281) : Bool
+    Branch(%288, then=B12, else=B11, join=<none>)
+  B11 loop.exit.11:  ; preds: B10
+    %305 = Constant(none) : None
+    %306 = LayoutBox(layout=0, node=12, x) : Px
+    %307 = LayoutBox(layout=0, node=12, y) : Px
+    %308 = LayoutBox(layout=0, node=12, width) : Px
+    %309 = LayoutBox(layout=0, node=12, height) : Px
+    %310 = PopClip()
+    CheckRendererStatus(%310)
+    %312 = EndFrame()
+    CheckRendererStatus(%312)
+    TracyEndZoneInstr()
+    Return()
+  B12 loop.body.12:  ; preds: B10
+    %290 = LoadIndex(%280, %287) : String
+    %291 = LayoutSlotInstance(layout=0, slot=14, template=2, nodes=3)
+    %292 = LayoutBox(layout=2, node=1, x) : Px
+    %293 = LayoutBox(layout=2, node=1, y) : Px
+    %294 = LayoutBox(layout=2, node=1, width) : Px
+    %295 = LayoutBox(layout=2, node=1, height) : Px
+    %296 = Constant(Color()) : Color
+    %297 = FillRect(x=%292, y=%293, width=%294, height=%295, color=%296)
+    CheckRendererStatus(%297)
+    %299 = Constant(Int(value=255)) : Int
+    %300 = DrawText(layout=2, node=2, text=%290, color=%299)
+    CheckRendererStatus(%300)
+    %302 = Constant(Int(value=1)) : Int
+    %303 = BinaryOp(Add, %287, %302) : Int
+    Goto(B10)
+  B9 loop.body.9:  ; preds: B7
+    %206 = LoadIndex(%196, %203) : String
+    %207 = LayoutSlotInstance(layout=0, slot=14, template=1, nodes=3)
+    %208 = LayoutSetText(layout=1, node=2, text=%206, size=24)
+    %209 = Constant(Int(value=1)) : Int
+    %210 = BinaryOp(Add, %203, %209) : Int
+    Goto(B7)
+

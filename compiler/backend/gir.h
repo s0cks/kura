@@ -193,6 +193,82 @@ class FillRectInstr : public TemplateGraphicsInstr<5> {
   }
 };
 
+// A box as a whole: what it is filled with, a border inside its edge, and its corners rounded, all made lighter by
+// its opacity. It is drawn with the renderer's rectangles, so any renderer can: see `kura_rt_paint_box`.
+//
+// The colors are packed 0xRRGGBBAA, the rest numbers. A border with no width, or no alpha, is not there.
+class PaintBoxInstr : public TemplateGraphicsInstr<9> {
+ public:
+  static const auto kXPos = 0;
+  static const auto kYPos = 1;
+  static const auto kWidthPos = 2;
+  static const auto kHeightPos = 3;
+  static const auto kFillPos = 4;
+  static const auto kBorderColorPos = 5;
+  static const auto kBorderWidthPos = 6;
+  static const auto kRadiusPos = 7;
+  static const auto kOpacityPos = 8;
+
+ public:
+  PaintBoxInstr(Value* x, Value* y, Value* w, Value* h, Value* fill, Value* border_color, Value* border_width,
+                Value* radius, Value* opacity) {
+    SetInputAt(kXPos, x);
+    SetInputAt(kYPos, y);
+    SetInputAt(kWidthPos, w);
+    SetInputAt(kHeightPos, h);
+    SetInputAt(kFillPos, fill);
+    SetInputAt(kBorderColorPos, border_color);
+    SetInputAt(kBorderWidthPos, border_width);
+    SetInputAt(kRadiusPos, radius);
+    SetInputAt(kOpacityPos, opacity);
+  }
+  ~PaintBoxInstr() override = default;
+
+  inline auto GetX() const -> Value* {
+    return GetInputAt(kXPos);
+  }
+
+  inline auto GetY() const -> Value* {
+    return GetInputAt(kYPos);
+  }
+
+  inline auto GetWidth() const -> Value* {
+    return GetInputAt(kWidthPos);
+  }
+
+  inline auto GetHeight() const -> Value* {
+    return GetInputAt(kHeightPos);
+  }
+
+  inline auto GetFill() const -> Value* {
+    return GetInputAt(kFillPos);
+  }
+
+  inline auto GetBorderColor() const -> Value* {
+    return GetInputAt(kBorderColorPos);
+  }
+
+  inline auto GetBorderWidth() const -> Value* {
+    return GetInputAt(kBorderWidthPos);
+  }
+
+  inline auto GetRadius() const -> Value* {
+    return GetInputAt(kRadiusPos);
+  }
+
+  inline auto GetOpacity() const -> Value* {
+    return GetInputAt(kOpacityPos);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(PaintBox);
+
+ public:
+  static inline auto New(Value* x, Value* y, Value* w, Value* h, Value* fill, Value* border_color,
+                         Value* border_width, Value* radius, Value* opacity) -> PaintBoxInstr* {
+    return new PaintBoxInstr(x, y, w, h, fill, border_color, border_width, radius, opacity);
+  }
+};
+
 // What is drawn until the matching PopClip is only drawn inside the rect (and the clips around it).
 class PushClipInstr : public TemplateGraphicsInstr<4> {
  public:
@@ -258,21 +334,33 @@ class DrawRectInstr : public GraphicsInstr {
 // Draws a text node. What is drawn, where, and at what size and in which family is the layout's: it has the
 // text, its box and its font, so the instruction only names the node, and the color is the one thing it's
 // given. The value is the text's content, kept as an input so that it is computed before the draw.
-class DrawTextInstr : public TemplateGraphicsInstr<2> {
+//
+// The opacity (0 to 1) is multiplied into the color's alpha, and the alignment says where each line is in the room
+// the text has: 0 at its start, 1 in the middle and 2 at its end.
+class DrawTextInstr : public TemplateGraphicsInstr<3> {
  public:
   static const auto kValuePos = 0;
   static const auto kColorPos = 1;
+  static const auto kOpacityPos = 2;
+
+  static const auto kAlignStart = 0;
+  static const auto kAlignCenter = 1;
+  static const auto kAlignEnd = 2;
 
  private:
   std::shared_ptr<LayoutPlan> plan_;
   layout::NodeId node_;
+  int align_;
 
  public:
-  DrawTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color) :
+  DrawTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color,
+                Value* opacity, const int align) :
     plan_(std::move(plan)),
-    node_(node) {
+    node_(node),
+    align_(align) {
     SetInputAt(kValuePos, value);
     SetInputAt(kColorPos, color);
+    SetInputAt(kOpacityPos, opacity);
   }
   ~DrawTextInstr() override = default;
 
@@ -292,12 +380,20 @@ class DrawTextInstr : public TemplateGraphicsInstr<2> {
     return GetInputAt(kColorPos);
   }
 
+  inline auto GetOpacity() const -> Value* {
+    return GetInputAt(kOpacityPos);
+  }
+
+  inline auto GetAlign() const -> int {
+    return align_;
+  }
+
   DECLARE_INSTRUCTION_TYPE(DrawText);
 
  public:
-  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color)
-      -> DrawTextInstr* {
-    return new DrawTextInstr(std::move(plan), node, value, color);
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color,
+                         Value* opacity, const int align = kAlignStart) -> DrawTextInstr* {
+    return new DrawTextInstr(std::move(plan), node, value, color, opacity, align);
   }
 };
 
@@ -314,8 +410,7 @@ class RegisterEventInstr : public TemplateGraphicsInstr<1> {
   uint64_t kind_;
 
  public:
-  RegisterEventInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const uint64_t kind,
-                     Value* message) :
+  RegisterEventInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, const uint64_t kind, Value* message) :
     plan_(std::move(plan)),
     node_(node),
     kind_(kind) {
@@ -400,16 +495,75 @@ class FillBezierInstr : public GraphicsInstr {
   }
 };
 
-class DrawLineInstr : public GraphicsInstr {
+class DrawLineInstr : public TemplateGraphicsInstr<5> {
+  static const auto kColorPos = 0;
+  static const auto kX1Pos = 1;
+  static const auto kY1Pos = 2;
+  static const auto kX2Pos = 3;
+  static const auto kY2Pos = 4;
+
+ private:
+  Value* x1;
+  Value* y1;
+  Value* x2;
+  Value* y2;
+  Value* color_;
+
  public:
-  DrawLineInstr() = default;
+  DrawLineInstr(Value* x1, Value* y1, Value* x2, Value* y2, Value* color) {
+    SetColor(color);
+    SetX1(x1);
+    SetY1(y1);
+    SetX2(x1);
+    SetY2(y1);
+  }
   ~DrawLineInstr() override = default;
+
+  inline void SetX1(Value* rhs) {
+    return SetInputAt(kX1Pos, rhs);
+  }
+
+  inline auto GetX1() const -> Value* {
+    return GetInputAt(kX1Pos);
+  }
+
+  inline void SetY1(Value* rhs) {
+    return SetInputAt(kY1Pos, rhs);
+  }
+
+  inline auto GetY1() const -> Value* {
+    return GetInputAt(kY1Pos);
+  }
+
+  inline void SetX2(Value* rhs) {
+    return SetInputAt(kX2Pos, rhs);
+  }
+
+  inline auto GetX2() const -> Value* {
+    return GetInputAt(kX2Pos);
+  }
+
+  inline void SetY2(Value* rhs) {
+    return SetInputAt(kY2Pos, rhs);
+  }
+
+  inline auto GetY2() const -> Value* {
+    return GetInputAt(kY2Pos);
+  }
+
+  inline void SetColor(Value* rhs) {
+    return SetInputAt(kColorPos, rhs);
+  }
+
+  inline auto GetColor() const -> Value* {
+    return GetInputAt(kColorPos);
+  }
 
   DECLARE_INSTRUCTION_TYPE(DrawLine);
 
  public:
-  static inline auto New() -> DrawLineInstr* {
-    return new DrawLineInstr();
+  static inline auto New(Value* x1, Value* y1, Value* x2, Value* y2, Value* color) -> DrawLineInstr* {
+    return new DrawLineInstr(x1, y1, x2, y2, color);
   }
 };
 

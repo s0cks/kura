@@ -9,6 +9,22 @@ import Property from "../../../components/Property.astro";
 import PropertyTable from "../../../components/PropertyTable.astro";
 import TableSeparator from "../../../components/TableSeparator.astro";
 
+## View
+
+The View is the window: the root of every view, which is there without being written. It has the box properties
+and the container properties, so a view can be given a background, a padding or a direction by writing it as the
+outermost element:
+
+```kura
+fn view(state: State): Node =>
+  #view(fill: white, padding: 16px, direction: "column") {
+    #text("Hello")
+  }
+```
+
+A `#view` has to be the outermost element, and there is only one. Without one, the view still has its View, with
+nothing to paint.
+
 ## Fragments
 
 Fragments allow for grouping of UI Primitives but cannot effect the layout and do not have any properties>.
@@ -89,16 +105,19 @@ Boxes are the absolute most basic UI primitive
     Background fill color of the box.
   </Property>
   <Property name="border-color" types={["Color"]}>
-    Color of the box border.
+    Color of the box border. A color with no `border-width` is a border `1px` thick.
   </Property>
   <Property name="border-width" types={["Px"]}>
-    Thickness of the border, in `px` (`>= 0`).
+    Thickness of the border, in `px` (`>= 0`). It is inside the box's edge, and takes none of its room from its
+    children's: that is `padding`'s. A width with no `border-color` is black.
   </Property>
   <Property name="radius" types={["Px"]}>
-    Corner rounding radius, in `px` (`>= 0`).
+    Corner rounding radius, in `px` (`>= 0`). It is at most half of the box's smaller side. A rounded box is made of
+    rows of rectangles, so its edge is not smoothed.
   </Property>
   <Property name="opacity" types={["Number"]}>
-    Opacity from `0` (transparent) to `1` (opaque).
+    Opacity from `0` (transparent) to `1` (opaque). It lightens the box's own fill and border, or a text's color. It
+    is not passed on to what is inside the box.
   </Property>
   <Property name="on-click" types={["Message"]}>
     Message dispatched when the box is clicked.
@@ -168,7 +187,9 @@ A <Node name="box" /> for displaying text
     The color of the text. Opaque black if it isn't given.
   </Property>
   <Property name="text-align" types={["String"]}>
-    Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
+    Horizontal text alignment: `"left"`, `"center"`, or `"right"`. Each line of the text is placed in the room the
+    text has, which is its own width unless something makes it wider, like a column that stretches it. It is
+    a word, not a value that changes.
   </Property>
   <TableSeparator text="Positional Arguments"
                   color="primary" />
@@ -289,12 +310,21 @@ A <Node name="box" /> that response to clicks
 
 ## Scroll & List
 
-A <Node name="container" /> for displaying multiple children
+A <Node name="container" /> for displaying more children than fit. What is in it is laid out at its own size, and
+the box shows the part of it that has been scrolled to, clipping the rest. Its `padding`, `gap`, `direction`, `align`
+and `justify` are for what is inside it, and its `width`, `height`, `fill`, `border-*` and `radius` for the box.
+
+A `#list` is a `#scroll` that goes down: its `direction` is `"column"` unless it says otherwise. Every row of a list is
+laid out and drawn, whether it is in view or not.
+
+The host scrolls it (`Session::Scroll`, or `kura_rt_event_scroll`): the wheel moves the topmost container under the
+pointer that has room to go that way, and when it is as far as it goes the one it is in gets the wheel. How far a
+container is scrolled is kept from one frame to the next, and is kept in range if its content shrinks.
 
 <PropertyTable inherits={"container"}>
   <Property name="on-scroll"
             types={[ "Message" ]}>
-    Message dispatched when the scroll offset changes.
+    Message dispatched when the scroll offset changes. It doesn't say where the offset is yet.
   </Property>
 </PropertyTable>
 

@@ -1,0 +1,6 @@
+text x=2 y=2 size=16 family="" color=#000000ff value="a"
+text x=2 y=28 size=16 family="" color=#000000ff value="b"
+text x=2 y=54 size=16 family="" color=#000000ff value="c"
+text x=2 y=80 size=16 family="" color=#000000ff value="d"
+text x=2 y=106 size=16 family="" color=#000000ff value="e"
+text x=2 y=66 size=16 family="" color=#000000ff value="after"
