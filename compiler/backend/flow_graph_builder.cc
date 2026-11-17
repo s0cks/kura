@@ -106,13 +106,17 @@ auto FlowGraphBuilder::FoldableLocal(LocalVariable* local) const -> Object* {
   if (const auto found = ctx_->constants.find(local); found != ctx_->constants.end())
     return found->second;
 
-  const auto binding = std::find_if(ctx_->bindings.begin(), ctx_->bindings.end(),
-                                    [local](const expr::StoreLocalExpr* store) { return store->GetLocal() == local; });
+  const auto binding =
+      std::find_if(ctx_->bindings.begin(), ctx_->bindings.end(), [local](const expr::StoreLocalExpr* store) {
+        return store->GetLocal() == local;
+      });
   if (binding == ctx_->bindings.end() || (*binding)->GetAnnotation() || !ctx_->folding.insert(local).second)
     return nullptr;
 
   dom::Tree tree{};
-  dom::Builder builder(&tree, [this](LocalVariable* other) { return FoldableLocal(other); });
+  dom::Builder builder(&tree, [this](LocalVariable* other) {
+    return FoldableLocal(other);
+  });
   const auto value = builder.FoldConstant((*binding)->GetValue());
   ctx_->folding.erase(local);
   ctx_->constants[local] = value;
@@ -197,7 +201,6 @@ auto FlowGraphBuilder::Finish() -> FlowGraph* {
   std::string error;
   if (!graph_->Verify(&error))
     ctx_->errors.push_back("internal error: " + error);
-
   return graph_;
 }
 

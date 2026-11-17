@@ -67,6 +67,21 @@ void kura_rt_event_clip_pop() {
     tl_clips.pop_back();
 }
 
+int kura_rt_event_topmost(const uint64_t kind, const double x, const double y, KuraRect* box, KuraValue* message) {
+  // what was drawn last is on top
+  for (auto it = tl_regions.rbegin(); it != tl_regions.rend(); ++it) {
+    if (it->kind != kind || x < it->x || x >= it->x + it->width || y < it->y || y >= it->y + it->height)
+      continue;
+    if (box != nullptr)
+      *box = KuraRect{static_cast<float>(it->x), static_cast<float>(it->y), static_cast<float>(it->width),
+                      static_cast<float>(it->height)};
+    if (message != nullptr)
+      *message = it->message;
+    return 1;
+  }
+  return 0;
+}
+
 void kura_rt_events_clear() {
   tl_regions.clear();
   tl_clips.clear();

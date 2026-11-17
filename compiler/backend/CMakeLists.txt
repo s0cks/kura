@@ -21,6 +21,7 @@ target_sources(kura-compiler
          runtime_layout.cc
          session.cc
          runtime_renderer.cc
+         runtime_tooltip.cc
          type_analysis.cc
          node_visitor.cc
          value_visitor.cc)

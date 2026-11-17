@@ -1,0 +1,7 @@
+// error: #fragment: 'tooltip' doesn't apply to #fragment
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  #fragment(tooltip: "no box to point at")

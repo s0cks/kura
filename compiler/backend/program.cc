@@ -117,7 +117,8 @@ auto Matches(CompileType* type, const uint64_t tag) -> bool {
       case CompileType::kVec2:
       case CompileType::kVec3:
       case CompileType::kRect:
-        // geometry has no tag: nothing a host can send is one
+        // geometry is a list of its floats to a host (see `kura_rt_vec_from`)
+        ok |= tag == rt::kTagSeq;
         break;
 
       case CompileType::kNode:
@@ -228,6 +229,7 @@ auto Program::Load(const std::string& path, const Options& options, std::string*
 
 Program::~Program() {
   kura_rt_layout_reset();
+  kura_rt_tooltip_reset();
 }
 
 auto Program::Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,

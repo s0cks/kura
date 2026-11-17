@@ -1,0 +1,4 @@
+// error: a list becomes a Rect when it is 4 numbers that are all Int or all Float
+fn take-rect(r: Rect): Int => 1
+
+fn view(state: Int): Int => take-rect(["a", "b", "c", "d"])

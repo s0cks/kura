@@ -1,0 +1,53 @@
+// A list of numbers is a Vec2, a Vec3 or a Rect wherever one is wanted: as an argument, as a result, or as the value
+// of a top-level `let` that says so. The numbers are all Int or all Float, and there are as many as the geometry takes.
+let origin: Vec2 = [0.0, 0.0]
+
+fn take-point(p: Vec2): Int => 1
+fn take-vector(v: Vec3): Int => 2
+fn take-rect(r: Rect): Int => 3
+fn make-rect(): Rect => [0.0, 0.0, 10.0, 20.0]
+fn make-ints(): Vec3 => [1, 2, 3]
+fn floats(xs: Seq<Float>): Seq<Float> => xs
+// what a closure returns is of any type: only what it holds says what it is
+fn identity() => (x) => x
+
+// run: written-out => 1
+fn written-out(): Int => take-point([1.0, 2.0])
+// run: ints-are-fine => 3
+fn ints-are-fine(): Int => take-rect([0, 0, 10, 20])
+// run: result-of-a-function => 3
+fn result-of-a-function(): Int => take-rect(make-rect())
+// run: int-result => 2
+fn int-result(): Int => take-vector(make-ints())
+// run: global => 1
+fn global(): Int => take-point(origin)
+// run: not-written-out => 2
+fn not-written-out(): Int => take-vector(floats([1.0, 2.0, 3.0]))
+// run: a-value-of-any-type => 1
+fn a-value-of-any-type(): Int => take-point(identity()([1.5, 2.5]))
+
+// panic: wrong-count-at-run-time => a Vec2 takes 2 numbers, but this list has 3
+fn wrong-count-at-run-time(): Int => take-point(floats([1.0, 2.0, 3.0]))
+// panic: not-enough => a Rect takes 4 numbers, but this list has 0
+fn not-enough(): Int => take-rect(floats([]))
+// panic: mixed-numbers => a Vec2 takes numbers of one type, but this list mixes Int and Float
+fn mixed-numbers(): Int => take-point(identity()([1, 2.5]))
+// panic: not-numbers => a Vec2 takes numbers, but element 2 is a String
+fn not-numbers(): Int => take-point(identity()([1.0, "two"]))
+// panic: not-a-list => a Vec3 is made from a list of 3 numbers, not from a Int
+fn not-a-list(): Int => take-vector(identity()(5))
+
+// To a host, and anywhere a value of any type goes, geometry is the list of its floats: a list, an element of one, or
+// a field of a record.
+type Marker = { at: Vec2 }
+fn marker(): Marker => { at: [1.0, 2.0] }
+fn points(): Seq<Vec2> => [[1.0, 2.0], [3.0, 4.0]]
+
+// run: to-a-host => [0.0, 0.0, 10.0, 20.0]
+fn to-a-host(): Rect => make-rect()
+// run: ints-become-floats => [1.0, 2.0, 3.0]
+fn ints-become-floats(): Vec3 => make-ints()
+// run: in-a-record => { at: [1.0, 2.0] }
+fn in-a-record(): Marker => marker()
+// run: in-a-list => [[1.0, 2.0], [3.0, 4.0]]
+fn in-a-list(): Seq<Vec2> => points()

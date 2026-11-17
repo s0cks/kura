@@ -24,6 +24,12 @@ concept HasBlockId = requires(I instr, const uint64_t id) {
   { instr.GetBlockId() } -> std::same_as<BlockId>;
 };
 
+enum PaintPass : uint8_t {
+  kAll,
+  kBoxesOnly,
+  kTextOnly,
+};
+
 class FlowGraphBuilder {
   friend class EffectVisitor;
   friend class ValueVisitor;
@@ -70,6 +76,7 @@ class FlowGraphBuilder {
     std::shared_ptr<LayoutPlan> plan{};
     layout::NodeId slot = layout::kNoNode;
     bool draw = false;
+    PaintPass pass = PaintPass::kAll;
   };
   const HoleScope* hole_ = nullptr;
 

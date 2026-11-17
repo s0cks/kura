@@ -209,7 +209,7 @@ class Generator {
       case Rep::kPtr:
         return b_.CreatePtrToInt(value, i64_);
       case Rep::kVec:
-        Fail("internal error: a " + type->ToString() + " can't be put where any value goes: geometry is never boxed");
+        Fail("internal error: a " + type->ToString() + " has no bits to tag: it is converted to a list of floats, not reinterpreted");
         return b_.getInt64(0);
       default:
         return b_.getInt64(0);
@@ -227,7 +227,7 @@ class Generator {
       case Rep::kPtr:
         return b_.CreateIntToPtr(bits, ptr_ty_);
       case Rep::kVec:
-        Fail("internal error: a " + type->ToString() + " can't be taken out of a value of any type: geometry is never boxed");
+        Fail("internal error: a " + type->ToString() + " is not the bits of a value: it is converted from a list of numbers, not reinterpreted");
         return llvm::PoisonValue::get(Lower(type));
       default:
         return b_.getInt8(0);
@@ -249,8 +249,27 @@ class Generator {
 
     const auto rf = RepOf(from);
     const auto rt = RepOf(to);
+    if (rt == Rep::kVec && (from->IsSeq() || rf == Rep::kTagged)) {
+      // A list of numbers is the geometry, if it has the numbers for it: that is checked as it is converted, because
+      // a Seq's length isn't in its type.
+      llvm::Value* tag = rf == Rep::kTagged ? TagOfValue(value) : b_.getInt64(rt::kTagSeq);
+      llvm::Value* bits = rf == Rep::kTagged ? BitsOfValue(value) : b_.CreatePtrToInt(value, i64_);
+      const auto vec_ty = Lower(to);
+      const auto slot = EntryAlloca(vec_ty);
+      CallRt("kura_rt_vec_from", void_ty_, {tag, bits, b_.getInt64(LanesOf(to)), slot});
+      return b_.CreateLoad(vec_ty, slot);
+    }
+
+    if (rf == Rep::kVec && rt == Rep::kTagged) {
+      // geometry as a value of any type is a list of its floats, which is what it can be made from again
+      const auto slot = EntryAlloca(value->getType());
+      b_.CreateStore(value, slot);
+      const auto seq = CallRt("kura_rt_seq_from_vec", ptr_ty_, {slot, b_.getInt64(LanesOf(from))});
+      return Pack(b_.getInt64(rt::kTagSeq), b_.CreatePtrToInt(seq, i64_));
+    }
+
     if (rf == Rep::kVec || rt == Rep::kVec) {
-      // a Vec2 is only a Vec2: it isn't a number, or tagged, or another geometry
+      // a Vec2 is only a Vec2: it isn't a number, or another geometry
       Fail("internal error: can't convert " + from->ToString() + " to " + to->ToString());
       return llvm::PoisonValue::get(Lower(to));
     }
@@ -640,7 +659,8 @@ class Generator {
 
   // A stack slot, made where the function starts so that a loop doesn't make a new one each time round.
   auto EntryAlloca(llvm::Type* type) -> llvm::Value* {
-    auto& entry = fn_->native->getEntryBlock();
+    // the function being written, whether it is a Kura function or a wrapper that has no `fn_`
+    auto& entry = b_.GetInsertBlock()->getParent()->getEntryBlock();
     llvm::IRBuilder<> at_entry(&entry, entry.getFirstInsertionPt());
     return at_entry.CreateAlloca(type);
   }

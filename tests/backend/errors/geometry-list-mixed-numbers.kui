@@ -1,0 +1,4 @@
+// error: a list becomes a Vec2 when it is 2 numbers that are all Int or all Float
+fn take-point(p: Vec2): Int => 1
+
+fn view(state: Int): Int => take-point([1, 2.5])

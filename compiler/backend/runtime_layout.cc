@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "backend/runtime_abi.h"
+#include "backend/runtime_text.h"
 #include "layout/layout.h"
 #include "object.h"
 
@@ -469,6 +470,16 @@ auto Apply(lay::Style* style, const lay::Property property, const uint64_t tag, 
   return false;
 }
 }  // namespace
+
+namespace kura::rt {
+auto WrapText(const std::string& text, const float size, const std::string& family, const float max_width)
+    -> std::vector<TextLine> {
+  std::vector<TextLine> lines{};
+  for (const auto& line : Wrap(text, size, family, max_width))
+    lines.push_back(TextLine{line.text, line.width, line.height});
+  return lines;
+}
+}  // namespace kura::rt
 
 extern "C" {
 void kura_rt_layout_set(const void* table, const uint64_t count, const uint64_t node, const uint64_t property,

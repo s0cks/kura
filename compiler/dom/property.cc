@@ -73,6 +73,7 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("border-width", kBoxes, kPx, {}, 0);
   add("radius", kBoxes, kPx, {}, 0);
   add("opacity", kBoxes, kNumbers, {}, 0, 1);
+  add("tooltip", kBoxes, kString);
 
   add("value", MaskOf(Kind::kText), kString);
   add("value", MaskOf(Kind::kInput), kString);

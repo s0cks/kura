@@ -1,5 +1,6 @@
 #include "backend/runtime_abi.h"
 
+#include <cstring>
 #include <bit>
 #include <charconv>
 #include <cmath>
@@ -460,6 +461,42 @@ KuraValue kura_rt_seq_get(void* seq, const int64_t index) {
     Panic("index " + std::to_string(index) + " is out of range for a Seq of " + std::to_string(s->items.size()));
 
   return s->items[index];
+}
+
+void kura_rt_vec_from(const uint64_t tag, const uint64_t bits, const uint64_t lanes, float* out) {
+  const std::string name = lanes == 2 ? "Vec2" : lanes == 3 ? "Vec3" : "Rect";
+  if (tag != kTagSeq)
+    Panic("a " + name + " is made from a list of " + std::to_string(lanes) + " numbers, not from a " + TagName(tag));
+
+  const auto& items = reinterpret_cast<SeqObj*>(bits)->items;
+  if (items.size() != lanes)
+    Panic("a " + name + " takes " + std::to_string(lanes) + " numbers, but this list has " +
+          std::to_string(items.size()));
+
+  for (size_t i = 0; i < items.size(); i++) {
+    const auto& item = items[i];
+    if (item.tag != kTagInt && item.tag != kTagFloat)
+      Panic("a " + name + " takes numbers, but element " + std::to_string(i + 1) + " is a " + TagName(item.tag));
+    if (item.tag != items[0].tag)
+      Panic("a " + name + " takes numbers of one type, but this list mixes " + TagName(items[0].tag) + " and " +
+            TagName(item.tag));
+
+    if (item.tag == kTagInt) {
+      out[i] = static_cast<float>(static_cast<int64_t>(item.bits));
+    } else {
+      double value = 0;
+      std::memcpy(&value, &item.bits, sizeof(value));
+      out[i] = static_cast<float>(value);
+    }
+  }
+}
+
+void* kura_rt_seq_from_vec(const float* values, const uint64_t lanes) {
+  const auto seq = new SeqObj();
+  seq->items.reserve(lanes);
+  for (uint64_t i = 0; i < lanes; i++)
+    seq->items.push_back(MakeFloat(static_cast<double>(values[i])));
+  return seq;
 }
 
 void* kura_rt_seq_concat(void* a, void* b) {

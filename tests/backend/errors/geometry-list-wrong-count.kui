@@ -1,0 +1,4 @@
+// error: a Vec2 takes 2 numbers, but this list has 3
+fn take-point(p: Vec2): Int => 1
+
+fn view(state: Int): Int => take-point([1.0, 2.0, 3.0])

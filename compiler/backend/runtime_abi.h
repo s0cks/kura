@@ -81,6 +81,8 @@ enum EventKind : uint64_t {
   // The node is a scroll container: the wheel moves its content (see `kura_rt_event_scroll`), and the Message, if
   // it has one, is what it means that the content moved.
   kEventScroll = 2,
+  // The node has a tooltip: the message is the String to show, when the pointer has been over it for a while.
+  kEventTooltip = 3,
 };
 
 auto MakeString(const std::string& value) -> KuraValue;
@@ -96,6 +98,8 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_string_cmp)           \
   V(kura_rt_seq_new)              \
   V(kura_rt_seq_get)              \
+  V(kura_rt_vec_from)             \
+  V(kura_rt_seq_from_vec)         \
   V(kura_rt_seq_concat)           \
   V(kura_rt_len)                  \
   V(kura_rt_store_index)          \
@@ -158,6 +162,11 @@ int64_t kura_rt_string_cmp(void* a, void* b);
 
 void* kura_rt_seq_new(uint64_t capacity);
 KuraValue kura_rt_seq_get(void* seq, int64_t index);
+// Geometry from a list: `lanes` is 2 for a Vec2, 3 for a Vec3 and 4 for a Rect, and `out` is that many floats.
+// The value is a list of exactly that many numbers, all Int or all Float; anything else is a panic.
+void kura_rt_vec_from(uint64_t tag, uint64_t bits, uint64_t lanes, float* out);
+// And back: geometry as a value of any type is a list of its floats, `lanes` of them from `values`.
+void* kura_rt_seq_from_vec(const float* values, uint64_t lanes);
 void* kura_rt_seq_concat(void* a, void* b);
 
 int64_t kura_rt_len(void* object);
@@ -302,6 +311,44 @@ uint64_t kura_rt_event_count();
 // The Message of the last place of `kind` drawn that contains (x, y), which is the topmost one: a parent is
 // drawn before its children. Returns 1 and sets `message`, or 0 and sets nothing if there is none.
 int kura_rt_event_hit(uint64_t kind, double x, double y, KuraValue* message);
+
+// How a tooltip looks and when it comes: where the host has nothing to say, these are the defaults. Sizes are in
+// pixels, the colors are 0xRRGGBBAA, and `delay` is in seconds.
+typedef struct KuraTooltipStyle {
+  double delay;          // how long the pointer is over something before its tooltip shows
+  float font_size;
+  float max_width;       // the widest a tooltip is, with its padding: a longer text is wrapped
+  float padding_x;
+  float padding_y;
+  float radius;
+  float gap;             // between the node and the tooltip
+  float margin;          // the least between the tooltip and the edge of the viewport
+  uint64_t background;
+  uint64_t color;
+} KuraTooltipStyle;
+
+// Host => UI. The pointer is at (x, y), in the coordinates of the frames, or has left the window. What is under
+// the pointer when a frame ends is what its tooltip is shown for.
+void kura_rt_pointer_moved(double x, double y);
+void kura_rt_pointer_left();
+// Host => UI. What time it is, in seconds from when the host likes: tooltips show after the pointer has been
+// somewhere for a while, and this is how they know. A host that never says gets the system's clock.
+void kura_rt_set_time(double seconds);
+// Hides the tooltip that is showing, or is about to: a click, or the wheel. It stays hidden until the pointer is
+// over another node.
+void kura_rt_tooltip_dismiss();
+// Whether the pointer is over a tooltip that is not showing yet, because its delay isn't over: a host that draws
+// only when something changes has to draw again when it is.
+int kura_rt_tooltip_pending();
+void kura_rt_tooltip_configure(const KuraTooltipStyle* style);
+KuraTooltipStyle kura_rt_tooltip_style();
+KuraTooltipStyle kura_rt_tooltip_default_style();
+// Forgets what the pointer was over, waiting for, or had hidden. A program that is unloaded does this when it goes.
+void kura_rt_tooltip_reset();
+// Draws the tooltip the pointer is over, if it is time: the end of a frame does, after everything else.
+void kura_rt_tooltip_draw();
+// The topmost place of a kind that the point is in, as of the last frame: its box and its message.
+int kura_rt_event_topmost(uint64_t kind, double x, double y, KuraRect* box, KuraValue* message);
 
 // UI => host. The wheel (or a drag) moved by (dx, dy) pixels at (x, y), in the coordinates of the last frame, down
 // and to the right being positive. The topmost scroll container at that point that can move that way does, by as

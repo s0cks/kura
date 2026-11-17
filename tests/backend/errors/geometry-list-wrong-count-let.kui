@@ -1,0 +1,4 @@
+// error: a Vec3 takes 3 numbers, but this list has 2
+let direction: Vec3 = [0.0, 1.0]
+
+fn view(state: Int): Int => 1

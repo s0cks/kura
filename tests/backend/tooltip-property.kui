@@ -1,0 +1,17 @@
+// A tooltip can be on any box: the view, a block, a button, a text, a scroll and a list; it can come from a `set` rule, and
+// can be made when the view runs.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+set button(tooltip: "Press")
+
+fn view(state: Int): Node =>
+  #view(tooltip: "The window") {
+    #block(tooltip: "n is {state}") {
+      #text(tooltip: "A text", "x")
+      #button { #text("y") }
+      #scroll(tooltip: "A scroll") { #text("z") }
+      #list(tooltip: "A list") { #text("w") }
+    }
+  }

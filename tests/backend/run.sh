@@ -79,7 +79,8 @@ for f in "$dir"/run/*.kui; do
         out="$("$kurac" "$f" $flags --run $call 2>&1)"
         code=$?
         if [ "$kind" = run ]; then
-            got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1)"
+            # `kurac --run` ends the line with how long the call took, like `  (7us)`: that isn't the value
+            got="$(echo "$out" | sed -n 's/^=> //p' | head -n 1 | sed 's/  ([0-9.]*[mnu]*s)$//')"
             if [ "$got" = "$want" ]; then
                 pass=$((pass + 1))
             else

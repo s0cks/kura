@@ -287,9 +287,20 @@ class Analyzer {
     analyzed_.insert(function);
 
     if (sig.declared && function->GetName()->GetValue() != "view") {
-      if (!CompileType::IsAssignable(inferred, sig.declared))
+      if (!CompileType::IsAssignable(inferred, sig.declared)) {
         Error("fn " + std::string(function->GetName()->GetData()) + ": returns " + inferred->ToString() +
-              " but is declared to return " + sig.declared->ToString());
+              " but is declared to return " + sig.declared->ToString() + GeometryHint(inferred, sig.declared));
+      } else if (Lanes(sig.declared) != 0) {
+        // a list that is written out in a return has to have the numbers for what is declared
+        for (const auto block : graph->GetReversePostorder()) {
+          for (Instruction* instr = block; instr != nullptr; instr = instr->GetNext()) {
+            const auto ret = instr->AsReturn();
+            const auto problem = ret ? ShapeProblem(ret->GetValue(), sig.declared) : std::string{};
+            if (!problem.empty())
+              Error("fn " + std::string(function->GetName()->GetData()) + ": " + problem);
+          }
+        }
+      }
     } else {
       if (function->GetName()->GetValue() == "view") {
         sig.result = CompileType::Node();
@@ -828,6 +839,34 @@ class Analyzer {
     return CompileType::Record(list);
   }
 
+  // ── geometry from a list ─────────────────────────────────────────────────
+  // A list of numbers can be used where a Vec2, a Vec3 or a Rect is wanted (see CompileType::IsAssignable). A list that
+  // is written out is known to have so many numbers, so it can be told now that it has the wrong number. One that is
+  // not is checked when it is converted.
+  static auto Lanes(CompileType* type) -> size_t {
+    return type->IsVec2() ? 2 : type->IsVec3() ? 3 : type->IsRect() ? 4 : 0;
+  }
+
+  static auto ShapeProblem(Value* value, CompileType* to) -> std::string {
+    const auto lanes = Lanes(to);
+    const auto def = value != nullptr ? value->GetDefinition() : nullptr;
+    const auto list = lanes != 0 && def != nullptr ? def->AsNewList() : nullptr;
+    if (list == nullptr || list->GetInputs().size() == lanes)
+      return {};
+
+    return "a " + to->ToString() + " takes " + std::to_string(lanes) + " numbers, but this list has " +
+           std::to_string(list->GetInputs().size());
+  }
+
+  // What to add to "X but Y is expected" when X is a list that is not what makes Y.
+  static auto GeometryHint(CompileType* from, CompileType* to) -> std::string {
+    if (Lanes(to) == 0 || !from->IsSeq())
+      return {};
+
+    return " (a list becomes a " + to->ToString() + " when it is " + std::to_string(Lanes(to)) +
+           " numbers that are all Int or all Float)";
+  }
+
   auto ListType(NewListInstr* list, Context& ctx) -> CompileType* {
     auto element = CompileType::Never();
     for (const auto input : list->GetInputs())
@@ -918,9 +957,12 @@ class Analyzer {
       }
 
       const auto arg = TypeOf(args[idx]);
-      if (!CompileType::IsAssignable(arg, params[idx]))
+      if (!CompileType::IsAssignable(arg, params[idx])) {
         Report(call, "argument " + std::to_string(idx + 1) + " is " + arg->ToString() + " but " +
-                         params[idx]->ToString() + " is expected");
+                         params[idx]->ToString() + " is expected" + GeometryHint(arg, params[idx]));
+      } else if (const auto problem = ShapeProblem(args[idx], params[idx]); !problem.empty()) {
+        Report(call, "argument " + std::to_string(idx + 1) + ": " + problem);
+      }
     }
 
     return target->GetResult();
@@ -950,7 +992,10 @@ class Analyzer {
         declared = Resolve(it->second, {}, "let " + std::string(store->GetLocal()->GetName()->GetData()));
         if (!CompileType::IsAssignable(type, declared))
           Report(instr, "`" + std::string(store->GetLocal()->GetName()->GetData()) + "` is declared " +
-                            declared->ToString() + " but its value is " + type->ToString());
+                            declared->ToString() + " but its value is " + type->ToString() +
+                            GeometryHint(type, declared));
+        else if (const auto problem = ShapeProblem(store->GetValue(), declared); !problem.empty())
+          Report(instr, "`" + std::string(store->GetLocal()->GetName()->GetData()) + "`: " + problem);
       }
 
       const auto before = globals_.find(store->GetLocal());

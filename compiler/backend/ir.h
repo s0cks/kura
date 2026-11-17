@@ -138,18 +138,6 @@ class Instruction {
  protected:
   Instruction() = default;
 
-  void SetPrevious(Instruction* p) {
-    previous_ = p;
-  }
-
-  void SetNext(Instruction* n) {
-    next_ = n;
-  }
-
-  virtual void SetInputAt(const uint64_t idx, Value* rhs) {
-    // do nothing
-  }
-
  public:
   virtual ~Instruction() = default;
 
@@ -162,6 +150,10 @@ class Instruction {
     return previous_;
   }
 
+  void SetPrevious(Instruction* p) {
+    previous_ = p;
+  }
+
   auto HasPrevious() const -> bool {
     return previous_ != nullptr;
   }
@@ -172,6 +164,10 @@ class Instruction {
 
   auto HasNext() const -> bool {
     return next_ != nullptr;
+  }
+
+  void SetNext(Instruction* n) {
+    next_ = n;
   }
 
   virtual auto IsDefinition() const -> bool {
@@ -188,6 +184,10 @@ class Instruction {
 
   virtual auto GetNumberOfInputs() const -> uint64_t {
     return 0;
+  }
+
+  virtual void SetInputAt(const uint64_t idx, Value* rhs) {
+    // do nothing
   }
 
   virtual auto GetInputAt(const uint64_t idx) const -> Value* {
@@ -466,6 +466,8 @@ class ConstantInstr : public Definition {
   auto GetValue() const -> Object* {
     return value_;
   }
+
+  auto GetCanonicalKey() const -> std::string;
 
   DECLARE_INSTRUCTION_TYPE(Constant);
 
@@ -1008,6 +1010,10 @@ class PhiInstr : public Definition {
   }
 
   auto GetIncoming() const -> const IncomingList& {
+    return incoming_;
+  }
+
+  auto GetIncoming() -> IncomingList& {
     return incoming_;
   }
 

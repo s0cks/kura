@@ -269,6 +269,13 @@ auto CompileType::IsAssignable(CompileType* from, CompileType* to) -> bool {
       return from->IsNumeric();
     case kSeq:
       return from->IsSeq() && IsAssignable(from->element_, to->element_);
+    case kVec2:
+    case kVec3:
+    case kRect:
+      // A list of numbers that are all Int or all Float. How many there are is known where the list is written out,
+      // and checked when it is converted everywhere else (a Seq has no length in its type). A list that is empty
+      // has no type for its numbers yet, and is only as long as it is.
+      return from->IsSeq() && (from->element_->IsInt() || from->element_->IsFloat() || from->element_->IsNever());
     case kRecord: {
       if (!from->IsRecord())
         return false;

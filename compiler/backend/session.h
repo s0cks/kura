@@ -105,6 +105,24 @@ class Session {
   // landed on nothing isn't an error: `*handled` is false.
   auto Click(double x, double y, bool* handled, std::string* error) -> bool;
 
+  // Host => UI. Tooltips: a node's `tooltip` shows next to the pointer once the pointer has been over it for a while, over
+  // everything else in the frame. The host says where the pointer is and what time it is, and the frames that it
+  // renders do the rest.
+  //
+  // `PointerMoved` is where the pointer is, in the coordinates of the frames, and `PointerLeft` that it isn't over the
+  // window any more. `SetTime` is the time in seconds, from whenever the host likes; it is what `delay` is measured
+  // in, and a host that never calls it gets the system's clock. A click or the wheel hides the tooltip that is
+  // showing, until the pointer is over something else.
+  //
+  // A host that renders only when something changes has to render again while `TooltipPending`: the pointer is over
+  // a tooltip that is waiting for its delay to be over.
+  void PointerMoved(double x, double y);
+  void PointerLeft();
+  void SetTime(double seconds);
+  auto TooltipPending() const -> bool;
+  void SetTooltipStyle(const KuraTooltipStyle& style);
+  auto GetTooltipStyle() const -> KuraTooltipStyle;
+
   // UI => host. Says that the wheel (or a drag) moved by (dx, dy) pixels at (x, y), in the coordinates of the last
   // frame, down and to the right being positive. The topmost `#scroll` or `#list` there that has room to move
   // that way scrolls, and `*handled` is set: the host should `Render` again to see it. If that container has an

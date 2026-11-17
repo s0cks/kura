@@ -219,6 +219,8 @@ void kura_rt_begin_frame(const uint32_t width, const uint32_t height) {
 
 void kura_rt_end_frame() {
   const auto& ops = Current("kura_rt_end_frame");
+  // over everything that was drawn
+  kura_rt_tooltip_draw();
   Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
 }
 

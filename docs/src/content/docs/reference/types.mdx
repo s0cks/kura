@@ -78,13 +78,43 @@ size in the plane, a point in space, and a rectangle by its top left corner and 
 floats, laid out exactly like the renderer ABI's `KuraVec2`, `KuraVec3` and `KuraRect`, so a `Rect` is handed to a
 renderer as it is.
 
-They are for the compiler's own use: there is no literal for them and no built-in that makes one yet, and the
-compiler holds them unboxed, as vectors of floats. That means they have no tagged form: none can be an entry
-point's argument or result, a field of a record, an element of a `Seq`, or part of a `Message`. They are three
-distinct types, and a function can take and return them.
+### From a list
+
+A list of numbers is converted to geometry wherever the geometry is asked for, with no cast:
+
+| Type   | The list is                          |
+| ------ | ------------------------------------ |
+| `Vec2` | 2 numbers: `x`, `y`                  |
+| `Vec3` | 3 numbers: `x`, `y`, `z`             |
+| `Rect` | 4 numbers: `x`, `y`, `width`, `height` |
+
+```kura
+fn center(): Vec2 => [100, 50]
+
+fn draw-box(r: Rect): Int => 1
+
+fn demo(): Int => draw-box([0.0, 0.0, 200.0, 100.0])
+```
+
+The numbers have to be of one type, all `Int` or all `Float` (an `Int` list is converted to floats), and there have
+to be as many as the geometry takes. A list that is written out is checked as the program is compiled, and a list
+that comes from anywhere else, or from a value of any type, is checked when it is converted: a list of the wrong
+length, a list that mixes `Int` and `Float`, or one that holds anything but numbers is a panic that says which.
+
+The conversion is where the geometry is asked for: as an argument, as a function's result, and as the value of a
+top-level `let` that has a type. A list that is stored in a record, or in another list, is stored as it is, and is
+converted where it is used as geometry.
+
+### To a list
+
+To a host, and wherever a value of any type goes, geometry is the list of its floats: a `Rect` that a function
+returns is `[0.0, 0.0, 200.0, 100.0]`. A host that passes one to a function that takes geometry passes that list.
+The compiler itself holds geometry unboxed, as vectors of floats.
 
 For example, the draw calls the compiler makes for a box take the box as a `Rect`, read once from the layout, where
 they used to take its four coordinates one by one.
+
+There is no literal for them, and nothing that reads one apart (no `.x`) yet.
 
 ## Type declarations
 

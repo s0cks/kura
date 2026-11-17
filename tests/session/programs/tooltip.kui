@@ -1,0 +1,21 @@
+// A column of things with tooltips. In a 400 by 300 viewport the children are at these heights:
+//   button 0-30, red block 40-70, block with a changing tooltip 80-110, text 120-140, scroll 150-190, long tooltip 200-230
+type Message = Tick | Tock
+
+fn init(): Int => 7
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  #block(direction: "column", gap: 10px, width: 400px, tooltip: "the column"){
+    #button(width: 100px, height: 30px, tooltip: "Save the file", on-click: Tock){
+      #text("Save")
+    }
+    #block(width: 100px, height: 30px, fill: red)
+    #block(width: 100px, height: 30px, tooltip: "state is {state}")
+    #text(height: 20px, tooltip: "about this", "hello")
+    #scroll(width: 100px, height: 40px, direction: "column"){
+      #block(width: 100px, height: 100px, tooltip: "tall")
+    }
+    #block(width: 100px, height: 30px,
+           tooltip: "a long tooltip that is made of a good many words, so that it has to be broken into lines to fit")
+  }

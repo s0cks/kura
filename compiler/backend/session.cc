@@ -116,7 +116,32 @@ auto Session::Render(std::string* error) -> bool {
   return program_->Call("view", args, &ignored, error);
 }
 
+void Session::PointerMoved(const double x, const double y) {
+  kura_rt_pointer_moved(x, y);
+}
+
+void Session::PointerLeft() {
+  kura_rt_pointer_left();
+}
+
+void Session::SetTime(const double seconds) {
+  kura_rt_set_time(seconds);
+}
+
+auto Session::TooltipPending() const -> bool {
+  return kura_rt_tooltip_pending() != 0;
+}
+
+void Session::SetTooltipStyle(const KuraTooltipStyle& style) {
+  kura_rt_tooltip_configure(&style);
+}
+
+auto Session::GetTooltipStyle() const -> KuraTooltipStyle {
+  return kura_rt_tooltip_style();
+}
+
 auto Session::Click(const double x, const double y, bool* handled, std::string* error) -> bool {
+  kura_rt_tooltip_dismiss();
   rt::KuraValue message{};
   const auto hit = kura_rt_event_hit(rt::kEventClick, x, y, &message) != 0;
   if (handled != nullptr)
@@ -128,6 +153,8 @@ auto Session::Scroll(const double x, const double y, const double dx, const doub
                      std::string* error) -> bool {
   rt::KuraValue message{};
   const auto result = kura_rt_event_scroll(x, y, dx, dy, &message);
+  if ((result & 1) != 0)
+    kura_rt_tooltip_dismiss();
   if (handled != nullptr)
     *handled = (result & 1) != 0;
   return (result & 2) == 0 || Send(message, error);

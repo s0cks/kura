@@ -115,6 +115,12 @@ Boxes are the absolute most basic UI primitive
     Corner rounding radius, in `px` (`>= 0`). It is at most half of the box's smaller side. A rounded box is made of
     rows of rectangles, so its edge is not smoothed.
   </Property>
+  <Property name="tooltip" types={["String"]}>
+    A tooltip: text that is shown next to the pointer once it has been over the box for a moment (half a second, unless
+    the host says otherwise), over everything else. What is inside the box has the box's tooltip unless it has its own, and
+    where the box is cut off, by a `#scroll` for instance, it has none. A click or the wheel hides it until the pointer
+    is over something else. The text can be made when the view runs, like `"{count} items"`, and wraps if it is long.
+  </Property>
   <Property name="opacity" types={["Number"]}>
     Opacity from `0` (transparent) to `1` (opaque). It lightens the box's own fill and border, or a text's color. It
     is not passed on to what is inside the box.

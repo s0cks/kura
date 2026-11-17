@@ -60,6 +60,51 @@ void DomLowering::EmitLayoutProperties(dom::Node* node, const Resolved& resolved
   }
 }
 
+auto DomLowering::EmitPassRange(const size_t begin, const size_t end) -> bool {
+  if (pass_ == PaintPass::kAll || pass_ == PaintPass::kBoxesOnly) {
+    for (size_t i = begin; i < end; i++) {
+      const auto& op = ops_[i];
+      if (op.node->IsButton()) {
+        if (!DrawButton(op.node))
+          return false;
+      } else if (op.node->IsBlock()) {
+        if (!DrawBlock(op.node))
+          return false;
+      } else if (op.node->IsView()) {
+        if (!DrawView(op.node))
+          return false;
+      } else if (op.node->IsLine()) {
+        if (!DrawLine(*op.node))
+          return false;
+      }
+    }
+  }
+
+  // 2. Text (all labels in this clip section emit together)
+  if (pass_ == PaintPass::kAll || pass_ == PaintPass::kTextOnly) {
+    for (size_t i = begin; i < end; i++) {
+      const auto& op = ops_[i];
+      if (op.node->IsText()) {
+        if (!DrawText(op))
+          return false;
+      }
+    }
+  }
+
+  // 3. Dynamic holes (`for`, `if`, `match`)
+  if (pass_ == PaintPass::kAll) {
+    for (size_t i = begin; i < end; i++) {
+      const auto& op = ops_[i];
+      if (op.node->IsDynamic()) {
+        if (!RunHole(op.node, true))
+          return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 auto DomLowering::Lower(dom::Node* root) -> bool {
   const auto owner = host_->GetOwner();
   // when this tree is what a hole makes, where: the hole's own scope must not reach what is lowered in here
@@ -80,44 +125,32 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
 
   if (hole) {
     drawing_hole_ = hole->draw;
+    pass_ = hole->pass == 1 ? PaintPass::kBoxesOnly : hole->pass == 2 ? PaintPass::kTextOnly : PaintPass::kAll;
     host_->Emit(LayoutSlotInstanceInstr::New(hole->plan, hole->slot, plan_));
   }
 
   if (!root->Accept(this))
     return false;
 
-  // what a hole makes is drawn when the hole is drawn, after the layout of the tree it is in
   if (hole && !hole->draw)
     return true;
 
-  // the tree a hole is in lays its instances out, with itself
   if (!hole)
     host_->Emit(LayoutRunInstr::New(plan_));
-  for (const auto& op : ops_) {
-    if (op.node->IsButton()) {
-      if (!DrawButton(op.node))
+
+  // Flush each clip section in pass order (Boxes -> Text -> Holes)
+  size_t section_start = 0;
+  for (size_t i = 0; i < ops_.size(); i++) {
+    const auto& op = ops_[i];
+    if (op.node->IsScroll() || op.node->IsList()) {
+      if (!EmitPassRange(section_start, i))
         return false;
-    } else if (op.node->IsText()) {
-      if (!DrawText(op))
-        return false;
-    } else if (op.node->IsBlock()) {
-      if (!DrawBlock(op.node))
-        return false;
-    } else if (op.node->IsView()) {
-      if (!DrawView(op.node))
-        return false;
-    } else if (op.node->IsScroll() || op.node->IsList()) {
       if (!DrawScroll(op))
         return false;
-    } else if (op.node->IsLine()) {
-      if (!DrawLine(*op.node))
-        return false;
-    } else if (op.node->IsDynamic()) {
-      if (!RunHole(op.node, true))
-        return false;
+      section_start = i + 1;
     }
   }
-  return true;
+  return EmitPassRange(section_start, ops_.size());
 }
 
 auto DomLowering::VisitNode(dom::Node* node) -> bool {
@@ -265,6 +298,18 @@ void DomLowering::EmitEvents(dom::Node* node) {
   // a container scrolls with or without a Message for it
   if ((node->IsScroll() || node->IsList()) && !scroll_message)
     host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventScroll, host_->Bind(ConstantInstr::New(None::Get()))));
+
+  EmitTooltip(node);
+}
+
+// A node's `tooltip` is a place where the pointer has to be for it to show, the node's box with the text as what
+// it means: the runtime keeps the places of a frame, and draws the one the pointer is over when the frame ends.
+void DomLowering::EmitTooltip(dom::Node* node) {
+  const auto id = plan_->FindId(node);
+  if (!id)
+    return;
+  if (const auto text = ResolvePropertyByName(node, "tooltip", resolved_[node]))
+    host_->Emit(RegisterEventInstr::New(plan_, *id, rt::kEventTooltip, text));
 }
 
 // Paints the box of a node: its `fill`, and what makes it more than a rectangle, which is `border-width`,
@@ -399,6 +444,7 @@ auto DomLowering::DrawText(const Op& op) -> bool {
   }
 
   EmitRenderCall(DrawTextInstr::New(plan_, *id, op.text, color, opacity, align));
+  EmitTooltip(op.node);
   return true;
 }
 
@@ -409,10 +455,26 @@ auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
     return Fail("internal error: a dynamic node has no place in the layout");
 
   const auto owner = host_->GetOwner();
-  FlowGraphBuilder::HoleScope scope{plan_, *id, draw};
   const auto outer = owner->hole_;
-  owner->hole_ = &scope;
 
+  // When drawing a `for` comprehension, run two passes (all row boxes, then all row text)
+  // so every row's background batches into 1 draw call and every row's text batches into 1 draw call.
+  if (draw && node->GetExpr()->IsListComprehension()) {
+    for (int pass : {1, 2}) {
+      FlowGraphBuilder::HoleScope scope{plan_, *id, true, static_cast<PaintPass>(pass)};
+      owner->hole_ = &scope;
+      host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
+      NodeVisitor for_expr(owner);
+      const bool ok = node->GetExpr()->Accept(&for_expr);
+      owner->hole_ = outer;
+      if (!ok)
+        return false;
+    }
+    return true;
+  }
+
+  FlowGraphBuilder::HoleScope scope{plan_, *id, draw, static_cast<PaintPass>(0)};
+  owner->hole_ = &scope;
   host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
   NodeVisitor for_expr(owner);
   const auto ok = node->GetExpr()->Accept(&for_expr);

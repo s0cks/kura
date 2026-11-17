@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unordered_set>
 
+#include "backend/ir.h"
 #include "function.h"
 
 namespace kura {
@@ -15,6 +16,34 @@ auto FlowGraph::GetTerminator(EntryInstr* block) -> Instruction* {
   while (last->HasNext())
     last = last->GetNext();
   return last;
+}
+
+void FlowGraph::DedupeConstants() {
+  std::unordered_map<std::string, ConstantInstr*> pool{};
+  EntryInstr* entry_block = GetEntry()->GetTarget();
+  for (const auto block : GetReversePostorder()) {
+    for (Instruction* instr = block->GetNext(); instr != nullptr;) {
+      Instruction* next = instr->GetNext();
+      if (const auto c = instr->AsConstant()) {
+        const std::string key = c->GetCanonicalKey();
+        auto [it, inserted] = pool.try_emplace(key, c);
+        if (!inserted) {
+          ReplaceAllUsesWith(c, it->second);
+          Remove(c);
+        } else if (block != entry_block) {
+          Remove(c);
+          Instruction* insert_after = entry_block;
+          while (insert_after->GetNext() != nullptr && insert_after->GetNext()->IsParameter())
+            insert_after = insert_after->GetNext();
+
+          Instruction* after = insert_after->GetNext();
+          Instruction::Link(insert_after, c);
+          Instruction::Link(c, after);
+        }
+      }
+      instr = next;
+    }
+  }
 }
 
 void FlowGraph::Finalize() {
@@ -71,6 +100,8 @@ void FlowGraph::Finalize() {
   }
   reverse_postorder_.assign(postorder_.rbegin(), postorder_.rend());
   ComputeDominators();
+
+  DedupeConstants();
 }
 
 // Cooper, Harvey & Kennedy, "A Simple, Fast Dominance Algorithm".
@@ -205,5 +236,36 @@ auto FlowGraph::Verify(std::string* error) const -> bool {
     }
   }
   return true;
+}
+
+void FlowGraph::Remove(Instruction* instr) {
+  Instruction* prev = instr->GetPrevious();
+  Instruction* next = instr->GetNext();
+  if (prev)
+    prev->SetNext(next);
+  if (next)
+    next->SetPrevious(prev);
+  instr->SetNext(nullptr);
+  instr->SetPrevious(nullptr);
+}
+
+void FlowGraph::ReplaceAllUsesWith(Definition* from, Definition* to) {
+  for (const auto block : GetReversePostorder()) {
+    for (Instruction* instr = block; instr != nullptr; instr = instr->GetNext()) {
+      for (uint64_t i = 0; i < instr->GetNumberOfInputs(); i++) {
+        if (const auto input = instr->GetInputAt(i); input && input->GetDefinition() == from) {
+          instr->SetInputAt(i, Value::New(to));  // TODO(@s0cks): probably need to free the old input
+        }
+      }
+
+      if (auto phi = instr->AsPhi()) {
+        for (auto& in : phi->GetIncoming()) {
+          if (in.value && in.value->GetDefinition() == from) {
+            in.value = Value::New(to);
+          }
+        }
+      }
+    }
+  }
 }
 }  // namespace kura

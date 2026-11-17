@@ -9,6 +9,7 @@
 #include "backend/ir.h"
 #include "backend/layout_plan.h"
 #include "dom/node.h"
+#include "flow_graph_builder.h"
 
 namespace kura {
 class NodeVisitor;
@@ -50,15 +51,18 @@ class DomLowering : public dom::Visitor {
   bool drawing_hole_ = false;
   std::unordered_map<const dom::Node*, Resolved> resolved_{};
   std::vector<Op> ops_{};
+  PaintPass pass_ = kAll;
 
   auto ResolvePropertyByName(dom::Node* node, const std::string name, Resolved& resolved) -> Value*;
 
+  auto EmitPassRange(const size_t begin, const size_t end) -> bool;
   auto Fail(const std::string& message) -> bool;
   void EmitRenderCall(Definition* defn);
   auto ResolveProperties(dom::Node* node, Resolved* resolved) -> bool;
   void EmitLayoutProperties(dom::Node* node, const Resolved& resolved);
   auto BoxOf(dom::Node* node) -> Value*;
   void EmitEvents(dom::Node* node);
+  void EmitTooltip(dom::Node* node);
   auto DrawButton(dom::Node* node) -> bool;
   auto DrawBlock(dom::Node* node) -> bool;
   auto DrawView(dom::Node* node) -> bool;

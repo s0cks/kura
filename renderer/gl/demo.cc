@@ -107,6 +107,30 @@ void OnScroll(GLFWwindow* window, const double x, const double y) {
   state->wheel_y += y;
 }
 
+// Where the cursor is, in the coordinates of the frames (the canvas is at the bottom of the window, in pixels of the
+// framebuffer); false if it is not over the window, or there is no canvas to be over.
+auto CursorInCanvas(GLFWwindow* window, double* x, double* y) -> bool {
+  if (glfwGetWindowAttrib(window, GLFW_HOVERED) == 0)
+    return false;
+
+  double mx = 0.0;
+  double my = 0.0;
+  glfwGetCursorPos(window, &mx, &my);
+  int win_w = 0, win_h = 0;
+  int fb_w = 0, fb_h = 0;
+  glfwGetWindowSize(window, &win_w, &win_h);
+  glfwGetFramebufferSize(window, &fb_w, &fb_h);
+  if (win_w <= 0 || win_h <= 0)
+    return false;
+
+  const double scale_x = static_cast<double>(fb_w) / win_w;
+  const double scale_y = static_cast<double>(fb_h) / win_h;
+  const double canvas_top = win_h - (kura_rt_viewport_height() / scale_y);
+  *x = mx * scale_x;
+  *y = (my - canvas_top) * scale_y;
+  return true;
+}
+
 void OnFocus(GLFWwindow* window, const int focused) {
   const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
   state->focus_changed = true;
@@ -344,6 +368,17 @@ int main(const int argc, char** argv) {
         window_state.wheel_x = 0.0;
         window_state.wheel_y = 0.0;
       }
+    }
+
+    // host => UI: what a tooltip needs to know, which is where the pointer is and what time it is
+    session->SetTime(glfwGetTime());
+    {
+      double px = 0.0;
+      double py = 0.0;
+      if (CursorInCanvas(window, &px, &py))
+        session->PointerMoved(px, py);
+      else
+        session->PointerLeft();
     }
 
     PROFILE_BEGIN(render);

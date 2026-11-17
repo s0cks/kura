@@ -41,6 +41,42 @@ auto Value::ToString() const -> std::string {
   return Name(this);
 }
 
+auto ConstantInstr::GetCanonicalKey() const -> std::string {
+  switch (value_->GetType()) {
+    case kNoneType:
+      return "none";
+    case kBoolType:
+      return (dynamic_cast<Bool*>(value_)->GetValue() ? "bool:1" : "bool:0");
+    case kIntType:
+      return "int:" + std::to_string(dynamic_cast<Int*>(value_)->GetValue());
+    case kFloatType: {
+      const double v = dynamic_cast<Float*>(value_)->GetValue();
+      uint64_t bits = 0;
+      memcpy(&bits, &v, sizeof(bits));
+      return "float:" + std::to_string(bits);
+    }
+    case kStringType:
+      return "str:" + std::string(dynamic_cast<String*>(value_)->GetData());
+    case kColorType: {
+      const auto c = dynamic_cast<Color*>(value_);
+      uint32_t rgba[4];
+      const float vals[4] = {static_cast<float>(c->GetRed()), static_cast<float>(c->GetGreen()),
+                             static_cast<float>(c->GetBlue()), static_cast<float>(c->GetAlpha())};
+      memcpy(rgba, vals, sizeof(rgba));
+      return "color:" + std::to_string(rgba[0]) + ":" + std::to_string(rgba[1]) + ":" + std::to_string(rgba[2]) + ":" +
+             std::to_string(rgba[3]);
+    }
+    case kPxType: {
+      const float v = dynamic_cast<Px*>(value_)->GetValue();
+      uint32_t bits = 0;
+      memcpy(&bits, &v, sizeof(bits));
+      return "px:" + std::to_string(bits);
+    }
+    default:
+      return "ptr:" + std::to_string(reinterpret_cast<uintptr_t>(value_));
+  }
+}
+
 auto ConstantInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "Constant(" << (GetValue() ? GetValue()->ToString() : "null") << ")";

@@ -70,6 +70,9 @@ class FlowGraph {
     property_constraints_.push_back(std::move(constraint));
   }
 
+  void Remove(Instruction* instr);
+  void ReplaceAllUsesWith(Definition* from, Definition* to);
+
  public:
   ~FlowGraph() = default;
 
@@ -162,6 +165,7 @@ class FlowGraph {
   // Computes the block orders and the successor/predecessor edges. Call it
   // once, after the last instruction has been linked.
   void Finalize();
+  void DedupeConstants();
 
   // The immediate dominator of `block` (null for the entry). Valid after
   // Finalize().

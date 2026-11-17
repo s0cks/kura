@@ -1,0 +1,4 @@
+// error: a Rect takes 4 numbers, but this list has 2
+fn bounds(): Rect => [1.0, 2.0]
+
+fn view(state: Int): Int => 1
