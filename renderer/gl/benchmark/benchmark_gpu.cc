@@ -103,5 +103,3 @@ void BenchmarkKuiFile_GPU(OpenGLFixture& fixture, benchmark::State& state, const
 
 // Register as many .kui scenes as you want:
 KURA_REGISTER_GPU_SCENE(Counter_GPU, "counter.kui");
-KURA_REGISTER_GPU_SCENE(TodoList_GPU, "todo.kui");
-KURA_REGISTER_GPU_SCENE(TextHeavy_GPU, "text.kui");

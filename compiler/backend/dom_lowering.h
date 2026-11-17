@@ -49,12 +49,19 @@ class DomLowering : public dom::Visitor {
   std::shared_ptr<LayoutPlan> plan_{};
   // when this tree is what a hole makes, and that hole is being drawn: its layout is set already
   bool drawing_hole_ = false;
+  Value* active_clip_ = nullptr;
   std::unordered_map<const dom::Node*, Resolved> resolved_{};
   std::vector<Op> ops_{};
   PaintPass pass_ = kAll;
+  std::vector<Value*> clip_stack_{};
+
+  auto CurrentClip() const -> Value* {
+    return clip_stack_.empty() ? nullptr : clip_stack_.back();
+  }
 
   auto ResolvePropertyByName(dom::Node* node, const std::string name, Resolved& resolved) -> Value*;
 
+  auto EmitClippedHoleBody(dom::Node* root, size_t begin, size_t end) -> bool;
   auto EmitPassRange(const size_t begin, const size_t end) -> bool;
   auto Fail(const std::string& message) -> bool;
   void EmitRenderCall(Definition* defn);

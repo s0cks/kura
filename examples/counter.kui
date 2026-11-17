@@ -66,21 +66,30 @@ fn view(state: State): Node => {
                 _ => white,
               }){
     #block(direction: "column",
+           min-height: 25%,
            grow: 1){
       #block(direction: "row"){
         #text("value: {state.value}")
       }
 
+      #line(fill: blue)
+
       #button(on-click: Append(state.value), radius: 16px){
         #text("Append")
       }
 
+      #line(fill: blue)
+
       counter-buttons()
     }
 
-    #list(){
-      for _, item in state.items =>
-        row(item)
+    #block(direction: "row", max-height: 75%){
+      #scroll{
+        #list{
+          for _, item in state.items =>
+            row(item)
+        }
+      }
     }
   }
 }

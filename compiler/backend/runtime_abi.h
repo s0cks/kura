@@ -210,7 +210,7 @@ void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_
 // `family` is the `font-family`, NULL (or a zero length) for the default font. Not called by compiled code.
 void kura_rt_render_text(double x, double y, const char* utf8, uint64_t length, float size, const char* family,
                          uint64_t family_length, uint64_t color);
-void kura_rt_draw_line(uint64_t x1bits, uint64_t y1bits, uint64_t x2bits, uint64_t y2bits, uint64_t color);
+void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, uint64_t color);
 // ── viewport and layout ────────────────────────────────────────────────────
 // The size of the surface a view lays out in and draws into. The host sets it (a window's size, say)
 // and a view reads it at the start of every frame, so changing it reflows the next frame. It is
@@ -315,14 +315,14 @@ int kura_rt_event_hit(uint64_t kind, double x, double y, KuraValue* message);
 // How a tooltip looks and when it comes: where the host has nothing to say, these are the defaults. Sizes are in
 // pixels, the colors are 0xRRGGBBAA, and `delay` is in seconds.
 typedef struct KuraTooltipStyle {
-  double delay;          // how long the pointer is over something before its tooltip shows
+  double delay;  // how long the pointer is over something before its tooltip shows
   float font_size;
-  float max_width;       // the widest a tooltip is, with its padding: a longer text is wrapped
+  float max_width;  // the widest a tooltip is, with its padding: a longer text is wrapped
   float padding_x;
   float padding_y;
   float radius;
-  float gap;             // between the node and the tooltip
-  float margin;          // the least between the tooltip and the edge of the viewport
+  float gap;     // between the node and the tooltip
+  float margin;  // the least between the tooltip and the edge of the viewport
   uint64_t background;
   uint64_t color;
 } KuraTooltipStyle;

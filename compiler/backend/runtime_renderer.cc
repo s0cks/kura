@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "backend/runtime_abi.h"
+#include "renderer/renderer_abi.h"
 
 namespace {
 // The renderer is thread-local so that two threads (two UIs, or a UI and a test) can render at the
@@ -229,11 +230,9 @@ void kura_rt_fill_rect(const KuraRect* rect, const uint64_t color) {
   Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, *rect, UnpackColor(color)));
 }
 
-void kura_rt_draw_line(uint64_t x1bits, uint64_t y1bits, uint64_t x2bits, uint64_t y2bits, uint64_t color) {
+void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, uint64_t color) {
   const auto& ops = Current("kura_rt_draw_line");
-  const KuraVec2 start{Coordinate(x1bits), Coordinate(y1bits)};
-  const KuraVec2 end{Coordinate(x2bits), Coordinate(y2bits)};
-  Record("kura_rt_draw_line", ops.draw_line(tl_renderer.self, start, end, UnpackColor(color)));
+  Record("kura_rt_draw_line", ops.draw_line(tl_renderer.self, *start, *end, UnpackColor(color)));
 }
 
 void kura_rt_push_clip(const KuraRect* rect) {

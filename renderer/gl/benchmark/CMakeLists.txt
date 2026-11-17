@@ -22,3 +22,4 @@ function(add_gl_renderer_benchmark name sources)
 endfunction()
 
 add_gl_renderer_benchmark(gpu benchmark_gpu.cc)
+add_gl_renderer_benchmark(scroll benchmark_scroll.cc)

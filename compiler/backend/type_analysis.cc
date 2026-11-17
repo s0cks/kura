@@ -1020,6 +1020,9 @@ class Analyzer {
     if (!def)
       return false;
 
+    if (const auto t = instr->AsRectIntersects())
+      return Set(def, CompileType::Bool());
+
     if (const auto c = instr->AsConstant())
       return Set(def, ConstantType(c->GetValue()));
 

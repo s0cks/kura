@@ -77,6 +77,7 @@ class FlowGraphBuilder {
     layout::NodeId slot = layout::kNoNode;
     bool draw = false;
     PaintPass pass = PaintPass::kAll;
+    Value* clip;
   };
   const HoleScope* hole_ = nullptr;
 

@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace kura::text {
@@ -69,6 +70,56 @@ struct GlyphBitmap {
 
 // One font file at every size. Glyph ids are only meaningful for the font that shaped them.
 class Font {
+  struct MetricsKey {
+    std::string text;
+    uint32_t size_bits;
+
+    auto operator==(const MetricsKey& other) const noexcept -> bool = default;
+  };
+
+  struct MetricsKeyView {
+    std::string_view text;
+    uint32_t size_bits;
+  };
+
+  struct MetricsKeyHash {
+    using is_transparent = void;
+
+    [[nodiscard]] auto operator()(const MetricsKeyView& k) const noexcept -> size_t {
+      size_t h = std::hash<std::string_view>{}(k.text);
+      // Boost-style hash combine with quantized font size bits
+      h ^= static_cast<size_t>(k.size_bits) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+      return h;
+    }
+
+    [[nodiscard]] auto operator()(const MetricsKey& k) const noexcept -> size_t {
+      return (*this)(MetricsKeyView{k.text, k.size_bits});
+    }
+  };
+
+  struct MetricsKeyEqual {
+    using is_transparent = void;
+
+    [[nodiscard]] auto operator()(const MetricsKeyView& lhs, const MetricsKeyView& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const MetricsKey& lhs, const MetricsKeyView& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const MetricsKeyView& lhs, const MetricsKey& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const MetricsKey& lhs, const MetricsKey& rhs) const noexcept -> bool {
+      return lhs == rhs;
+    }
+  };
+
+  static constexpr size_t kMaxMetricsCacheEntries = 4096;
+  mutable std::unordered_map<MetricsKey, FontMetrics, MetricsKeyHash, MetricsKeyEqual> metrics_cache_{};
+
  public:
   ~Font();
   Font(const Font&) = delete;

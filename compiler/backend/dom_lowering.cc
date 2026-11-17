@@ -126,6 +126,8 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
   if (hole) {
     drawing_hole_ = hole->draw;
     pass_ = hole->pass == 1 ? PaintPass::kBoxesOnly : hole->pass == 2 ? PaintPass::kTextOnly : PaintPass::kAll;
+    if (hole->clip)
+      clip_stack_.push_back(hole->clip);
     host_->Emit(LayoutSlotInstanceInstr::New(hole->plan, hole->slot, plan_));
   }
 
@@ -150,7 +152,43 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
       section_start = i + 1;
     }
   }
+
+  if (drawing_hole_ && CurrentClip() != nullptr)
+    return EmitClippedHoleBody(root, section_start, ops_.size());
+
   return EmitPassRange(section_start, ops_.size());
+}
+
+// In backend/dom_lowering.cc
+auto DomLowering::EmitClippedHoleBody(dom::Node* root, const size_t begin, const size_t end) -> bool {
+  dom::Node* target_node = (begin < end && ops_[begin].node) ? ops_[begin].node : root;
+  Value* item_rect = BoxOf(target_node);
+  if (!item_rect)
+    return false;
+
+  Value* visible = host_->Bind(RectIntersectsInstr::New(item_rect, CurrentClip()));
+
+  const auto owner = host_->GetOwner();
+  auto* then_entry = owner->NewTarget("clip.draw");
+  auto* else_entry = owner->NewTarget("clip.skip");
+  auto* join_entry = owner->NewJoin("clip.join");
+
+  owner->Terminate(BranchInstr::New(visible, then_entry, else_entry, join_entry));
+
+  // Then branch: item intersects the scroll clip rect -> emit draw calls
+  owner->Enter(then_entry);
+  if (!EmitPassRange(begin, end))
+    return false;
+  if (!owner->IsClosed())
+    owner->Terminate(GotoInstr::New(join_entry));
+
+  // Else branch: offscreen -> skip draw calls completely
+  owner->Enter(else_entry);
+  owner->Terminate(GotoInstr::New(join_entry));
+
+  // Continue lowering at the join block (graph_->Finalize() wires predecessor/successor edges)
+  owner->Enter(join_entry);
+  return true;
 }
 
 auto DomLowering::VisitNode(dom::Node* node) -> bool {
@@ -367,27 +405,18 @@ auto DomLowering::DrawView(dom::Node* node) -> bool {
 }
 
 auto DomLowering::DrawLine(dom::Node& node) -> bool {
-  // Value* x = Box(&node, LayoutBoxInstr::kX);
-  // Value* y = Box(&node, LayoutBoxInstr::kY);
-  // Value* w = Box(&node, LayoutBoxInstr::kWidth);
-  // Value* h = Box(&node, LayoutBoxInstr::kHeight);
-  // if (!x || !y || !w || !h)
-  //   return false;
-  //
-  // Value* half = host_->Bind(ConstantInstr::New(Float::New(0.5f)));
-  //
-  // Value* x1 = x;
-  // Value* y1 = host_->Bind(BinaryOpInstr::New(BinaryOp::kMultiply, h, half));
-  // y1 = host_->Bind(BinaryOpInstr::New(BinaryOp::kAdd, y, y1));
-  //
-  // Value* x2 = host_->Bind(BinaryOpInstr::New(BinaryOp::kAdd, x, w));
-  // Value* y2 = y1;
-  //
-  // Value* color = ResolvePropertyByName(&node, "fill", resolved_[&node]);
-  // if (!color)
-  //   color = host_->Bind(ConstantInstr::New(Int::New(0)));
-  //
-  // EmitRenderCall(DrawLineInstr::New(x1, y1, x2, y2, color));
+  if (!EmitBox(&node, true))
+    return false;
+
+  Value* rect = BoxOf(&node);
+  if (!rect)
+    return false;
+
+  Value* color = ResolvePropertyByName(&node, "fill", resolved_[&node]);
+  if (!color)
+    color = host_->Bind(ConstantInstr::New(Int::New(0)));
+
+  EmitRenderCall(DrawLineInstr::New(rect, color));
   return true;
 }
 
@@ -396,6 +425,8 @@ auto DomLowering::DrawLine(dom::Node& node) -> bool {
 auto DomLowering::DrawScroll(const Op& op) -> bool {
   if (op.end) {
     EmitRenderCall(PopClipInstr::New());
+    if (!clip_stack_.empty())
+      clip_stack_.pop_back();
     return true;
   }
 
@@ -405,8 +436,10 @@ auto DomLowering::DrawScroll(const Op& op) -> bool {
 
   if (!EmitBox(op.node, false, rect))
     return false;
+
   EmitEvents(op.node);
   EmitRenderCall(PushClipInstr::New(rect));
+  clip_stack_.push_back(rect);
   return true;
 }
 
@@ -461,7 +494,7 @@ auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
   // so every row's background batches into 1 draw call and every row's text batches into 1 draw call.
   if (draw && node->GetExpr()->IsListComprehension()) {
     for (int pass : {1, 2}) {
-      FlowGraphBuilder::HoleScope scope{plan_, *id, true, static_cast<PaintPass>(pass)};
+      FlowGraphBuilder::HoleScope scope{plan_, *id, true, static_cast<PaintPass>(pass), CurrentClip()};
       owner->hole_ = &scope;
       host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
       NodeVisitor for_expr(owner);
@@ -473,7 +506,7 @@ auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
     return true;
   }
 
-  FlowGraphBuilder::HoleScope scope{plan_, *id, draw, static_cast<PaintPass>(0)};
+  FlowGraphBuilder::HoleScope scope{plan_, *id, draw, static_cast<PaintPass>(0), CurrentClip()};
   owner->hole_ = &scope;
   host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
   NodeVisitor for_expr(owner);

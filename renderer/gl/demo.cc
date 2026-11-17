@@ -24,20 +24,11 @@
 #include "renderer/gl/renderer.h"
 
 // TODO(@s0cks): move to common
-#ifdef KURA_DEBUG
-
 #define PROFILE_BEGIN(Name) const auto Name##_start = std::chrono::high_resolution_clock::now();
 #define PROFILE_END(Name)                                                                                     \
   const auto Name##_end = std::chrono::high_resolution_clock::now();                                          \
   const auto Name##_dur = std::chrono::duration_cast<std::chrono::microseconds>((Name##_end - Name##_start)); \
   Name##_samples.push_back(Name##_dur.count());
-
-#else
-
-#define PROFILE_BEGIN(Name)
-#define PROFILE_END(Name)
-
-#endif  // KURA_DEBUG
 
 namespace {
 // The window starts this big, in screen points, and can be resized.

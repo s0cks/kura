@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <epoxy/gl.h>
+#include <format>
 #include <new>
 #include <print>
 #include <stdexcept>
@@ -101,9 +102,9 @@ inline auto IsValid(const KuraTextStyle& value) -> bool {
   return IsValid(value.size) && value.size > 0.0f && (value.family != nullptr || value.family_length == 0);
 }
 
-inline auto FamilyOf(const KuraTextStyle& style) -> std::string {
-  return style.family == nullptr || style.family_length == 0 ? std::string{}
-                                                             : std::string(style.family, style.family_length);
+inline auto FamilyOf(const KuraTextStyle& style) -> std::string_view {
+  return style.family == nullptr || style.family_length == 0 ? std::string_view{}
+                                                             : std::string_view(style.family, style.family_length);
 }
 
 inline auto Coord(const float value) -> float {
@@ -399,6 +400,7 @@ class GlImpl {
   auto MeasureText(const char* utf8, const size_t length, const KuraTextStyle& style, KuraTextMetrics* out) -> Status {
     if (out == nullptr || !IsValid(style) || (utf8 == nullptr && length != 0))
       return KURA_RENDERER_ERR_INVALID_ARG;
+
     if (const auto font = fonts_.Find(FamilyOf(style))) {
       const auto metrics = font->Measure(std::string_view(length == 0 ? "" : utf8, length), style.size);
       out->width = metrics.width;
@@ -406,6 +408,7 @@ class GlImpl {
       out->ascent = metrics.ascent;
       return KURA_RENDERER_OK;
     }
+
     return FixedMetrics(utf8, length, style, out);
   }
 
@@ -782,7 +785,6 @@ class GlImpl {
   void Flush() {
     if (idx_.empty())
       return;
-
     glUseProgram(program_);
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
@@ -823,7 +825,6 @@ auto OpStrokeRect(void* self, const KuraRect rect, const KuraColor color) -> Sta
 }
 
 auto OpDrawLine(void* self, const KuraVec2 from, const KuraVec2 to, const KuraColor color) -> Status {
-  std::println("drawing line");
   return reinterpret_cast<GlImpl*>(self)->DrawLine(std::move(from), std::move(to), std::move(color));
 }
 

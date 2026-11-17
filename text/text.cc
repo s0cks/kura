@@ -2,14 +2,17 @@
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include <hb-ft.h>
-#include <hb.h>
-
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <hb-ft.h>
+#include <hb.h>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #ifdef KURA_TEXT_HAS_FONTCONFIG
@@ -23,7 +26,9 @@ constexpr float kMaxSize = 1024.0f;
 
 auto Lower(const std::string_view value) -> std::string {
   std::string out(value);
-  std::transform(out.begin(), out.end(), out.begin(), [](const unsigned char c) { return std::tolower(c); });
+  std::transform(out.begin(), out.end(), out.begin(), [](const unsigned char c) {
+    return std::tolower(c);
+  });
   return out;
 }
 
@@ -131,32 +136,159 @@ auto MatchWellKnown(Match* out) -> bool {
 // ── Font ────────────────────────────────────────────────────────────────────
 
 struct Font::Impl {
+  struct CachedRun {
+    std::vector<Line> lines{};
+    Metrics metrics{};
+  };
+
+  struct RunKey {
+    std::string text;
+    uint32_t size_bits;
+
+    auto operator==(const RunKey& other) const noexcept -> bool = default;
+  };
+
+  struct RunKeyView {
+    std::string_view text;
+    uint32_t size_bits;
+  };
+
+  struct RunKeyHash {
+    using is_transparent = void;
+
+    [[nodiscard]] auto operator()(const RunKeyView& k) const noexcept -> size_t {
+      size_t h = std::hash<std::string_view>{}(k.text);
+      h ^= static_cast<size_t>(k.size_bits) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+      return h;
+    }
+
+    [[nodiscard]] auto operator()(const RunKey& k) const noexcept -> size_t {
+      return (*this)(RunKeyView{k.text, k.size_bits});
+    }
+  };
+
+  struct RunKeyEqual {
+    using is_transparent = void;
+
+    [[nodiscard]] auto operator()(const RunKeyView& lhs, const RunKeyView& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const RunKey& lhs, const RunKeyView& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const RunKeyView& lhs, const RunKey& rhs) const noexcept -> bool {
+      return lhs.size_bits == rhs.size_bits && lhs.text == rhs.text;
+    }
+
+    [[nodiscard]] auto operator()(const RunKey& lhs, const RunKey& rhs) const noexcept -> bool {
+      return lhs == rhs;
+    }
+  };
+
+  static constexpr size_t kMaxCacheEntries = 4096;
+
   FT_Face face = nullptr;
   hb_font_t* hb = nullptr;
+  hb_buffer_t* scratch_buffer = hb_buffer_create();
   std::string family{};
   std::string path{};
-  // The size the face is set to now, in 26.6 points, so a run of calls at one size doesn't redo it.
   FT_F26Dot6 current = 0;
 
+  std::unordered_map<RunKey, CachedRun, RunKeyHash, RunKeyEqual> run_cache_{};
+
   ~Impl() {
+    if (scratch_buffer != nullptr)
+      hb_buffer_destroy(scratch_buffer);
     if (hb != nullptr)
       hb_font_destroy(hb);
     if (face != nullptr)
       FT_Done_Face(face);
   }
 
-  // 1 point is 1 pixel at 72 dpi, so a size in points is a size in pixels.
   void SetSize(const float size) {
     const auto wanted = static_cast<FT_F26Dot6>(std::lround(ClampSize(size) * 64.0f));
     if (wanted == current)
       return;
     if (FT_Set_Char_Size(face, 0, wanted, 72, 72) != 0) {
-      // a bitmap-only font has fixed sizes, and the closest will have to do
       if (face->num_fixed_sizes > 0)
         FT_Select_Size(face, 0);
     }
     hb_ft_font_changed(hb);
     current = wanted;
+  }
+
+  auto ShapeUncached(const std::string_view utf8, const float size) -> CachedRun {
+    SetSize(size);
+
+    const auto& m = face->size->metrics;
+    const float ascent = static_cast<float>(m.ascender) / 64.0f;
+    const float descent = -static_cast<float>(m.descender) / 64.0f;
+    float line_height = static_cast<float>(m.height) / 64.0f;
+    if (line_height <= 0.0f)
+      line_height = ascent + descent;
+
+    CachedRun out{};
+    out.metrics.ascent = ascent;
+
+    size_t pos = 0;
+    while (true) {
+      const auto end = std::min(utf8.find('\n', pos), utf8.size());
+      auto text = utf8.substr(pos, end - pos);
+      if (!text.empty() && text.back() == '\r')
+        text.remove_suffix(1);
+
+      Line line{};
+      if (!text.empty()) {
+        hb_buffer_clear_contents(scratch_buffer);
+        hb_buffer_add_utf8(scratch_buffer, text.data(), static_cast<int>(text.size()), 0,
+                           static_cast<int>(text.size()));
+        hb_buffer_guess_segment_properties(scratch_buffer);
+        hb_shape(hb, scratch_buffer, nullptr, 0);
+
+        unsigned int count = 0;
+        const auto info = hb_buffer_get_glyph_infos(scratch_buffer, &count);
+        const auto position = hb_buffer_get_glyph_positions(scratch_buffer, &count);
+        line.glyphs.reserve(count);
+        for (unsigned int i = 0; i < count; i++) {
+          Glyph glyph{};
+          glyph.id = info[i].codepoint;
+          glyph.cluster = info[i].cluster;
+          glyph.x_advance = static_cast<float>(position[i].x_advance) / 64.0f;
+          glyph.y_advance = -static_cast<float>(position[i].y_advance) / 64.0f;
+          glyph.x_offset = static_cast<float>(position[i].x_offset) / 64.0f;
+          glyph.y_offset = -static_cast<float>(position[i].y_offset) / 64.0f;
+          line.width += glyph.x_advance;
+          line.glyphs.push_back(glyph);
+        }
+      }
+      out.metrics.width = std::max(out.metrics.width, line.width);
+      out.lines.push_back(std::move(line));
+      if (end >= utf8.size())
+        break;
+      pos = end + 1;
+    }
+
+    out.metrics.height = static_cast<float>(out.lines.size()) * line_height;
+    return out;
+  }
+
+  auto GetOrShape(const std::string_view utf8, const float size) -> const CachedRun* {
+    const auto wanted = static_cast<FT_F26Dot6>(std::lround(ClampSize(size) * 64.0f));
+    const auto size_bits = static_cast<uint32_t>(wanted);
+    const RunKeyView lookup{utf8, size_bits};
+
+    if (const auto it = run_cache_.find(lookup); it != run_cache_.end()) {
+      return &it->second;
+    }
+
+    if (run_cache_.size() >= kMaxCacheEntries) {
+      run_cache_.clear();
+    }
+
+    auto [it, _] = run_cache_.emplace(RunKey{std::string(utf8), size_bits}, ShapeUncached(utf8, size));
+    return &it->second;
   }
 };
 
@@ -185,58 +317,18 @@ auto Font::GetMetrics(const float size) -> FontMetrics {
   return out;
 }
 
-auto Font::Shape(const std::string_view utf8, const float size) -> std::vector<Line> {
-  impl_->SetSize(size);
-  std::vector<Line> lines{};
-  size_t pos = 0;
-  while (true) {
-    const auto end = std::min(utf8.find('\n', pos), utf8.size());
-    auto text = utf8.substr(pos, end - pos);
-    if (!text.empty() && text.back() == '\r')
-      text.remove_suffix(1);
-
-    Line line{};
-    if (!text.empty()) {
-      const auto buffer = hb_buffer_create();
-      hb_buffer_add_utf8(buffer, text.data(), static_cast<int>(text.size()), 0, static_cast<int>(text.size()));
-      hb_buffer_guess_segment_properties(buffer);
-      hb_shape(impl_->hb, buffer, nullptr, 0);
-
-      unsigned int count = 0;
-      const auto info = hb_buffer_get_glyph_infos(buffer, &count);
-      const auto position = hb_buffer_get_glyph_positions(buffer, &count);
-      line.glyphs.reserve(count);
-      for (unsigned int i = 0; i < count; i++) {
-        Glyph glyph{};
-        glyph.id = info[i].codepoint;
-        glyph.cluster = info[i].cluster;
-        glyph.x_advance = static_cast<float>(position[i].x_advance) / 64.0f;
-        glyph.y_advance = -static_cast<float>(position[i].y_advance) / 64.0f;
-        glyph.x_offset = static_cast<float>(position[i].x_offset) / 64.0f;
-        glyph.y_offset = -static_cast<float>(position[i].y_offset) / 64.0f;
-        line.width += glyph.x_advance;
-        line.glyphs.push_back(glyph);
-      }
-      hb_buffer_destroy(buffer);
-    }
-    lines.push_back(std::move(line));
-    if (end >= utf8.size())
-      break;
-    pos = end + 1;
+auto Font::Measure(const std::string_view utf8, const float size) -> Metrics {
+  if (!utf8.empty() && utf8.size() <= 256) {
+    return impl_->GetOrShape(utf8, size)->metrics;
   }
-  return lines;
+  return impl_->ShapeUncached(utf8, size).metrics;
 }
 
-auto Font::Measure(const std::string_view utf8, const float size) -> Metrics {
-  const auto lines = Shape(utf8, size);
-  const auto font = GetMetrics(size);
-  Metrics out{};
-  out.lines = lines.size();
-  out.ascent = font.ascent;
-  out.height = font.line_height * static_cast<float>(lines.size());
-  for (const auto& line : lines)
-    out.width = std::max(out.width, line.width);
-  return out;
+auto Font::Shape(const std::string_view utf8, const float size) -> std::vector<Line> {
+  if (!utf8.empty() && utf8.size() <= 256) {
+    return impl_->GetOrShape(utf8, size)->lines;
+  }
+  return impl_->ShapeUncached(utf8, size).lines;
 }
 
 auto Font::Rasterize(const uint32_t glyph, const float size) -> GlyphBitmap {
@@ -273,17 +365,31 @@ auto Font::Rasterize(const uint32_t glyph, const float size) -> GlyphBitmap {
 // ── FontLibrary ─────────────────────────────────────────────────────────────
 
 struct FontLibrary::Impl {
+  struct StringHash {
+    using is_transparent = void;
+    [[nodiscard]] auto operator()(std::string_view sv) const noexcept -> size_t {
+      return std::hash<std::string_view>{}(sv);
+    }
+  };
+
+  struct StringEqual {
+    using is_transparent = void;
+    [[nodiscard]] auto operator()(std::string_view lhs, std::string_view rhs) const noexcept -> bool {
+      return lhs == rhs;
+    }
+  };
+
   FT_Library ft = nullptr;
   // a file that is a family, ahead of what's installed (lowercase family -> path)
-  std::unordered_map<std::string, std::string> files{};
+  std::unordered_map<std::string, std::string, StringHash, StringEqual> files{};
   // every font opened, by file and face
-  std::unordered_map<std::string, std::unique_ptr<Font>> fonts{};
+  std::unordered_map<std::string, std::unique_ptr<Font>, StringHash, StringEqual> fonts{};
   // what a family value resolved to, including to nothing, so a missing family is only searched for once
   struct Resolution {
     Font* font = nullptr;
     bool fallback = false;
   };
-  std::unordered_map<std::string, Resolution> resolved{};
+  std::unordered_map<std::string, Resolution, StringHash, StringEqual> resolved{};
 
   Impl() {
     if (FT_Init_FreeType(&ft) != 0)
@@ -342,8 +448,8 @@ struct FontLibrary::Impl {
     if (MatchWithFontconfig(name, &match)) {
       // fontconfig always answers, with the closest it has, so a family only counts as found when it's one
       // of the names the file goes by
-      const auto found = IsGeneric(lower) || std::find(match.matched.begin(), match.matched.end(), lower) !=
-                                                 match.matched.end();
+      const auto found =
+          IsGeneric(lower) || std::find(match.matched.begin(), match.matched.end(), lower) != match.matched.end();
       if (found)
         return Open(match, name);
     }

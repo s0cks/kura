@@ -75,6 +75,42 @@ class TemplateGraphicsInstr : public TemplateDefinition<NumberOfInputs> {
   }
 };
 
+class RectIntersectsInstr : public TemplateDefinition<2> {
+ public:
+  static const auto kLeftPos = 0;
+  static const auto kRightPos = 1;
+
+ public:
+  RectIntersectsInstr(Value* lhs, Value* rhs) {
+    SetLeft(lhs);
+    SetRight(rhs);
+  }
+  ~RectIntersectsInstr() override = default;
+
+  inline void SetLeft(Value* rhs) {
+    return SetInputAt(kLeftPos, rhs);
+  }
+
+  inline auto GetLeft() const -> Value* {
+    return GetInputAt(kLeftPos);
+  }
+
+  inline void SetRight(Value* rhs) {
+    return SetInputAt(kRightPos, rhs);
+  }
+
+  inline auto GetRight() const -> Value* {
+    return GetInputAt(kRightPos);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(RectIntersects);
+
+ public:
+  static inline auto New(Value* lhs, Value* rhs) -> RectIntersectsInstr* {
+    return new RectIntersectsInstr(lhs, rhs);
+  }
+};
+
 class BeginFrameInstr : public GraphicsInstr {
  private:
   uint32_t width_;
@@ -291,8 +327,8 @@ class DrawTextInstr : public TemplateGraphicsInstr<3> {
   int align_;
 
  public:
-  DrawTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color,
-                Value* opacity, const int align) :
+  DrawTextInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color, Value* opacity,
+                const int align) :
     plan_(std::move(plan)),
     node_(node),
     align_(align) {
@@ -433,60 +469,23 @@ class FillBezierInstr : public GraphicsInstr {
   }
 };
 
-class DrawLineInstr : public TemplateGraphicsInstr<5> {
+class DrawLineInstr : public TemplateGraphicsInstr<2> {
   static const auto kColorPos = 0;
-  static const auto kX1Pos = 1;
-  static const auto kY1Pos = 2;
-  static const auto kX2Pos = 3;
-  static const auto kY2Pos = 4;
-
- private:
-  Value* x1;
-  Value* y1;
-  Value* x2;
-  Value* y2;
-  Value* color_;
+  static const auto kBoundsPos = 1;
 
  public:
-  DrawLineInstr(Value* x1, Value* y1, Value* x2, Value* y2, Value* color) {
+  DrawLineInstr(Value* bounds, Value* color) {
+    SetBounds(bounds);
     SetColor(color);
-    SetX1(x1);
-    SetY1(y1);
-    SetX2(x1);
-    SetY2(y1);
   }
   ~DrawLineInstr() override = default;
 
-  inline void SetX1(Value* rhs) {
-    return SetInputAt(kX1Pos, rhs);
+  inline auto GetBounds() const -> Value* {
+    return GetInputAt(kBoundsPos);
   }
 
-  inline auto GetX1() const -> Value* {
-    return GetInputAt(kX1Pos);
-  }
-
-  inline void SetY1(Value* rhs) {
-    return SetInputAt(kY1Pos, rhs);
-  }
-
-  inline auto GetY1() const -> Value* {
-    return GetInputAt(kY1Pos);
-  }
-
-  inline void SetX2(Value* rhs) {
-    return SetInputAt(kX2Pos, rhs);
-  }
-
-  inline auto GetX2() const -> Value* {
-    return GetInputAt(kX2Pos);
-  }
-
-  inline void SetY2(Value* rhs) {
-    return SetInputAt(kY2Pos, rhs);
-  }
-
-  inline auto GetY2() const -> Value* {
-    return GetInputAt(kY2Pos);
+  inline void SetBounds(Value* rhs) {
+    return SetInputAt(kBoundsPos, rhs);
   }
 
   inline void SetColor(Value* rhs) {
@@ -500,8 +499,8 @@ class DrawLineInstr : public TemplateGraphicsInstr<5> {
   DECLARE_INSTRUCTION_TYPE(DrawLine);
 
  public:
-  static inline auto New(Value* x1, Value* y1, Value* x2, Value* y2, Value* color) -> DrawLineInstr* {
-    return new DrawLineInstr(x1, y1, x2, y2, color);
+  static inline auto New(Value* bounds, Value* color) -> DrawLineInstr* {
+    return new DrawLineInstr(bounds, color);
   }
 };
 

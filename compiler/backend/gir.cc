@@ -9,6 +9,15 @@ static inline auto Name(const Value* value) -> std::string {
   return "%" + std::to_string(value->GetDefinition()->GetId());
 }
 
+auto RectIntersectsInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "RectIntersctsInstr(";
+  ss << "left=" << Name(GetLeft()) << ", ";
+  ss << "right=" << Name(GetRight());
+  ss << ")";
+  return ss.str();
+}
+
 auto CheckRendererStatusInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "CheckRendererStatus(";
@@ -177,10 +186,7 @@ auto FillBezierInstr::ToString() const -> std::string {
 auto DrawLineInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawLine(";
-  ss << "x1=" << Name(GetX1()) << ", ";
-  ss << "y1=" << Name(GetY1()) << ", ";
-  ss << "x2=" << Name(GetX2()) << ", ";
-  ss << "y2=" << Name(GetY2()) << ", ";
+  ss << "bounds=" << Name(GetBounds()) << ", ";
   ss << "color=" << Name(GetColor());
   ss << ")";
   return ss.str();

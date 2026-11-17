@@ -45,6 +45,7 @@ namespace kura {
   V(StoreLocal)                 \
   V(LoadLocal)                  \
   V(Alloc)                      \
+  V(RectIntersects)             \
   V(CheckRendererStatus)        \
   V(BeginFrame)                 \
   V(EndFrame)                   \

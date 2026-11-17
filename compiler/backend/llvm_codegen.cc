@@ -209,7 +209,8 @@ class Generator {
       case Rep::kPtr:
         return b_.CreatePtrToInt(value, i64_);
       case Rep::kVec:
-        Fail("internal error: a " + type->ToString() + " has no bits to tag: it is converted to a list of floats, not reinterpreted");
+        Fail("internal error: a " + type->ToString() +
+             " has no bits to tag: it is converted to a list of floats, not reinterpreted");
         return b_.getInt64(0);
       default:
         return b_.getInt64(0);
@@ -227,7 +228,8 @@ class Generator {
       case Rep::kPtr:
         return b_.CreateIntToPtr(bits, ptr_ty_);
       case Rep::kVec:
-        Fail("internal error: a " + type->ToString() + " is not the bits of a value: it is converted from a list of numbers, not reinterpreted");
+        Fail("internal error: a " + type->ToString() +
+             " is not the bits of a value: it is converted from a list of numbers, not reinterpreted");
         return llvm::PoisonValue::get(Lower(type));
       default:
         return b_.getInt8(0);
@@ -582,6 +584,34 @@ class Generator {
     KASSERT(instr);
   }
 
+  void EmitRectIntersects(RectIntersectsInstr* instr) {
+    llvm::Value* a = Val(instr->GetLeft());   // <4 x float>: {x, y, w, h}
+    llvm::Value* b = Val(instr->GetRight());  // <4 x float>: {x, y, w, h}
+
+    llvm::Value* ax0 = b_.CreateExtractElement(a, b_.getInt64(0), "a.x0");
+    llvm::Value* ay0 = b_.CreateExtractElement(a, b_.getInt64(1), "a.y0");
+    llvm::Value* aw = b_.CreateExtractElement(a, b_.getInt64(2), "a.w");
+    llvm::Value* ah = b_.CreateExtractElement(a, b_.getInt64(3), "a.h");
+    llvm::Value* ax1 = b_.CreateFAdd(ax0, aw, "a.x1");
+    llvm::Value* ay1 = b_.CreateFAdd(ay0, ah, "a.y1");
+
+    llvm::Value* bx0 = b_.CreateExtractElement(b, b_.getInt64(0), "b.x0");
+    llvm::Value* by0 = b_.CreateExtractElement(b, b_.getInt64(1), "b.y0");
+    llvm::Value* bw = b_.CreateExtractElement(b, b_.getInt64(2), "b.w");
+    llvm::Value* bh = b_.CreateExtractElement(b, b_.getInt64(3), "b.h");
+    llvm::Value* bx1 = b_.CreateFAdd(bx0, bw, "b.x1");
+    llvm::Value* by1 = b_.CreateFAdd(by0, bh, "b.y1");
+
+    // Non-empty AABB intersection: ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0
+    llvm::Value* c0 = b_.CreateFCmpOLT(ax0, bx1);
+    llvm::Value* c1 = b_.CreateFCmpOGT(ax1, bx0);
+    llvm::Value* c2 = b_.CreateFCmpOLT(ay0, by1);
+    llvm::Value* c3 = b_.CreateFCmpOGT(ay1, by0);
+
+    llvm::Value* hit = b_.CreateAnd(b_.CreateAnd(c0, c1), b_.CreateAnd(c2, c3), "rect.vis");
+    Define(instr, hit, CompileType::Bool());
+  }
+
   void EmitCheckRenererStatusInstr(CheckRendererStatusInstr* instr) {
     CallRt("kura_rt_check_renderer", void_ty_, {});
   }
@@ -695,12 +725,34 @@ class Generator {
   }
 
   void EmitDrawLine(DrawLineInstr* draw) {
-    llvm::Value* x1 = CoordinateBits(draw->GetX1());
-    llvm::Value* y1 = CoordinateBits(draw->GetY1());
-    llvm::Value* x2 = CoordinateBits(draw->GetX2());
-    llvm::Value* y2 = CoordinateBits(draw->GetY2());
-    llvm::Value* c = Val(draw->GetColor());
-    CallRt("kura_rt_fill_rect", void_ty_, {x1, y1, x2, y2, c});
+    llvm::Value* vec = Val(draw->GetBounds());
+    llvm::Value* x = b_.CreateExtractElement(vec, b_.getInt64(0), "x");
+    llvm::Value* y = b_.CreateExtractElement(vec, b_.getInt64(1), "y");
+    llvm::Value* w = b_.CreateExtractElement(vec, b_.getInt64(2), "w");
+    llvm::Value* h = b_.CreateExtractElement(vec, b_.getInt64(3), "h");
+
+    llvm::Value* half = llvm::ConstantFP::get(f32_, 0.5f);
+    llvm::Value* x1 = x;
+    llvm::Value* y1 = b_.CreateFAdd(y, b_.CreateFMul(h, half));
+    llvm::Value* x2 = b_.CreateFAdd(x, w);
+    llvm::Value* y2 = y1;
+
+    auto* vec2_ty = llvm::FixedVectorType::get(f32_, 2);
+    llvm::Value* from = llvm::UndefValue::get(vec2_ty);
+    from = b_.CreateInsertElement(from, x1, b_.getInt64(0));
+    from = b_.CreateInsertElement(from, y1, b_.getInt64(1));
+
+    llvm::Value* to = llvm::UndefValue::get(vec2_ty);
+    to = b_.CreateInsertElement(to, x2, b_.getInt64(0));
+    to = b_.CreateInsertElement(to, y2, b_.getInt64(1));
+
+    llvm::Value* start_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.start");
+    b_.CreateStore(from, start_ptr);
+
+    llvm::Value* end_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.end");
+    b_.CreateStore(to, end_ptr);
+
+    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, Val(draw->GetColor())});
   }
 
   // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
@@ -893,6 +945,8 @@ class Generator {
       return EmitTracyBegin(b);
     if (const auto e = instr->AsTracyEndZone())
       return EmitTracyEnd(e);
+    if (const auto i = instr->AsRectIntersects())
+      return EmitRectIntersects(i);
 
     if (const auto phi = instr->AsPhi()) {
       const auto node = b_.CreatePHI(Lower(phi->GetCompileType()), phi->GetNumberOfIncoming());
