@@ -48,8 +48,9 @@ namespace kura::syntax {
   V(WhenWithElse,             29, "'when' with an 'else'")                             \
   V(BadForBinding,            30, "malformed 'for' binding")                           \
   V(BadStaticAssert,          31, "malformed 'static-assert'")                         \
-  V(StyleError,               32, "style error")                                     \
-  V(BadElementId,             33, "element id is malformed")
+  V(StyleError,               32, "style error")                                       \
+  V(BadElementId,             33, "element id is malformed")                           \
+  V(ButtonMissingOnClick,     34, "button element is missing on-click")
 // clang-format on
 
 enum class Severity : uint8_t {
@@ -125,6 +126,17 @@ class DiagnosticList {
   auto Add(Diagnostic diagnostic) -> Diagnostic& {
     diagnostics_.push_back(std::move(diagnostic));
     return diagnostics_.back();
+  }
+
+  auto Warning(const DiagnosticCode code, const Span& span, std::string message, std::string span_label = {})
+      -> Diagnostic& {
+    Diagnostic d{};
+    d.severity = Severity::kWarning;
+    d.code = static_cast<uint64_t>(code);
+    d.message = std::move(message);
+    d.span = span;
+    d.span_label = std::move(span_label);
+    return Add(std::move(d));
   }
 
   auto Error(const DiagnosticCode code, const Span& span, std::string message, std::string span_label = {})

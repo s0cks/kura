@@ -5,6 +5,7 @@
 
 #include "compiler/frontend/syntax/lexer.h"
 #include "frontend/syntax/ast.h"
+#include "frontend/syntax/diagnostic.h"
 
 namespace kura::syntax {
 namespace {
@@ -278,6 +279,10 @@ class TreeBuilder {
 
   auto Report(const DiagnosticCode code, const Span& span, std::string message, std::string label = {}) -> Diagnostic& {
     return diagnostics_.Error(code, span, std::move(message), std::move(label));
+  }
+
+  auto Warn(const DiagnosticCode code, const Span& span, std::string message, std::string label = {}) -> Diagnostic& {
+    return diagnostics_.Warning(code, span, std::move(message), std::move(label));
   }
 
   void ExpectedHere(const std::string& what) {
@@ -1754,8 +1759,7 @@ class TreeBuilder {
     const auto token = Next();
     const auto name = MakeName(token.span, Text(token.span));
     if (element.has_id) {
-      Report(DiagnosticCode::kBadElementId, SpanFrom(colon.span.begin), "an element has one id",
-             "remove this id")
+      Report(DiagnosticCode::kBadElementId, SpanFrom(colon.span.begin), "an element has one id", "remove this id")
           .WithLabel(element.id.span, "the id is already given here");
       return;
     }
@@ -1779,6 +1783,7 @@ class TreeBuilder {
       element->span = SpanFrom(begin);
       return element;
     }
+    bool seen_on_click = false;
     if (Is(K::kIdent)) {
       const auto tag = Next();
       element->tag = MakeName(tag.span, Text(tag.span));
@@ -1801,7 +1806,9 @@ class TreeBuilder {
       auto seen_positional = false;
       for (const auto* prop : element->props) {
         const auto* arg = prop->As<Arg>();
-        if (arg->form == Arg::kPositional) {
+        if (arg->name.text == "on-click") {
+          seen_on_click = true;
+        } else if (arg->form == Arg::kPositional) {
           seen_positional = true;
         } else if (seen_positional) {
           Report(DiagnosticCode::kPositionalNotLast, arg->span, "this argument comes after a positional one",
@@ -1811,12 +1818,20 @@ class TreeBuilder {
         }
       }
     }
+
     if (Is(K::kLBrace)) {
       const auto open = Next();
       element->has_children = true;
       ParseUiChildren(*element, open.span);
     }
     element->span = SpanFrom(begin);
+
+    if (element->tag.text == "button" && !seen_on_click) {
+      Warn(DiagnosticCode::kButtonMissingOnClick, element->span, "#button is missing on-click",
+           "add an on-click property")
+          .WithHelp("#button elements should have an on-click property, like: #button(on-click: MyMessage)");
+    }
+
     return element;
   }
 

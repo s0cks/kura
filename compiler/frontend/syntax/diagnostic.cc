@@ -153,11 +153,6 @@ class DiagnosticRenderer {
   ~DiagnosticRenderer() = default;
 
   void Render(const SourceFile& source, const Diagnostic& d) {
-    // const auto paint = [&](const char* color, const std::string& text) {
-    //   return options.color ? std::string(color) + text + kReset : text;
-    // };
-
-    // gutter width is decided by the largest line number we will print
     auto last_line = source.GetPosition(d.span.begin).line + 1;
     for (const auto& label : d.labels)
       last_line = std::max(last_line, source.GetPosition(label.span.begin).line + 1);
@@ -171,7 +166,7 @@ class DiagnosticRenderer {
     stream() << "\n";
 
     magenta("--> ");
-    stream() << source.GetName() << ": " << begin << "\n";
+    stream() << source.GetName() << ":" << begin << "\n";
 
     stream() << gutter;
     magenta(" |");

@@ -1,3 +1,5 @@
+find_package(argparse CONFIG REQUIRED)
+
 add_library(kura-syntax STATIC
   ast.cc
   ast_printer.cc
