@@ -71,12 +71,23 @@ auto AlignOf(const std::string& name, layout::Align* out) -> bool {
 auto LayoutPlan::PropertyOf(const std::string_view name) -> std::optional<layout::Property> {
   using P = layout::Property;
   static constexpr std::pair<std::string_view, P> kProperties[] = {
-      {"width", P::kWidth},       {"height", P::kHeight},     {"min-width", P::kMinWidth},
-      {"min-height", P::kMinHeight}, {"max-width", P::kMaxWidth}, {"max-height", P::kMaxHeight},
-      {"basis", P::kBasis},       {"padding", P::kPadding},   {"margin", P::kMargin},
-      {"gap", P::kGap},           {"direction", P::kDirection}, {"align", P::kAlign},
-      {"align-self", P::kAlignSelf}, {"justify", P::kJustify}, {"wrap", P::kWrap},
-      {"grow", P::kGrow},         {"shrink", P::kShrink},
+      {"width", P::kWidth},
+      {"height", P::kHeight},
+      {"min-width", P::kMinWidth},
+      {"min-height", P::kMinHeight},
+      {"max-width", P::kMaxWidth},
+      {"max-height", P::kMaxHeight},
+      {"basis", P::kBasis},
+      {"padding", P::kPadding},
+      {"margin", P::kMargin},
+      {"gap", P::kGap},
+      {"direction", P::kDirection},
+      {"align", P::kAlign},
+      {"align-self", P::kAlignSelf},
+      {"justify", P::kJustify},
+      {"wrap", P::kWrap},
+      {"grow", P::kGrow},
+      {"shrink", P::kShrink},
   };
   for (const auto& [candidate, property] : kProperties) {
     if (candidate == name)
@@ -224,14 +235,15 @@ auto LayoutPlan::Add(dom::Node* node, dom::Node* root, const layout::NodeId pare
 
   const auto id = static_cast<layout::NodeId>(nodes_.size());
   layout::Style style{};
-  style.display = node->IsFragment() && (node != root || template_) ? layout::Display::kContents : layout::Display::kFlex;
+  style.display =
+      node->IsFragment() && (node != root || template_) ? layout::Display::kContents : layout::Display::kFlex;
   // a list goes down the page unless it says otherwise
   if (node->IsList())
     style.direction = layout::Direction::kColumn;
   if (!Convert(node, &style, id, error))
     return false;
 
-  if (node->IsScroll() || node->IsList()) {
+  if (node->IsScroll()) {
     // The viewport is the box the node's own properties are about, and what it scrolls is a node in it: that is
     // laid out as large as its children want, never smaller, and it takes what makes the node a container. The
     // viewport's own direction is the content's, so that the content goes the way the node does.

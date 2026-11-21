@@ -31,10 +31,10 @@
 #include "backend/gir.h"
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
-#include "heap/objects.h"
 #include "c_type.h"
 #include "common.h"
 #include "function.h"
+#include "heap/objects.h"
 #include "local_scope.h"
 #include "module.h"
 #include "object.h"
@@ -327,8 +327,8 @@ class Generator {
   // A block of the function's stack as big as a heap object with `payload` bytes after its header. It is made at the
   // function's entry, so it is one block however many times the instruction that wants it is reached.
   auto StackBlock(const uint64_t payload) -> llvm::Value* {
-    const uint64_t total = (sizeof(heap::HeapObject) + payload + kObjectAlignment - 1) &
-                           ~static_cast<uint64_t>(kObjectAlignment - 1);
+    const uint64_t total =
+        (sizeof(heap::HeapObject) + payload + kObjectAlignment - 1) & ~static_cast<uint64_t>(kObjectAlignment - 1);
     auto& entry = fn_->native->getEntryBlock();
     llvm::IRBuilder<> at(&entry, entry.getFirstInsertionPt());
     const auto slot = at.CreateAlloca(llvm::ArrayType::get(llvm::Type::getInt8Ty(ctx_), total));
@@ -616,6 +616,29 @@ class Generator {
 
   LOWER_FN(AllocImage) {
     // TODO(@s0cks): not implement
+  }
+
+  LOWER_FN(RectPastClip) {
+    llvm::Value* a = Val(instr->GetItem());  // <4 x float>: {x, y, w, h} (or GetLeft())
+    llvm::Value* b = Val(instr->GetClip());  // <4 x float>: {x, y, w, h} (or GetRight())
+
+    llvm::Value* ax0 = b_.CreateExtractElement(a, b_.getInt64(0), "a.x0");
+    llvm::Value* ay0 = b_.CreateExtractElement(a, b_.getInt64(1), "a.y0");
+
+    llvm::Value* bx0 = b_.CreateExtractElement(b, b_.getInt64(0), "b.x0");
+    llvm::Value* by0 = b_.CreateExtractElement(b, b_.getInt64(1), "b.y0");
+    llvm::Value* bw = b_.CreateExtractElement(b, b_.getInt64(2), "b.w");
+    llvm::Value* bh = b_.CreateExtractElement(b, b_.getInt64(3), "b.h");
+
+    llvm::Value* bx1 = b_.CreateFAdd(bx0, bw, "b.x1");
+    llvm::Value* by1 = b_.CreateFAdd(by0, bh, "b.y1");
+
+    // True once the item has scrolled strictly past the right or bottom edge of the clip rect
+    llvm::Value* past_x = b_.CreateFCmpOGT(ax0, bx1, "rect.past_x");
+    llvm::Value* past_y = b_.CreateFCmpOGT(ay0, by1, "rect.past_y");
+    llvm::Value* past = b_.CreateOr(past_x, past_y, "rect.past");
+
+    Define(instr, past, CompileType::Bool());
   }
 
   LOWER_FN(RectIntersects) {
@@ -973,6 +996,7 @@ class Generator {
     CHECK(TracyBeginZone);
     CHECK(TracyEndZone);
     CHECK(RectIntersects);
+    CHECK(RectPastClip);
 
 #undef CHECK
 

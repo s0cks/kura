@@ -945,6 +945,11 @@ class DrawImageInstr : public GraphicsInstr {
     return SetInputAt(kSourcePos, rhs);
   }
 
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    if (idx == kSourcePos)
+      SetSource(rhs);
+  }
+
   DECLARE_INSTRUCTION_TYPE(DrawImage);
 
  public:
@@ -980,6 +985,34 @@ class LayoutRectInstr : public GraphicsInstr {
  public:
   static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node) -> LayoutRectInstr* {
     return new LayoutRectInstr(std::move(plan), node);
+  }
+};
+
+class RectPastClipInstr : public TemplateDefinition<2> {
+ public:
+  static constexpr uint64_t kItemPos = 0;
+  static constexpr uint64_t kClipPos = 1;
+
+ public:
+  RectPastClipInstr(Value* item, Value* clip) {
+    SetInputAt(kItemPos, item);
+    SetInputAt(kClipPos, clip);
+  }
+  ~RectPastClipInstr() override = default;
+
+  inline auto GetItem() const -> Value* {
+    return GetInputAt(kItemPos);
+  }
+
+  inline auto GetClip() const -> Value* {
+    return GetInputAt(kClipPos);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(RectPastClip);
+
+ public:
+  static inline auto New(Value* item, Value* clip) -> RectPastClipInstr* {
+    return new RectPastClipInstr(item, clip);
   }
 };
 }  // namespace kura

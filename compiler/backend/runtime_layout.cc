@@ -45,6 +45,29 @@ struct ScrollState {
   float max_y = 0;
 };
 
+struct Flat {
+  std::vector<lay::Node> nodes{};
+  std::vector<lay::Box> boxes{};
+  std::vector<std::string_view> texts{};
+  std::vector<float> sizes{};
+  std::vector<std::string_view> families{};
+
+  void Clear() {
+    nodes.clear();
+    boxes.clear();
+    texts.clear();
+    sizes.clear();
+    families.clear();
+  }
+};
+
+// One line of a text that has been wrapped, and how big it is.
+struct Line {
+  std::string text{};
+  float width = 0;
+  float height = 0;
+};
+
 struct Context {
   const void* table = nullptr;
   // by the id of the viewport node
@@ -62,6 +85,7 @@ struct Context {
   lay::Engine engine{};
   lay::Size viewport{lay::kUndefined, lay::kUndefined};
   bool dirty = true;
+  Flat flat{};
 };
 
 thread_local std::unordered_map<const void*, std::unique_ptr<Context>> tl_contexts{};
@@ -130,12 +154,11 @@ auto Equal(const lay::Edges& a, const lay::Edges& b) -> bool {
 
 auto Equal(const lay::Style& a, const lay::Style& b) -> bool {
   return Equal(a.width, b.width) && Equal(a.height, b.height) && Equal(a.min_width, b.min_width) &&
-         Equal(a.min_height, b.min_height) && Equal(a.max_width, b.max_width) &&
-         Equal(a.max_height, b.max_height) && Equal(a.basis, b.basis) && Equal(a.padding, b.padding) &&
-         Equal(a.margin, b.margin) && Equal(a.gap, b.gap) && a.grow == b.grow && a.shrink == b.shrink &&
-         a.direction == b.direction && a.align == b.align && a.align_self == b.align_self &&
-         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display && a.overflow == b.overflow &&
-         a.single_line == b.single_line;
+         Equal(a.min_height, b.min_height) && Equal(a.max_width, b.max_width) && Equal(a.max_height, b.max_height) &&
+         Equal(a.basis, b.basis) && Equal(a.padding, b.padding) && Equal(a.margin, b.margin) && Equal(a.gap, b.gap) &&
+         a.grow == b.grow && a.shrink == b.shrink && a.direction == b.direction && a.align == b.align &&
+         a.align_self == b.align_self && a.justify == b.justify && a.wrap == b.wrap && a.display == b.display &&
+         a.overflow == b.overflow && a.single_line == b.single_line;
 }
 
 // Whether an instance was made from this table: tables are constant, so the same shape is the same values. They
@@ -150,26 +173,20 @@ auto Matches(const Context& instance, const void* table, const uint64_t count) -
   const auto a = static_cast<const lay::Node*>(instance.table);
   const auto b = static_cast<const lay::Node*>(table);
   for (uint64_t i = 0; i < count; i++) {
-    if (a[i].parent != b[i].parent || a[i].first_child != b[i].first_child ||
-        a[i].next_sibling != b[i].next_sibling || a[i].measured != b[i].measured || !Equal(a[i].style, b[i].style))
+    if (a[i].parent != b[i].parent || a[i].first_child != b[i].first_child || a[i].next_sibling != b[i].next_sibling ||
+        a[i].measured != b[i].measured || !Equal(a[i].style, b[i].style))
       return false;
   }
   return true;
 }
 
 // The tree and its instances as one table for the kernel.
-struct Flat {
-  std::vector<lay::Node> nodes{};
-  std::vector<lay::Box> boxes{};
-  std::vector<std::string> texts{};
-  std::vector<float> sizes{};
-  std::vector<std::string> families{};
-};
-
 void Flatten(Context* context, Flat* flat) {
   const auto base = flat->nodes.size();
   context->base = base;
-  const auto shift = [base](const lay::NodeId id) { return id == lay::kNoNode ? id : id + base; };
+  const auto shift = [base](const lay::NodeId id) {
+    return id == lay::kNoNode ? id : id + base;
+  };
   for (size_t i = 0; i < context->nodes.size(); i++) {
     auto node = context->nodes[i];
     node.parent = shift(node.parent);
@@ -247,7 +264,7 @@ void Scatter(Context* context, const Flat& flat) {
 }
 
 // What the renderer can't tell us, when there is no renderer to ask: enough to keep layout working.
-auto MeasureLine(const std::string& text, const float size, const std::string& family) -> lay::Size {
+auto MeasureLine(const std::string_view text, const float size, const std::string_view family) -> lay::Size {
   float width = 0;
   float height = 0;
   if (kura_rt_measure_text(text.data(), text.size(), size, family.empty() ? nullptr : family.data(), family.size(),
@@ -256,21 +273,11 @@ auto MeasureLine(const std::string& text, const float size, const std::string& f
   return lay::Size{width, height};
 }
 
-// One line of a text that has been wrapped, and how big it is.
-struct Line {
-  std::string text{};
-  float width = 0;
-  float height = 0;
-};
-
-// A text's lines: all of it on one line when it fits in `max_width` (or there is none), and otherwise broken at
-// word boundaries. A word longer than the line gets a line of its own and overflows it. Layout measures a text
-// with this, and drawing places its lines with it, so what is drawn is what was made room for.
-auto Wrap(const std::string& text, const float size, const std::string& family, const lay::Scalar max_width)
+auto Wrap(const std::string_view text, const float size, const std::string_view family, const lay::Scalar max_width)
     -> std::vector<Line> {
   const auto whole = MeasureLine(text, size, family);
   if (!lay::IsDefined(max_width) || whole.width <= max_width)
-    return {Line{text, whole.width, whole.height}};
+    return {Line{std::string(text), whole.width, whole.height}};
 
   std::vector<Line> lines{};
   Line line{};
@@ -279,14 +286,14 @@ auto Wrap(const std::string& text, const float size, const std::string& family, 
     const auto end = std::min(text.find(' ', pos), text.size());
     const auto word = text.substr(pos, end - pos);
     pos = end + 1;
-    const auto candidate = line.text.empty() ? word : line.text + " " + word;
+    const auto candidate = line.text.empty() ? std::string(word) : line.text + " " + std::string(word);
     const auto measured = MeasureLine(candidate, size, family);
     if (line.text.empty() || measured.width <= max_width) {
-      line = Line{candidate, measured.width, measured.height};
+      line = Line{std::move(candidate), measured.width, measured.height};
     } else {
       lines.push_back(std::move(line));
       const auto alone = MeasureLine(word, size, family);
-      line = Line{word, alone.width, alone.height};
+      line = Line{std::string(word), alone.width, alone.height};
     }
   }
   lines.push_back(std::move(line));
@@ -387,9 +394,9 @@ auto Apply(lay::Style* style, const lay::Property property, const uint64_t tag, 
     case lay::Property::kWidth:
     case lay::Property::kHeight:
     case lay::Property::kBasis: {
-      auto& target = property == lay::Property::kWidth    ? style->width
-                     : property == lay::Property::kHeight ? style->height
-                                                          : style->basis;
+      auto& target = property == lay::Property::kWidth  ? style->width
+                   : property == lay::Property::kHeight ? style->height
+                                                        : style->basis;
       if (tag == kura::rt::kTagFr) {
         // `1fr` is a share of the free space: it grows from nothing.
         number = static_cast<float>(AsDouble(bits));
@@ -405,10 +412,10 @@ auto Apply(lay::Style* style, const lay::Property property, const uint64_t tag, 
     case lay::Property::kMinHeight:
     case lay::Property::kMaxWidth:
     case lay::Property::kMaxHeight: {
-      auto& target = property == lay::Property::kMinWidth    ? style->min_width
-                     : property == lay::Property::kMinHeight ? style->min_height
-                     : property == lay::Property::kMaxWidth  ? style->max_width
-                                                             : style->max_height;
+      auto& target = property == lay::Property::kMinWidth  ? style->min_width
+                   : property == lay::Property::kMinHeight ? style->min_height
+                   : property == lay::Property::kMaxWidth  ? style->max_width
+                                                           : style->max_height;
       if (!ToLength(tag, bits, &length))
         break;
       return Assign(&target, length);
@@ -507,14 +514,15 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
   auto& context = ContextFor(table, count);
   if (node >= count)
     return;
-  const std::string value(kura::rt::StringView(reinterpret_cast<uint64_t>(text)));
+  const std::string_view value = kura::rt::StringView(reinterpret_cast<uint64_t>(text));
   const auto font_size = static_cast<float>(size);
-  const auto font_family = family == nullptr ? std::string{} : std::string(family, static_cast<size_t>(family_length));
+  const std::string_view font_family =
+      family == nullptr ? std::string_view{} : std::string_view(family, static_cast<size_t>(family_length));
   if (context.texts[node] == value && context.sizes[node] == font_size && context.families[node] == font_family)
     return;
-  context.texts[node] = value;
+  context.texts[node].assign(value.data(), value.size());
   context.sizes[node] = font_size;
-  context.families[node] = font_family;
+  context.families[node].assign(font_family.data(), font_family.size());
   Touch(&context);
 }
 
@@ -605,12 +613,12 @@ void kura_rt_layout_run(const void* table, const uint64_t count) {
   if (!context.dirty && viewport.width == context.viewport.width && viewport.height == context.viewport.height)
     return;
 
-  Flat flat{};
-  Flatten(&context, &flat);
-  flat.boxes.resize(flat.nodes.size());
-  context.engine.Run(flat.nodes, 0, viewport, flat.boxes, &Measure, &flat);
-  ApplyScroll(&context, &flat);
-  Scatter(&context, flat);
+  context.flat.Clear();
+  Flatten(&context, &context.flat);
+  context.flat.boxes.resize(context.flat.nodes.size());
+  context.engine.Run(context.flat.nodes, 0, viewport, context.flat.boxes, &Measure, &context.flat);
+  ApplyScroll(&context, &context.flat);
+  Scatter(&context, context.flat);
   context.viewport = viewport;
   context.dirty = false;
 }

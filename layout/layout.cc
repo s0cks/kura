@@ -26,15 +26,6 @@ static inline auto ResolveOr(const Length& length, const Scalar base, const Scal
   return IsDefined(value) ? value : fallback;
 }
 
-// The minimum wins over the maximum, as in CSS. Either bound may be undefined.
-static inline auto Clamp(Scalar value, const Scalar min, const Scalar max) -> Scalar {
-  if (IsDefined(max) && value > max)
-    value = max;
-  if (IsDefined(min) && value < min)
-    value = min;
-  return value;
-}
-
 static inline auto Bits(const Scalar value) -> uint32_t {
   return IsDefined(value) ? std::bit_cast<uint32_t>(value) : 0x7fc00000u;
 }
@@ -65,47 +56,6 @@ static inline auto IsReverse(const Direction direction) -> bool {
 }  // namespace
 
 // A flex item, in the axes of its container: "main" runs along the container's direction, "cross" across it.
-struct Engine::Item {
-  NodeId id = kNoNode;
-  Scalar margin_main_start = 0;
-  Scalar margin_main_end = 0;
-  Scalar margin_cross_start = 0;
-  Scalar margin_cross_end = 0;
-  Scalar min_main = 0;
-  Scalar max_main = kUndefined;
-  Scalar min_cross = 0;
-  Scalar max_cross = kUndefined;
-  Scalar pad_main = 0;
-  Scalar style_cross = kUndefined;  // the cross size the style asks for, if it asks for one
-  Align align = Align::kStretch;
-  Scalar grow = 0;
-  Scalar shrink = 1;
-  Scalar basis = 0;  // flex base size
-  Scalar hypothetical = 0;  // flex base size, clamped
-  Scalar main = 0;  // resolved
-  Scalar cross = 0;
-  Scalar pos_main = 0;  // border box offset from the container's inner box
-  Scalar pos_cross = 0;
-  Scalar violation = 0;
-  bool frozen = false;
-
-  inline auto ClampMain(const Scalar value) const -> Scalar {
-    return Clamp(value, min_main, max_main);
-  }
-
-  inline auto ClampCross(const Scalar value) const -> Scalar {
-    return Clamp(value, min_cross, max_cross);
-  }
-
-  inline auto MainMargins() const -> Scalar {
-    return margin_main_start + margin_main_end;
-  }
-
-  inline auto CrossMargins() const -> Scalar {
-    return margin_cross_start + margin_cross_end;
-  }
-};
-
 void Engine::CollectItems(const NodeId parent, std::vector<NodeId>* items, std::vector<NodeId>* contents) const {
   for (auto child = nodes_[parent].first_child; child != kNoNode; child = nodes_[child].next_sibling) {
     if (nodes_[child].style.display == Display::kContents) {
@@ -149,8 +99,8 @@ auto Engine::Compute(const NodeId id, const Scalar kw, const Scalar kh, const Sc
   return size;
 }
 
-auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar aw, const Scalar ah,
-                             const Scalar pw, const bool commit, const Scalar ox, const Scalar oy) -> Size {
+auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar aw, const Scalar ah, const Scalar pw,
+                             const bool commit, const Scalar ox, const Scalar oy) -> Size {
   computes_++;
   const auto& node = nodes_[id];
   const auto& style = node.style;
@@ -181,10 +131,34 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
     return Size{width, height};
   }
 
+  const size_t ids_base = scratch_ids_.size();
+  const size_t contents_base = scratch_contents_.size();
+  const size_t items_base = scratch_items_.size();
+  const size_t lines_base = scratch_lines_.size();
+
+  struct ScratchGuard {
+    Engine* engine;
+    size_t ids_base;
+    size_t contents_base;
+    size_t items_base;
+    size_t lines_base;
+    ~ScratchGuard() {
+      engine->scratch_ids_.resize(ids_base);
+      engine->scratch_contents_.resize(contents_base);
+      engine->scratch_items_.resize(items_base);
+      engine->scratch_lines_.resize(lines_base);
+    }
+  } guard{this, ids_base, contents_base, items_base, lines_base};
+
   const auto row = IsRow(style.direction);
-  std::vector<NodeId> ids{};
-  std::vector<NodeId> contents{};
-  CollectItems(id, &ids, &contents);
+  CollectItems(id, &scratch_ids_, &scratch_contents_);
+  const size_t ids_end = scratch_ids_.size();
+  const size_t contents_end = scratch_contents_.size();
+  // Pre-allocate the exact slot range for this container's items upfront!
+  scratch_items_.resize(items_base + (ids_end - ids_base));
+  const std::span<const NodeId> ids(scratch_ids_.data() + ids_base, scratch_ids_.size() - ids_base);
+  const std::span<const NodeId> contents(scratch_contents_.data() + contents_base,
+                                         scratch_contents_.size() - contents_base);
 
   // The space the children may assume when this box has no size of its own yet.
   const auto avail_iw = IsDefined(iw) ? iw : (IsDefined(aw) ? std::max(aw - pad_w, 0.0f) : kUndefined);
@@ -197,9 +171,8 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
   const auto gap_cross = std::max(ResolveOr(style.gap, cross_in, 0), 0.0f);
 
   // 9.2: the flex base size and hypothetical main size of every item.
-  std::vector<Item> items{};
-  items.reserve(ids.size());
-  for (const auto child : ids) {
+  for (size_t idx = 0; idx < ids_end - ids_base; ++idx) {
+    const auto child = scratch_ids_[ids_base + idx];
     const auto& cs = nodes_[child].style;
     Item item{};
     item.id = child;
@@ -251,30 +224,24 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
     }
     item.basis = std::max(basis, item.pad_main);
     item.hypothetical = item.ClampMain(item.basis);
-    items.push_back(item);
+
+    scratch_items_[items_base + idx] = item;
   }
+  const std::span<Item> items(scratch_items_.data() + items_base, scratch_items_.size() - items_base);
 
   // 9.3: collect the items into lines. An undefined main size is the longest line, which for a container
-  // that wraps is limited by the space on offer.
-  struct Line {
-    size_t begin = 0;
-    size_t end = 0;
-    Scalar used = 0;
-    Scalar cross = 0;
-    Scalar offset = 0;
-  };
-  std::vector<Line> lines{};
   {
-    const auto break_at = IsDefined(main_in)
-                              ? main_in
-                              : (style.wrap && IsDefined(avail_main) ? avail_main : std::numeric_limits<Scalar>::infinity());
+    const auto break_at =
+        IsDefined(main_in)
+            ? main_in
+            : (style.wrap && IsDefined(avail_main) ? avail_main : std::numeric_limits<Scalar>::infinity());
     Line line{};
     for (size_t i = 0; i < items.size(); ++i) {
       const auto outer = items[i].hypothetical + items[i].MainMargins();
       const auto added = (i > line.begin ? gap_main : 0) + outer;
       if (style.wrap && i > line.begin && line.used + added > break_at + kEpsilon) {
         line.end = i;
-        lines.push_back(line);
+        scratch_lines_.push_back(line);
         line = Line{};
         line.begin = i;
         line.used = outer;
@@ -284,9 +251,10 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
     }
     if (!items.empty()) {
       line.end = items.size();
-      lines.push_back(line);
+      scratch_lines_.push_back(line);
     }
   }
+  const std::span<Line> lines(scratch_lines_.data() + lines_base, scratch_lines_.size() - lines_base);
   if (!IsDefined(main_in)) {
     main_in = 0;
     for (const auto& line : lines)
@@ -304,8 +272,8 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
     for (auto i = line.begin; i < line.end; ++i) {
       auto& item = items[i];
       const auto factor = growing ? item.grow : item.shrink;
-      item.frozen = factor == 0 || (growing && item.basis > item.hypothetical) ||
-                    (!growing && item.basis < item.hypothetical);
+      item.frozen =
+          factor == 0 || (growing && item.basis > item.hypothetical) || (!growing && item.basis < item.hypothetical);
       item.main = item.frozen ? item.hypothetical : item.basis;
     }
     const auto free_space = [&]() {
@@ -366,7 +334,8 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
 
   // 9.4: cross sizes. An item that is going to be stretched (auto cross size, `align: stretch`) is sized by
   // its line below, and by the container itself when there is only one line.
-  for (auto& item : items) {
+  for (size_t idx = 0; idx < ids_end - ids_base; ++idx) {
+    auto& item = scratch_items_[items_base + idx];
     if (IsDefined(item.style_cross)) {
       item.cross = item.style_cross;
     } else if (item.align == Align::kStretch && !style.wrap && IsDefined(cross_in)) {
@@ -374,7 +343,8 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
     } else {
       const auto content = Compute(item.id, row ? item.main : kUndefined, row ? kUndefined : item.main,
                                    row ? kUndefined : avail_cross, row ? avail_cross : kUndefined, iw, false, 0, 0);
-      item.cross = item.ClampCross(row ? content.height : content.width);
+      scratch_items_[items_base + idx].cross =
+          scratch_items_[items_base + idx].ClampCross(row ? content.height : content.width);
     }
   }
   for (auto& line : lines) {
@@ -472,16 +442,18 @@ auto Engine::ComputeUncached(const NodeId id, Scalar kw, Scalar kh, const Scalar
   const auto height = IsDefined(kh) ? kh : (row ? cross_in : main_in) + pad_h;
 
   if (commit) {
-    for (const auto child : contents)
-      out_[child] = Box{ox + pad.left, oy + pad.top, 0, 0};
-    for (const auto& item : items) {
+    for (size_t idx = contents_base; idx < contents_end; ++idx)
+      out_[scratch_contents_[idx]] = Box{ox + pad.left, oy + pad.top, 0, 0};
+    for (size_t idx = 0; idx < ids_end - ids_base; ++idx) {
+      const auto& item = scratch_items_[items_base + idx];
+      const auto child_id = item.id;
       const auto x = ox + pad.left + (row ? item.pos_main : item.pos_cross);
       const auto y = oy + pad.top + (row ? item.pos_cross : item.pos_main);
       const auto w = row ? item.main : item.cross;
       const auto h = row ? item.cross : item.main;
-      out_[item.id] = Box{x, y, w, h};
-      if (nodes_[item.id].first_child != kNoNode)
-        Compute(item.id, w, h, kUndefined, kUndefined, width - pad_w, true, x, y);
+      out_[child_id] = Box{x, y, w, h};
+      if (nodes_[child_id].first_child != kNoNode)
+        Compute(child_id, w, h, kUndefined, kUndefined, width - pad_w, true, x, y);
     }
   }
   return Size{width, height};
@@ -544,11 +516,14 @@ void Engine::Run(const std::span<const Node> nodes, const NodeId root, const Siz
   auto height = Resolve(style.height, vh);
   if (!IsDefined(height))
     height = std::max(vh - margin_top - margin_bottom, 0.0f);
-  width = Clamp(width, std::max(ResolveOr(style.min_width, vw, 0), pad.left + pad.right),
-                Resolve(style.max_width, vw));
-  height = Clamp(height, std::max(ResolveOr(style.min_height, vh, 0), pad.top + pad.bottom),
-                 Resolve(style.max_height, vh));
+  width = Clamp(width, std::max(ResolveOr(style.min_width, vw, 0), pad.left + pad.right), Resolve(style.max_width, vw));
+  height =
+      Clamp(height, std::max(ResolveOr(style.min_height, vh, 0), pad.top + pad.bottom), Resolve(style.max_height, vh));
   out_[root] = Box{margin_left, margin_top, width, height};
+  scratch_ids_.clear();
+  scratch_contents_.clear();
+  scratch_items_.clear();
+  scratch_lines_.clear();
   Compute(root, width, height, kUndefined, kUndefined, vw, true, margin_left, margin_top);
   FixContents(root);
 }

@@ -264,6 +264,9 @@ class GlImpl {
 
     verts_.clear();
     idx_.clear();
+    text_verts_.clear();
+    text_idx_.clear();
+    active_atlas_ = nullptr;
     clips_.clear();
     in_frame_ = true;
     return KURA_RENDERER_OK;
@@ -272,6 +275,12 @@ class GlImpl {
   auto EndFrame() -> Status {
     if (!in_frame_)
       return KURA_RENDERER_ERR_NOT_IN_FRAME;
+
+    if (active_atlas_) {
+      FlushText(*active_atlas_);
+      active_atlas_ = nullptr;
+    }
+
     Flush();
     in_frame_ = false;
     const auto balanced = clips_.empty();
@@ -360,10 +369,14 @@ class GlImpl {
     const auto lines = font->Shape(std::string_view(length == 0 ? "" : utf8, length), style.size);
     const auto metrics = font->GetMetrics(style.size);
 
-    // what was batched is drawn first, so that text lands over it and under what comes later
     Flush();
     EnsureTextPipeline();
     auto& atlas = AtlasFor(font);
+
+    if (active_atlas_ && active_atlas_ != &atlas)
+      FlushText(*active_atlas_);
+    active_atlas_ = &atlas;
+
     const auto r = Channel(color.r);
     const auto g = Channel(color.g);
     const auto b = Channel(color.b);
@@ -391,7 +404,7 @@ class GlImpl {
       }
       baseline += static_cast<double>(metrics.line_height);
     }
-    FlushText(atlas);
+
     return KURA_RENDERER_OK;
   }
 
@@ -468,6 +481,7 @@ class GlImpl {
   std::unordered_map<const text::Font*, Atlas> atlases_{};
   std::vector<TextVertex> text_verts_{};
   std::vector<uint32_t> text_idx_{};
+  const Atlas* active_atlas_ = nullptr;
 
   void EnsureTextPipeline() {
     if (text_program_ != 0)
@@ -554,8 +568,8 @@ class GlImpl {
       atlas.cursor_y += atlas.row_height + 1;
       atlas.row_height = 0;
     }
+
     if (atlas.cursor_y + bitmap.height + 1 > kAtlasSize) {
-      // Full. What's queued refers to the glyphs about to go, so it's drawn before they do.
       FlushText(atlas);
       atlas.glyphs.clear();
       atlas.cursor_x = atlas.cursor_y = atlas.row_height = 0;
@@ -587,6 +601,7 @@ class GlImpl {
   void AddGlyphQuad(Atlas& atlas, const TextVertex& a, const TextVertex& b, const TextVertex& c, const TextVertex& d) {
     if (text_verts_.size() + 4 > kMaxVertices || text_idx_.size() + 6 > kMaxIndices)
       FlushText(atlas);
+
     const auto base = static_cast<uint32_t>(text_verts_.size());
     text_verts_.insert(text_verts_.end(), {a, b, c, d});
     text_idx_.insert(text_idx_.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
@@ -753,6 +768,11 @@ class GlImpl {
 
   // Draws what was batched under the old clip, and then switches to the current one.
   void ApplyClip() {
+    if (active_atlas_ != nullptr) {
+      FlushText(*active_atlas_);
+      active_atlas_ = nullptr;
+    }
+
     Flush();
     if (clips_.empty()) {
       glDisable(GL_SCISSOR_TEST);
@@ -775,8 +795,14 @@ class GlImpl {
   }
 
   void AddQuad(const Vertex& a, const Vertex& b, const Vertex& c, const Vertex& d) {
+    if (active_atlas_ != nullptr) {
+      FlushText(*active_atlas_);
+      active_atlas_ = nullptr;
+    }
+
     if (verts_.size() + 4 > kMaxVertices || idx_.size() + 6 > kMaxIndices)
       Flush();
+
     const auto base = static_cast<uint32_t>(verts_.size());
     verts_.insert(verts_.end(), {a, b, c, d});
     idx_.insert(idx_.end(), {base, base + 1, base + 2, base, base + 2, base + 3});

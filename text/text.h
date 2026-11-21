@@ -133,7 +133,7 @@ class Font {
   auto GetMetrics(float size) -> FontMetrics;
 
   // Shapes `utf8` at `size` pixels. There is always at least one line, even for empty text.
-  auto Shape(std::string_view utf8, float size) -> std::vector<Line>;
+  auto Shape(std::string_view utf8, float size) -> const std::vector<Line>&;
   auto Measure(std::string_view utf8, float size) -> Metrics;
 
   // Draws one glyph at `size` pixels into a coverage bitmap. A glyph with no outline (a space) has an

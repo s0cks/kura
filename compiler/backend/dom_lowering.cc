@@ -89,6 +89,9 @@ auto DomLowering::EmitPassRange(const size_t begin, const size_t end) -> bool {
       } else if (op.node->IsImage()) {
         if (!DrawImage(op.node))
           return false;
+      } else if (op.node->IsList()) {
+        if (!DrawBlock(op.node))
+          return false;
       }
     }
   }
@@ -125,6 +128,7 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
   const auto owner = host_->GetOwner();
   // when this tree is what a hole makes, where: the hole's own scope must not reach what is lowered in here
   const auto hole = owner->hole_;
+  hole_ = hole;
   struct Restore {
     FlowGraphBuilder* owner;
     const FlowGraphBuilder::HoleScope* hole;
@@ -160,7 +164,7 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
   size_t section_start = 0;
   for (size_t i = 0; i < ops_.size(); i++) {
     const auto& op = ops_[i];
-    if (op.node->IsScroll() || op.node->IsList()) {
+    if (op.node->IsScroll()) {
       if (!EmitPassRange(section_start, i))
         return false;
       if (!DrawScroll(op))
@@ -175,7 +179,6 @@ auto DomLowering::Lower(dom::Node* root) -> bool {
   return EmitPassRange(section_start, ops_.size());
 }
 
-// In backend/dom_lowering.cc
 auto DomLowering::EmitClippedHoleBody(dom::Node* root, const size_t begin, const size_t end) -> bool {
   dom::Node* target_node = (begin < end && ops_[begin].node) ? ops_[begin].node : root;
   Value* item_rect = BoxOf(target_node);
@@ -200,7 +203,24 @@ auto DomLowering::EmitClippedHoleBody(dom::Node* root, const size_t begin, const
 
   // Else branch: offscreen -> skip draw calls completely
   owner->Enter(else_entry);
-  owner->Terminate(GotoInstr::New(join_entry));
+  if (hole_ && hole_->monotonic_forward && hole_->exit != nullptr) {
+    // axis = 1 for vertical column list (`item.y > clip.y + clip.height`), 0 for horizontal row
+    Value* past_end = host_->Bind(RectPastClipInstr::New(item_rect, CurrentClip()));
+    auto* break_entry = owner->NewTarget("clip.break");
+    auto* cont_entry = owner->NewTarget("clip.continue");
+
+    owner->Terminate(BranchInstr::New(past_end, break_entry, cont_entry, nullptr));
+
+    // Past bottom/right of viewport -> jump directly out of the `for` loop!
+    owner->Enter(break_entry);
+    owner->Terminate(GotoInstr::New(hole_->exit));
+
+    // Before top/left of viewport -> skip this item and keep scanning
+    owner->Enter(cont_entry);
+    owner->Terminate(GotoInstr::New(join_entry));
+  } else {
+    owner->Terminate(GotoInstr::New(join_entry));
+  }
 
   // Continue lowering at the join block (graph_->Finalize() wires predecessor/successor edges)
   owner->Enter(join_entry);
@@ -260,7 +280,12 @@ auto DomLowering::VisitScroll(dom::Node* node) -> bool {
 }
 
 auto DomLowering::VisitList(dom::Node* node) -> bool {
-  return VisitScrollable(node);
+  if (!ResolveProperties(node, &resolved_[node]))
+    return false;
+
+  EmitLayoutProperties(node, resolved_[node]);
+  ops_.push_back(Op{node, nullptr});
+  return VisitChildren(node);
 }
 
 auto DomLowering::VisitButton(dom::Node* node) -> bool {
@@ -426,7 +451,7 @@ auto DomLowering::EmitBox(dom::Node* node, const bool always, Value* rect) -> bo
 }
 
 auto DomLowering::DrawBlock(dom::Node* node) -> bool {
-  if (!EmitBox(node, true))
+  if (!EmitBox(node, false))
     return false;
   EmitEvents(node);
   return true;
@@ -441,9 +466,6 @@ auto DomLowering::DrawView(dom::Node* node) -> bool {
 }
 
 auto DomLowering::DrawLine(dom::Node& node) -> bool {
-  if (!EmitBox(&node, true))
-    return false;
-
   Value* rect = BoxOf(&node);
   if (!rect)
     return false;
@@ -534,7 +556,7 @@ auto DomLowering::DrawImage(dom::Node* node) -> bool {
   auto& resolved = resolved_[node];
 
   Value* source = ResolvePropertyByName(node, "source", resolved);
-  if (source)
+  if (!source)
     return Fail("internal error: #" + std::string(node->GetTag()) + " has source value");
 
   EmitRenderCall(DrawImageInstr::New(source));
@@ -599,11 +621,20 @@ auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
   const auto owner = host_->GetOwner();
   const auto outer = owner->hole_;
 
+  bool monotonic_forward = false;
+  const auto& nodes = plan_->GetNodes();
+  if (*id < nodes.size() && nodes[*id].parent != layout::kNoNode) {
+    const auto& parent_style = nodes[nodes[*id].parent].style;
+    monotonic_forward = !parent_style.wrap && (parent_style.direction == layout::Direction::kRow ||
+                                               parent_style.direction == layout::Direction::kColumn);
+  }
+
   // When drawing a `for` comprehension, run two passes (all row boxes, then all row text)
   // so every row's background batches into 1 draw call and every row's text batches into 1 draw call.
   if (draw && node->GetExpr()->IsListComprehension()) {
     for (int pass : {1, 2}) {
-      FlowGraphBuilder::HoleScope scope{plan_, *id, true, static_cast<PaintPass>(pass), CurrentClip()};
+      FlowGraphBuilder::HoleScope scope{
+          plan_, *id, true, static_cast<PaintPass>(pass), CurrentClip(), nullptr, monotonic_forward};
       owner->hole_ = &scope;
       host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
       NodeVisitor for_expr(owner);
@@ -615,7 +646,8 @@ auto DomLowering::RunHole(dom::Node* node, const bool draw) -> bool {
     return true;
   }
 
-  FlowGraphBuilder::HoleScope scope{plan_, *id, draw, static_cast<PaintPass>(0), CurrentClip()};
+  FlowGraphBuilder::HoleScope scope{
+      plan_, *id, draw, static_cast<PaintPass>(0), CurrentClip(), nullptr, monotonic_forward};
   owner->hole_ = &scope;
   host_->Emit(LayoutSlotBeginInstr::New(plan_, *id));
   NodeVisitor for_expr(owner);

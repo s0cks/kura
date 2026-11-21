@@ -71,6 +71,7 @@ class FlowGraph {
   }
 
   void Remove(Instruction* instr);
+  void Replace(Instruction* old, Instruction* instr);
   void ReplaceAllUsesWith(Definition* from, Definition* to);
 
  public:
@@ -165,7 +166,17 @@ class FlowGraph {
   // Computes the block orders and the successor/predecessor edges. Call it
   // once, after the last instruction has been linked.
   void Finalize();
+  void RebuildCFG();
   void DedupeConstants();
+  void EliminateDeadPaints();
+  auto FoldEmptyBranches() -> bool;
+  auto EliminateDeadCode() -> bool;
+  auto EliminateEmptyLoops() -> bool;
+  auto FoldConstantStrings() -> bool;
+  auto EliminateCommonSubexpressions() -> bool;
+  auto EliminateRedundantClips() -> bool;
+  auto SimplifyCFG() -> bool;
+  auto DedupeLayoutSlotBegins() -> bool;
 
   // The immediate dominator of `block` (null for the entry). Valid after
   // Finalize().

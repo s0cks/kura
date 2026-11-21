@@ -192,6 +192,7 @@ struct Font::Impl {
   FT_Face face = nullptr;
   hb_font_t* hb = nullptr;
   hb_buffer_t* scratch_buffer = hb_buffer_create();
+  CachedRun scratch_run_{};
   std::string family{};
   std::string path{};
   FT_F26Dot6 current = 0;
@@ -324,11 +325,12 @@ auto Font::Measure(const std::string_view utf8, const float size) -> Metrics {
   return impl_->ShapeUncached(utf8, size).metrics;
 }
 
-auto Font::Shape(const std::string_view utf8, const float size) -> std::vector<Line> {
+auto Font::Shape(const std::string_view utf8, const float size) -> const std::vector<Line>& {
   if (!utf8.empty() && utf8.size() <= 256) {
     return impl_->GetOrShape(utf8, size)->lines;
   }
-  return impl_->ShapeUncached(utf8, size).lines;
+  impl_->scratch_run_ = impl_->ShapeUncached(utf8, size);
+  return impl_->scratch_run_.lines;
 }
 
 auto Font::Rasterize(const uint32_t glyph, const float size) -> GlyphBitmap {

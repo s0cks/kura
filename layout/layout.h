@@ -249,7 +249,63 @@ class Engine {
     CacheEntry entries[kCacheEntries]{};
   };
 
-  struct Item;
+  // The minimum wins over the maximum, as in CSS. Either bound may be undefined.
+  static inline auto Clamp(Scalar value, const Scalar min, const Scalar max) -> Scalar {
+    if (IsDefined(max) && value > max)
+      value = max;
+    if (IsDefined(min) && value < min)
+      value = min;
+    return value;
+  }
+
+  struct Item {
+    NodeId id = kNoNode;
+    Scalar margin_main_start = 0;
+    Scalar margin_main_end = 0;
+    Scalar margin_cross_start = 0;
+    Scalar margin_cross_end = 0;
+    Scalar min_main = 0;
+    Scalar max_main = kUndefined;
+    Scalar min_cross = 0;
+    Scalar max_cross = kUndefined;
+    Scalar pad_main = 0;
+    Scalar style_cross = kUndefined;  // the cross size the style asks for, if it asks for one
+    Align align = Align::kStretch;
+    Scalar grow = 0;
+    Scalar shrink = 1;
+    Scalar basis = 0;         // flex base size
+    Scalar hypothetical = 0;  // flex base size, clamped
+    Scalar main = 0;          // resolved
+    Scalar cross = 0;
+    Scalar pos_main = 0;  // border box offset from the container's inner box
+    Scalar pos_cross = 0;
+    Scalar violation = 0;
+    bool frozen = false;
+
+    inline auto ClampMain(const Scalar value) const -> Scalar {
+      return Clamp(value, min_main, max_main);
+    }
+
+    inline auto ClampCross(const Scalar value) const -> Scalar {
+      return Clamp(value, min_cross, max_cross);
+    }
+
+    inline auto MainMargins() const -> Scalar {
+      return margin_main_start + margin_main_end;
+    }
+
+    inline auto CrossMargins() const -> Scalar {
+      return margin_cross_start + margin_cross_end;
+    }
+  };
+
+  struct Line {
+    size_t begin = 0;
+    size_t end = 0;
+    Scalar used = 0;
+    Scalar cross = 0;
+    Scalar offset = 0;
+  };
 
   std::span<const Node> nodes_{};
   std::span<Box> out_{};
@@ -259,6 +315,10 @@ class Engine {
   std::vector<Cache> cache_{};
   uint64_t generation_ = 0;
   uint64_t computes_ = 0;
+  std::vector<NodeId> scratch_ids_{};
+  std::vector<NodeId> scratch_contents_{};
+  std::vector<Item> scratch_items_{};
+  std::vector<Line> scratch_lines_{};
 
   auto Compute(NodeId id, Scalar kw, Scalar kh, Scalar aw, Scalar ah, Scalar pw, bool commit, Scalar ox, Scalar oy)
       -> Size;

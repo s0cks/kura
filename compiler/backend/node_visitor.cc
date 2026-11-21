@@ -1,6 +1,7 @@
 #include "node_visitor.h"
 
 #include "backend/dom_lowering.h"
+#include "backend/flow_graph_builder.h"
 #include "backend/ir.h"
 #include "dom/builder.h"
 #include "frontend/expr.h"
@@ -61,6 +62,25 @@ auto NodeVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) -> V
   Loop loop{};
   if (!BeginLoop(iterable, &loop))
     return false;
+
+  const FlowGraphBuilder::HoleScope* prev_hole = GetOwner()->hole_;
+
+  FlowGraphBuilder::HoleScope active_hole{};
+  if (prev_hole) {
+    active_hole = *prev_hole;
+    active_hole.exit = loop.exit;
+    GetOwner()->hole_ = &active_hole;
+  }
+
+  struct RestoreHole {
+    FlowGraphBuilder* owner;
+    const FlowGraphBuilder::HoleScope* prev;
+
+    ~RestoreHole() {
+      owner->hole_ = prev;
+    }
+  } restore_hole{GetOwner(), prev_hole};
+
   // `for i in xs` skips the element, and `for _, x in xs` the index
   if (expr->GetLocal() != nullptr)
     GetOwner()->Define(expr->GetLocal(), loop.item->GetDefinition());

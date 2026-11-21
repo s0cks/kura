@@ -17,6 +17,15 @@ auto AllocImageInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto RectPastClipInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "RectPastClip(";
+  ss << "item=" << Name(GetItem()) << ", ";
+  ss << "clip=" << Name(GetClip()) << ", ";
+  ss << ")";
+  return ss.str();
+}
+
 auto DrawImageInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawImageInstr(";

@@ -78,6 +78,8 @@ class FlowGraphBuilder {
     bool draw = false;
     PaintPass pass = PaintPass::kAll;
     Value* clip;
+    EntryInstr* exit = nullptr;
+    bool monotonic_forward = false;
   };
   const HoleScope* hole_ = nullptr;
 

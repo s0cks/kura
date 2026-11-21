@@ -54,6 +54,7 @@ class DomLowering : public dom::Visitor {
   std::vector<Op> ops_{};
   PaintPass pass_ = kAll;
   std::vector<Value*> clip_stack_{};
+  const FlowGraphBuilder::HoleScope* hole_ = nullptr;
 
   auto CurrentClip() const -> Value* {
     return clip_stack_.empty() ? nullptr : clip_stack_.back();

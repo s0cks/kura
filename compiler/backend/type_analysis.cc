@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "backend/compile_type.h"
 #include "backend/ir.h"
 #include "c_type.h"
 #include "frontend/builtins.h"
@@ -1117,6 +1118,9 @@ class Analyzer {
 
       return Set(def, declared->second);
     }
+
+    if (const auto t = instr->IsRectPastClip())
+      return Set(def, CompileType::Bool());
 
     if (const auto t = instr->AsTestVariant()) {
       const auto subject = TypeOf(t->GetValue());

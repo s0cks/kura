@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.29)
+
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+  message(STATUS "compiling using ccache")
+  set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
+
 project(kura
   VERSION 0.0.1
   HOMEPAGE_URL https://github.com/s0cks/kura

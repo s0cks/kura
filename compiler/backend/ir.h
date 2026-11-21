@@ -79,7 +79,8 @@ namespace kura {
   V(DrawQuadBezier)             \
   V(RegisterEvent)              \
   V(TracyBeginZone)             \
-  V(TracyEndZone)
+  V(TracyEndZone)               \
+  V(RectPastClip)
 
 class Instruction;
 class EntryInstr;
@@ -769,6 +770,11 @@ class NewVariantInstr : public Definition {
     return idx == 0 ? payload_ : nullptr;
   }
 
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    if (idx == 0)
+      payload_ = rhs;
+  }
+
   DECLARE_INSTRUCTION_TYPE(NewVariant);
 
  public:
@@ -854,6 +860,10 @@ class NewClosureInstr : public Definition {
 
   auto GetInputAt(const uint64_t idx) const -> Value* override {
     return GetCaptureAt(idx);
+  }
+
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    return SetCaptureAt(idx, rhs);
   }
 
   DECLARE_INSTRUCTION_TYPE(NewClosure);
@@ -974,6 +984,13 @@ class CallInstr : public Definition {
 
   auto GetInputAt(const uint64_t idx) const -> Value* override {
     return idx == 0 ? target_ : GetArgAt(idx - 1);
+  }
+
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    if (idx == 0)
+      target_ = rhs;
+    else
+      SetArgAt(idx - 1, rhs);
   }
 
   DECLARE_INSTRUCTION_TYPE(Call);
@@ -1327,6 +1344,14 @@ class EntryInstr : public Instruction {
     return GetLabel() != nullptr;
   }
 
+  virtual void ClearSuccessors() {
+    // do nothing
+  }
+
+  virtual void ClearPredecessors() {
+    // do nothing
+  }
+
   virtual auto GetLastInstruction() -> Instruction*;
 
   void Append(Instruction* join) {
@@ -1355,6 +1380,9 @@ class EntryInstr : public Instruction {
   }                                                                      \
   auto Get##Name##At(const uint64_t idx) const -> EntryInstr* override { \
     return List[idx];                                                    \
+  }                                                                      \
+  void Clear##Name##s() override {                                       \
+    List.clear();                                                        \
   }
 
 #define _HAS_SUCCESSOR_LIST(List)   _HAS_ENTRY_LIST(Successor, List)
@@ -1416,6 +1444,10 @@ class JoinEntryInstr : public EntryInstr {
   ~JoinEntryInstr() override = default;
 
   auto GetPhis() const -> const PhiList& {
+    return phis_;
+  }
+
+  auto GetPhis() -> PhiList& {
     return phis_;
   }
 
