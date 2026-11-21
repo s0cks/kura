@@ -1741,6 +1741,33 @@ class TreeBuilder {
     return node;
   }
 
+  // `:name` in the arguments of an element: the element's id. It has to be the first argument, and an element
+  // has one; a second, or one after other arguments, is reported and skipped.
+  void ParseUiId(UiElement& element) {
+    const auto colon = Next();  // ':'
+    if (!Is(K::kIdent)) {
+      ReportHere(DiagnosticCode::kBadElementId, "expected a name after `:`, found " + Found(Peek()),
+                 "an id is `:` and a name")
+          .WithHelp("write the id as `:name`, like `#button(:my-button, fill: red)`");
+      return;
+    }
+    const auto token = Next();
+    const auto name = MakeName(token.span, Text(token.span));
+    if (element.has_id) {
+      Report(DiagnosticCode::kBadElementId, SpanFrom(colon.span.begin), "an element has one id",
+             "remove this id")
+          .WithLabel(element.id.span, "the id is already given here");
+      return;
+    }
+    if (!element.props.empty()) {
+      Report(DiagnosticCode::kBadElementId, SpanFrom(colon.span.begin), "the id comes first",
+             "move the id before the other arguments")
+          .WithHelp("the id is the first argument of an element: `#button(:my-button, fill: red)`");
+    }
+    element.has_id = true;
+    element.id = name;
+  }
+
   auto ParseUiElement(std::vector<Node*> directives) -> Node* {
     NestingGuard guard(*this);
     if (!guard.ok)
@@ -1763,6 +1790,11 @@ class TreeBuilder {
       const auto open = Next();
       element->has_props = true;
       ParseDelimited(K::kRParen, open.span, [&] {
+        // `#button(:my-button, fill: red)`: the id is first, and there is one
+        if (Is(K::kColon)) {
+          ParseUiId(*element);
+          return;
+        }
         element->props.push_back(ParseUiArg());
       });
       // positional arguments come last, like in Typst

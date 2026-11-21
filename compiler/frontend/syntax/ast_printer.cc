@@ -152,7 +152,8 @@ auto Details(const Node* node) -> std::string {
       return out + ")";
     }
     case Node::kUiElement:
-      return "#" + N(node->As<UiElement>()->tag);
+      return "#" + N(node->As<UiElement>()->tag) +
+             (node->As<UiElement>()->has_id ? " :" + N(node->As<UiElement>()->id) : "");
     case Node::kUnary:
       return node->As<Unary>()->op == Unary::kNeg ? "-" : "!";
     case Node::kBinary:

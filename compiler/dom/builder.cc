@@ -304,6 +304,15 @@ void Builder::BuildElement(Node* parent, expr::NodeExpr* expr, const TagList& in
   CollectMetaTags(expr->GetDirectives(), &tags);
   node->SetTags(tags);
 
+  // an id names one element of the tree
+  if (expr->HasId()) {
+    if (const auto other = tree_->FindById(expr->GetId()); other != nullptr && other != node)
+      Error("#" + std::string(node->GetTag()) + ": the id '" + expr->GetId() + "' is already used by a #" +
+            std::string(other->GetTag()));
+    else
+      node->SetId(expr->GetId());
+  }
+
   BuildProperties(node, expr);
 
   if (!CanHaveChildren(node->GetKind())) {

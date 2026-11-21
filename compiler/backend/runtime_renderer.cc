@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "backend/runtime_abi.h"
+#include "backend/runtime_input.h"
 #include "renderer/renderer_abi.h"
 
 namespace {
@@ -214,6 +215,7 @@ const KuraRenderer* kura_rt_get_renderer() {
 void kura_rt_begin_frame(const uint32_t width, const uint32_t height) {
   // what the last frame's view said its events meant is not what this one's will
   kura_rt_events_clear();
+  kura::rt::input::BeginFrame();
   const auto& ops = Current("kura_rt_begin_frame");
   Record("kura_rt_begin_frame", ops.begin_frame(tl_renderer.self, width, height));
 }
@@ -222,6 +224,7 @@ void kura_rt_end_frame() {
   const auto& ops = Current("kura_rt_end_frame");
   // over everything that was drawn
   kura_rt_tooltip_draw();
+  kura::rt::input::EndFrame();
   Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
 }
 

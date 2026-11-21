@@ -392,7 +392,41 @@ LOWER_FN(Pipe) {
 }
 
 LOWER_FN(ForExpr) {
-  return NewEmpty();
+  std::vector<NodePtr> parts{};
+  parts.push_back(NewText("for "));
+  parts.push_back(FormatName(rhs.first));
+  parts.push_back(NewText(", "));
+
+  parts.push_back(Lower(config, *rhs.second));
+  parts.push_back(NewText(" "));
+
+  parts.push_back(NewText("in "));
+  parts.push_back(Lower(config, *rhs.iterable));
+
+  if (rhs.guard) {
+    parts.push_back(NewText("if "));
+    parts.push_back(Lower(config, *rhs.guard));
+  }
+
+  if (rhs.has_fold) {
+    parts.push_back(NewText("fold "));
+    parts.push_back(FormatName(rhs.accumulator));
+    parts.push_back(NewText(" = "));
+    parts.push_back(Lower(config, *rhs.initial));
+  }
+
+  parts.push_back(NewText(" => "));
+  if (rhs.bracketed)
+    parts.push_back(NewText("{"));
+
+  parts.push_back(NewSoftLine());
+
+  parts.push_back(Lower(config, *rhs.body));
+
+  if (rhs.bracketed)
+    parts.push_back(NewText("}"));
+
+  return NewGroup(NewConcat(parts));
 }
 
 LOWER_FN(VariantPattern) {
@@ -433,6 +467,9 @@ LOWER_FN(UiElement) {
 
   if (rhs.has_props) {
     std::vector<NodePtr> props{};
+    // the id is the first argument: `#button(:my-button, fill: red)`
+    if (rhs.has_id)
+      props.push_back(NewConcat({NewText(":"), FormatName(rhs.id)}));
     for (const auto& prop : rhs.props)
       props.push_back(Lower(config, *prop));
 
@@ -524,8 +561,25 @@ LOWER_FN(FnDecl) {
 LOWER_FN(Block) {
   std::vector<NodePtr> parts{};
 
-  for (const auto& stmt : rhs.statements)
+  uint64_t num_sets = 0;
+  for (const auto& stmt : rhs.statements) {
+    if (const auto* set = stmt->As<syntax::SetRule>()) {
+      parts.push_back(Lower(config, *stmt));
+      num_sets++;
+    }
+
+    continue;
+  }
+
+  if (num_sets > 0)
+    parts.push_back(NewHardLine());
+
+  for (const auto& stmt : rhs.statements) {
+    if (const auto* set = stmt->As<syntax::SetRule>())
+      continue;
+
     parts.push_back(Lower(config, *stmt));
+  }
 
   if (rhs.result)
     parts.push_back(Lower(config, *rhs.result));
@@ -595,7 +649,7 @@ LOWER_FN(UnionType) {
   for (const auto& type : rhs.members)
     parts.push_back(Lower(config, *type));
 
-  return NewGroup(Punctuate(NewConcat({NewLine(), NewText("|"), NewLine()}), parts));
+  return NewGroup(Punctuate(NewConcat({NewLine(), NewText("| ")}), parts));
 }
 
 LOWER_FN(FunctionType) {
@@ -744,8 +798,103 @@ LOWER_FN(IfExpr) {
   return NewGroup(NewConcat(parts));
 }
 
+LOWER_FN(StringTemplate) {
+  std::vector<NodePtr> parts{};
+
+  for (auto i = 0; i < rhs.texts.size(); i++) {
+    const auto& text = rhs.texts[i];
+    parts.push_back(NewText(text));
+    if (i < rhs.exprs.size()) {
+      parts.push_back(NewConcat({
+          NewText("{"),
+          Lower(config, *rhs.exprs[i]),
+          NewText("}"),
+      }));
+    }
+  }
+
+  return NewGroup(DoubleQuote(NewConcat(parts)));
+}
+
 LOWER_FN(BindingPattern) {
   return FormatName(rhs.name);
+}
+
+LOWER_FN(RecordUpdate) {
+  std::vector<NodePtr> parts{};
+  parts.push_back(NewText("{ "));
+  parts.push_back(NewSoftLine());
+  parts.push_back(Lower(config, *rhs.base));
+  parts.push_back(NewText(" | "));
+
+  std::vector<NodePtr> entries{};
+  for (const auto& e : rhs.entries)
+    entries.push_back(Lower(config, *e));
+
+  parts.push_back(Punctuate(NewConcat({
+                                NewText(", "),
+                            }),
+                            entries));
+
+  parts.push_back(NewSoftLine());
+  parts.push_back(NewText(" }"));
+  return NewGroup(NewConcat(parts));
+}
+
+LOWER_FN(SetRule) {
+  std::vector<NodePtr> parts{};
+
+  parts.push_back(NewText("set "));
+  parts.push_back(FormatName(rhs.tag));
+
+  std::vector<NodePtr> props{};
+  for (const auto& p : rhs.props)
+    props.push_back(Lower(config, *p));
+
+  parts.push_back(Enclose("(", ")",
+                          Punctuate(NewConcat({
+                                        NewText(", "),
+                                    }),
+                                    props),
+                          0, false));
+
+  return NewGroup(NewConcat(parts));
+}
+
+LOWER_FN(UpdateEntry) {
+  std::vector<NodePtr> parts{};
+
+  for (auto i = 0; i < rhs.path.size(); i++) {
+    parts.push_back(FormatName(rhs.path[i]));
+    if (i < (parts.size() - 1))
+      parts.push_back(NewText("."));
+  }
+  parts.push_back(NewSoftLine());
+
+  switch (rhs.op) {
+    case syntax::UpdateEntry::Op::kAdd:
+      parts.push_back(NewText(" += "));
+      break;
+    case syntax::UpdateEntry::Op::kDiv:
+      parts.push_back(NewText(" /= "));
+      break;
+    case syntax::UpdateEntry::Op::kMod:
+      parts.push_back(NewText(" %= "));
+      break;
+    case syntax::UpdateEntry::Op::kMul:
+      parts.push_back(NewText(" *= "));
+      break;
+    case syntax::UpdateEntry::Op::kSub:
+      parts.push_back(NewText(" -= "));
+      break;
+    case syntax::UpdateEntry::Op::kSet:
+      parts.push_back(NewText(": "));
+      break;
+  }
+  parts.push_back(NewSoftLine());
+  parts.push_back(Lower(config, *rhs.value));
+
+  return NewGroup(NewConcat(parts));
 }
 
 auto Lower(const Config& config, const syntax::Node& node) -> NodePtr {
@@ -795,6 +944,10 @@ auto Lower(const Config& config, const syntax::Node& node) -> NodePtr {
     LOWER(IfExpr);
     LOWER(Placeholder);
     LOWER(BindingPattern);
+    LOWER(StringTemplate);
+    LOWER(RecordUpdate);
+    LOWER(SetRule);
+    LOWER(UpdateEntry);
 
 #undef LOWER
     default:

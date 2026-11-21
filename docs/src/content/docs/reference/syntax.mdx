@@ -87,6 +87,9 @@ fn sum(): Int => { let a = 1  a + 2 }  // block
 `{ x: x }`. Element arguments pun the same way: `#button(width,)` is `#button(width: width)`. Positional
 arguments come last.
 
+An element can be given an **id**, a name for it, written first in its arguments with a colon:
+`#button(:my-button, fill: red)`. An element has one id, and an id names one element in a view.
+
 ## Records
 
 Records are covered in [Primitives](/kura/reference/primitives/#records). A few

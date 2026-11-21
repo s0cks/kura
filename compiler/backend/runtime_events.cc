@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "backend/runtime_abi.h"
+#include "backend/runtime_input.h"
 
 namespace {
 struct Region {
@@ -83,6 +84,8 @@ int kura_rt_event_topmost(const uint64_t kind, const double x, const double y, K
 }
 
 void kura_rt_events_clear() {
+  // the inputs' places are indexed by the events that point at them
+  kura::rt::input::ClearPlaces();
   tl_regions.clear();
   tl_clips.clear();
   kura_rt_scrollers_clear();

@@ -41,6 +41,9 @@ class LayoutPlan {
 
  public:
   static constexpr double kDefaultFontSize = 16.0;
+  // What an input is when it isn't told: 200px wide, with 4px around its text.
+  static constexpr float kDefaultInputWidth = 200.0f;
+  static constexpr float kDefaultInputPadding = 4.0f;
 
   // Builds the plan for the tree under `root`. Returns null, and says why in `error`, when a layout
   // property can't be made into a constant.

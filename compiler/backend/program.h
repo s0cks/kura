@@ -41,6 +41,11 @@ class Program {
             std::string* error) -> bool;
 
   // Whether the program defines `function`: a host asks for `init` and `update`, which are optional.
+  // The flow graphs the program was compiled from, for tests that look at what the analyses decided.
+  auto GetModuleGraph() const -> ModuleGraph* {
+    return graphs_;
+  }
+
   auto HasFunction(const std::string& function) const -> bool;
 
   // Whether `function`'s parameter number `param` (from 0) takes a value like `value`: the same check a call

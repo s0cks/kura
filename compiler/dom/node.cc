@@ -84,4 +84,14 @@ auto Tree::New(const Kind kind) -> Node* {
   nodes_.push_back(std::unique_ptr<Node>(new Node(kind)));
   return nodes_.back().get();
 }
+
+auto Tree::FindById(const std::string_view id) const -> Node* {
+  if (id.empty())
+    return nullptr;
+  for (const auto& node : nodes_) {
+    if (node->GetId() == id)
+      return node.get();
+  }
+  return nullptr;
+}
 }  // namespace kura::dom

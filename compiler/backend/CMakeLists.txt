@@ -6,6 +6,7 @@ target_sources(kura-compiler
          effect_visitor.cc
          flow_graph.cc
          flow_graph_builder.cc
+         escape_analysis.cc
          flow_graph_compiler.cc
          ir.cc
          gir.cc
@@ -18,6 +19,7 @@ target_sources(kura-compiler
          purity_analysis.cc
          runtime_abi.cc
          runtime_events.cc
+         runtime_input.cc
          runtime_layout.cc
          session.cc
          runtime_renderer.cc

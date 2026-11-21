@@ -78,7 +78,7 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("value", MaskOf(Kind::kText), kString);
   add("value", MaskOf(Kind::kInput), kString);
   add("value", MaskOf(Kind::kProgress), kNumbers, {}, 0, 1);
-
+  add("source", MaskOf(Kind::kImage), kString);
   add("length", MaskOf(Kind::kLine), kSizes, kAuto);
 
   add("color", kFields, kColor);
@@ -86,6 +86,7 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("font-family", kFields, kString);
   add("text-align", kFields, kString, kTextAligns);
   add("placeholder", MaskOf(Kind::kInput), kString);
+  add("readonly", MaskOf(Kind::kInput), kBool);
 
   add("source", MaskOf(Kind::kImage), kString);
   add("fit", MaskOf(Kind::kImage), kString, kFits);

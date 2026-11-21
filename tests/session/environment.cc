@@ -9,7 +9,7 @@ namespace {
 class RuntimeEnvironment : public ::testing::Environment {
  public:
   void SetUp() override {
-    kura::heap::Heap::SetCurrent(new kura::heap::Heap(kura::heap::Heap::SmallOptions()));
+    kura::heap::Heap::SetCurrent(new kura::heap::Heap());
     kura::Type::Init();
   }
 };

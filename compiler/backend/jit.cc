@@ -87,6 +87,8 @@ auto Jit::Initialize(std::string* error) -> bool {
     return false;
   }
 
+  // the literals and top-level bindings are constants: they live in the tenured space
+  const rt::PhaseScope phase(rt::Phase::kConstant);
   symbol->toPtr<void (*)()>()();
   return true;
 }

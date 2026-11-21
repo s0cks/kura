@@ -1102,7 +1102,12 @@ class Analyzer {
       }
 
       const auto expected = declared->second->GetPayload();
-      if (!expected != !payload) {
+      if (v->IsOpen()) {
+        // `on-input: Typed`: the runtime makes the payload, and it is the text that was typed
+        if (!expected || !CompileType::IsAssignable(CompileType::String(), expected))
+          Report(instr, "`" + v->GetVariantName() +
+                            "` can't be the message of `on-input`: it has to carry a String, the text that was typed");
+      } else if (!expected != !payload) {
         Report(instr, expected ? "`" + v->GetVariantName() + "` needs a payload"
                                : "`" + v->GetVariantName() + "` takes no payload");
       } else if (expected && !payload->IsNever() && !CompileType::IsAssignable(payload, expected)) {

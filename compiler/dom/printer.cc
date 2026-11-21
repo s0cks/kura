@@ -6,6 +6,8 @@
 namespace kura::dom {
 auto Printer::VisitNode(Node* node) -> bool {
   stream_ << indent_ << node->GetName();
+  if (node->HasId())
+    stream_ << " :" << node->GetId();
 
   if (const auto expr = node->GetExpr())
     stream_ << (node->IsDynamic() ? " ~" : " ") << expr::ExprPrinter::ToString(expr);

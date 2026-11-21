@@ -240,7 +240,9 @@ point into the braces.
 ## UI elements
 
 ```text
-uiElement    = directive* '#' name ( '(' uiArgs? ')' )? ( '{' uiChild* '}' )?
+uiElement    = directive* '#' name ( '(' elementArgs? ')' )? ( '{' uiChild* '}' )?
+elementArgs  = uiId ( ',' uiArgs )? | uiArgs                    the id is the first argument, and there is one
+uiId         = ':' name                                         what the element is called: `#button(:my-button, fill: red)`
 uiArgs       = uiArg ( ',' uiArg )* ','?
 uiArg        = name ':' expression
              | name                                             when a comma follows: a pun, `#button(width,)`

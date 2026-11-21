@@ -53,6 +53,8 @@ TEST_P(DiagnosticCodeTest, ReportsTheRightCodeOnTheRightText) {
 INSTANTIATE_TEST_SUITE_P(
     All, DiagnosticCodeTest,
     testing::Values(CodeCase{"let a = $", DiagnosticCode::kUnexpectedCharacter, "$"},
+                    CodeCase{"fn view(): Node => #button(width: 1px, :late)", DiagnosticCode::kBadElementId, ":late"},
+                    CodeCase{"fn view(): Node => #button(:a, :b)", DiagnosticCode::kBadElementId, ":b"},
                     CodeCase{"let a = \"x\n", DiagnosticCode::kUnterminatedString, "\""},
                     CodeCase{"let a = \"\\q\"", DiagnosticCode::kInvalidEscape, "\\q"},
                     CodeCase{"extern fn `x(): Int", DiagnosticCode::kUnterminatedRawIdent, "`"},

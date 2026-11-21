@@ -18,6 +18,11 @@
 #include <llvm/TargetParser/Host.h>
 #include <map>
 #include <set>
+
+#ifdef KURA_TRACING_ENABLED
+#include <tracy/Tracy.hpp>
+#endif  // // KURA_TRACING_ENABLED
+
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +31,7 @@
 #include "backend/gir.h"
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
+#include "heap/objects.h"
 #include "c_type.h"
 #include "common.h"
 #include "function.h"
@@ -33,6 +39,8 @@
 #include "module.h"
 #include "object.h"
 #include "property.h"
+
+#define LOWER_FN(Name) void Emit##Name(Name##Instr* instr)
 
 namespace kura {
 auto EntryPointName(const std::string& function) -> std::string {
@@ -316,6 +324,18 @@ class Generator {
     return b_.CreateCall(callee, flat);
   }
 
+  // A block of the function's stack as big as a heap object with `payload` bytes after its header. It is made at the
+  // function's entry, so it is one block however many times the instruction that wants it is reached.
+  auto StackBlock(const uint64_t payload) -> llvm::Value* {
+    const uint64_t total = (sizeof(heap::HeapObject) + payload + kObjectAlignment - 1) &
+                           ~static_cast<uint64_t>(kObjectAlignment - 1);
+    auto& entry = fn_->native->getEntryBlock();
+    llvm::IRBuilder<> at(&entry, entry.getFirstInsertionPt());
+    const auto slot = at.CreateAlloca(llvm::ArrayType::get(llvm::Type::getInt8Ty(ctx_), total));
+    slot->setAlignment(llvm::Align(kObjectAlignment));
+    return slot;
+  }
+
   auto NameConstant(const std::string& name) -> llvm::Constant* {
     const auto it = names_.find(name);
     if (it != names_.end())
@@ -400,14 +420,14 @@ class Generator {
                    Convert(b, tb, CompileType::Any())});
   }
 
-  void EmitRegisterEvent(RegisterEventInstr* reg) {
-    const auto plan = reg->GetPlan().get();
+  LOWER_FN(RegisterEvent) {
+    const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_register_event", void_ty_,
-           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(reg->GetNode()),
-            b_.getInt64(reg->GetKind()), As(reg->GetMessage(), CompileType::Any())});
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
+            b_.getInt64(instr->GetKind()), As(instr->GetMessage(), CompileType::Any())});
   }
 
-  void EmitBinary(BinaryOpInstr* instr) {
+  LOWER_FN(BinaryOp) {
     const auto left = instr->GetLeft();
     const auto right = instr->GetRight();
     const auto a = Val(left);
@@ -556,7 +576,7 @@ class Generator {
     }
   }
 
-  void EmitUnary(UnaryOpInstr* instr) {
+  LOWER_FN(UnaryOp) {
     const auto value = Val(instr->GetValue());
     const auto type = Type(instr->GetValue());
     const auto op = instr->GetOp();
@@ -576,15 +596,29 @@ class Generator {
            CompileType::Any());
   }
 
-  void EmitTracyBegin(TracyBeginZoneInstr* instr) {
+  LOWER_FN(TracyBeginZone) {
     KASSERT(instr);
+#ifdef KURA_TRACING_ENABLED
+
+#endif  // KURA_TRACING_ENABLED
   }
 
-  void EmitTracyEnd(TracyEndZoneInstr* instr) {
+  LOWER_FN(TracyEndZone) {
     KASSERT(instr);
+#ifdef KURA_TRACING_ENABLED
+
+#endif  // KURA_TRACING_ENABLED
   }
 
-  void EmitRectIntersects(RectIntersectsInstr* instr) {
+  LOWER_FN(DrawImage) {
+    // TODO(@s0cks): not implement
+  }
+
+  LOWER_FN(AllocImage) {
+    // TODO(@s0cks): not implement
+  }
+
+  LOWER_FN(RectIntersects) {
     llvm::Value* a = Val(instr->GetLeft());   // <4 x float>: {x, y, w, h}
     llvm::Value* b = Val(instr->GetRight());  // <4 x float>: {x, y, w, h}
 
@@ -612,19 +646,19 @@ class Generator {
     Define(instr, hit, CompileType::Bool());
   }
 
-  void EmitCheckRenererStatusInstr(CheckRendererStatusInstr* instr) {
+  LOWER_FN(CheckRendererStatus) {
     CallRt("kura_rt_check_renderer", void_ty_, {});
   }
 
-  void EmitBeginFrame(BeginFrameInstr* draw) {
+  LOWER_FN(BeginFrame) {
     llvm::Value* width = nullptr;
     llvm::Value* height = nullptr;
-    if (draw->UsesViewport()) {
+    if (instr->UsesViewport()) {
       width = CallRt("kura_rt_viewport_width", b_.getInt32Ty(), {});
       height = CallRt("kura_rt_viewport_height", b_.getInt32Ty(), {});
     } else {
-      width = b_.getInt32(draw->GetWidth());
-      height = b_.getInt32(draw->GetHeight());
+      width = b_.getInt32(instr->GetWidth());
+      height = b_.getInt32(instr->GetHeight());
     }
     CallRt("kura_rt_begin_frame", void_ty_, {width, height});
   }
@@ -643,7 +677,7 @@ class Generator {
     return global;
   }
 
-  void EmitLayoutSetText(LayoutSetTextInstr* instr) {
+  LOWER_FN(LayoutSetText) {
     const auto plan = instr->GetPlan().get();
     // The family is a constant of the plan: its bytes, or no pointer at all for the default font.
     const auto& family = instr->GetFontFamily();
@@ -655,25 +689,25 @@ class Generator {
             b_.getInt64(family.size())});
   }
 
-  void EmitLayoutSetProperty(LayoutSetPropertyInstr* instr) {
+  LOWER_FN(LayoutSetProperty) {
     const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_layout_set", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
             b_.getInt64(static_cast<uint64_t>(instr->GetProperty())), As(instr->GetValue(), CompileType::Any())});
   }
 
-  void EmitLayoutRun(LayoutRunInstr* instr) {
+  LOWER_FN(LayoutRun) {
     const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_layout_run", void_ty_, {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes())});
   }
 
-  void EmitLayoutSlotBegin(LayoutSlotBeginInstr* instr) {
+  LOWER_FN(LayoutSlotBegin) {
     const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_layout_slot_begin", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot())});
   }
 
-  void EmitLayoutSlotInstance(LayoutSlotInstanceInstr* instr) {
+  LOWER_FN(LayoutSlotInstance) {
     const auto plan = instr->GetPlan().get();
     const auto instance = instr->GetTemplate().get();
     CallRt("kura_rt_layout_slot_instance", void_ty_,
@@ -681,7 +715,7 @@ class Generator {
             LayoutTable(instance), b_.getInt64(instance->GetNumberOfNodes())});
   }
 
-  void EmitLayoutSlotEnd(LayoutSlotEndInstr* instr) {
+  LOWER_FN(LayoutSlotEnd) {
     const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_layout_slot_end", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetSlot())});
@@ -707,7 +741,7 @@ class Generator {
     return slot;
   }
 
-  void EmitLayoutRect(LayoutRectInstr* instr) {
+  LOWER_FN(LayoutRect) {
     const auto plan = instr->GetPlan().get();
     const auto rect_ty = llvm::FixedVectorType::get(f32_, 4);
     const auto slot = EntryAlloca(rect_ty);
@@ -716,16 +750,16 @@ class Generator {
     Define(instr, b_.CreateLoad(rect_ty, slot), CompileType::Rect());
   }
 
-  void EmitEndFrame(EndFrameInstr* draw) {
+  LOWER_FN(EndFrame) {
     CallRt("kura_rt_end_frame", void_ty_, {});
   }
 
-  void EmitDrawRect(DrawRectInstr* draw) {
+  LOWER_FN(DrawRect) {
     CallRt("kura_rt_draw_rect", void_ty_, {});
   }
 
-  void EmitDrawLine(DrawLineInstr* draw) {
-    llvm::Value* vec = Val(draw->GetBounds());
+  LOWER_FN(DrawLine) {
+    llvm::Value* vec = Val(instr->GetBounds());
     llvm::Value* x = b_.CreateExtractElement(vec, b_.getInt64(0), "x");
     llvm::Value* y = b_.CreateExtractElement(vec, b_.getInt64(1), "y");
     llvm::Value* w = b_.CreateExtractElement(vec, b_.getInt64(2), "w");
@@ -752,7 +786,7 @@ class Generator {
     llvm::Value* end_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.end");
     b_.CreateStore(to, end_ptr);
 
-    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, Val(draw->GetColor())});
+    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, Val(instr->GetColor())});
   }
 
   // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
@@ -767,19 +801,19 @@ class Generator {
     return b_.CreateBitCast(v, i64_);
   }
 
-  void EmitFillRect(FillRectInstr* draw) {
-    CallRt("kura_rt_fill_rect", void_ty_, {Spill(draw->GetRect()), Val(draw->GetColor())});
+  LOWER_FN(FillRect) {
+    CallRt("kura_rt_fill_rect", void_ty_, {Spill(instr->GetRect()), Val(instr->GetColor())});
   }
 
-  void EmitPaintBox(PaintBoxInstr* paint) {
+  LOWER_FN(PaintBox) {
     CallRt("kura_rt_paint_box", void_ty_,
-           {Spill(paint->GetRect()), Val(paint->GetFill()), Val(paint->GetBorderColor()),
-            CoordinateBits(paint->GetBorderWidth()), CoordinateBits(paint->GetRadius()),
-            CoordinateBits(paint->GetOpacity())});
+           {Spill(instr->GetRect()), Val(instr->GetFill()), Val(instr->GetBorderColor()),
+            CoordinateBits(instr->GetBorderWidth()), CoordinateBits(instr->GetRadius()),
+            CoordinateBits(instr->GetOpacity())});
   }
 
-  void EmitPushClip(PushClipInstr* clip) {
-    CallRt("kura_rt_push_clip", void_ty_, {Spill(clip->GetRect())});
+  LOWER_FN(PushClip) {
+    CallRt("kura_rt_push_clip", void_ty_, {Spill(instr->GetRect())});
   }
 
   void EmitPopClip(PopClipInstr*) {
@@ -792,6 +826,17 @@ class Generator {
     CallRt("kura_rt_draw_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
             Val(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign())});
+  }
+
+  void EmitDrawInput(DrawInputInstr* draw) {
+    // The text, the box and the font are the layout's. The placeholder, the message and readonly are tagged
+    // values: the runtime reads what each is by its tag.
+    const auto plan = draw->GetPlan().get();
+    CallRt("kura_rt_draw_input", void_ty_,
+           {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
+            Val(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign()),
+            As(draw->GetPlaceholder(), CompileType::Any()), As(draw->GetMessage(), CompileType::Any()),
+            As(draw->GetReadonly(), CompileType::Any())});
   }
 
   // ── calls ────────────────────────────────────────────────────────────────
@@ -895,58 +940,41 @@ class Generator {
   }
 
   void EmitInstruction(Instruction* instr) {
-    if (const auto c = instr->AsConstant())
-      return EmitConstant(c);
+#define CHECK(Name)                     \
+  if (const auto i = instr->As##Name()) \
+    return Emit##Name(i);
+
     if (const auto p = instr->AsParameter())
       return Define(p, fn_->native->getArg(p->GetIndex()), p->GetCompileType());
-    if (const auto b = instr->AsBinaryOp())
-      return EmitBinary(b);
-    if (const auto u = instr->AsUnaryOp())
-      return EmitUnary(u);
-    if (const auto c = instr->AsCall())
-      return EmitCall(c);
-    if (const auto d = instr->AsDrawRect())
-      return EmitDrawRect(d);
-    if (const auto d = instr->AsFillRect())
-      return EmitFillRect(d);
-    if (const auto d = instr->AsPaintBox())
-      return EmitPaintBox(d);
-    if (const auto d = instr->AsDrawLine())
-      return EmitDrawLine(d);
-    if (const auto d = instr->AsPushClip())
-      return EmitPushClip(d);
-    if (const auto d = instr->AsPopClip())
-      return EmitPopClip(d);
-    if (const auto d = instr->AsDrawText())
-      return EmitDrawText(d);
-    if (const auto r = instr->AsRegisterEvent())
-      return EmitRegisterEvent(r);
-    if (const auto d = instr->AsBeginFrame())
-      return EmitBeginFrame(d);
-    if (const auto d = instr->AsLayoutSetText())
-      return EmitLayoutSetText(d);
-    if (const auto d = instr->AsLayoutSetProperty())
-      return EmitLayoutSetProperty(d);
-    if (const auto d = instr->AsLayoutRun())
-      return EmitLayoutRun(d);
-    if (const auto d = instr->AsLayoutSlotBegin())
-      return EmitLayoutSlotBegin(d);
-    if (const auto d = instr->AsLayoutSlotInstance())
-      return EmitLayoutSlotInstance(d);
-    if (const auto d = instr->AsLayoutSlotEnd())
-      return EmitLayoutSlotEnd(d);
-    if (const auto d = instr->AsLayoutRect())
-      return EmitLayoutRect(d);
-    if (const auto d = instr->AsEndFrame())
-      return EmitEndFrame(d);
-    if (const auto d = instr->AsCheckRendererStatus())
-      return EmitCheckRenererStatusInstr(d->AsCheckRendererStatus());
-    if (const auto b = instr->AsTracyBeginZone())
-      return EmitTracyBegin(b);
-    if (const auto e = instr->AsTracyEndZone())
-      return EmitTracyEnd(e);
-    if (const auto i = instr->AsRectIntersects())
-      return EmitRectIntersects(i);
+
+    CHECK(Constant);
+    CHECK(BinaryOp);
+    CHECK(UnaryOp);
+    CHECK(Call);
+    CHECK(DrawRect);
+    CHECK(FillRect);
+    CHECK(PaintBox);
+    CHECK(DrawLine);
+    CHECK(PushClip);
+    CHECK(PopClip);
+    CHECK(DrawText);
+    CHECK(RegisterEvent);
+    CHECK(DrawInput);
+    CHECK(BeginFrame);
+    CHECK(EndFrame);
+    CHECK(LayoutSetText);
+    CHECK(LayoutSetProperty);
+    CHECK(LayoutRun);
+    CHECK(LayoutSlotBegin);
+    CHECK(LayoutSlotInstance);
+    CHECK(LayoutSlotEnd);
+    CHECK(LayoutRect);
+    CHECK(CheckRendererStatus);
+    CHECK(TracyBeginZone);
+    CHECK(TracyEndZone);
+    CHECK(RectIntersects);
+
+#undef CHECK
 
     if (const auto phi = instr->AsPhi()) {
       const auto node = b_.CreatePHI(Lower(phi->GetCompileType()), phi->GetNumberOfIncoming());
@@ -972,8 +1000,15 @@ class Generator {
       if (!thunk)
         return Fail("internal error: no code for " + graph->GetName());
       const auto arity = graph->GetNumberOfParameters() - graph->GetCaptures().size();
-      const auto closure =
-          CallRt("kura_rt_closure_new", ptr_ty_, {thunk, b_.getInt64(arity), b_.getInt64(n->GetCaptures().size())});
+      llvm::Value* closure = nullptr;
+      if (n->IsStackAllocated()) {
+        closure = StackBlock(heap::ClosureObj::PayloadSize(n->GetCaptures().size()));
+        CallRt("kura_rt_stack_closure", void_ty_,
+               {closure, thunk, b_.getInt64(arity), b_.getInt64(n->GetCaptures().size())});
+      } else {
+        closure =
+            CallRt("kura_rt_closure_new", ptr_ty_, {thunk, b_.getInt64(arity), b_.getInt64(n->GetCaptures().size())});
+      }
       uint64_t index = 0;
       for (const auto capture : n->GetCaptures())
         CallRt("kura_rt_closure_capture", void_ty_, {closure, b_.getInt64(index++), As(capture, CompileType::Any())});
@@ -995,7 +1030,13 @@ class Generator {
     }
 
     if (const auto l = instr->AsNewList()) {
-      const auto seq = CallRt("kura_rt_seq_new", ptr_ty_, {b_.getInt64(l->GetInputs().size())});
+      llvm::Value* seq = nullptr;
+      if (l->IsStackAllocated()) {
+        seq = StackBlock(heap::SeqObj::PayloadSize(l->GetInputs().size()));
+        CallRt("kura_rt_stack_seq", void_ty_, {seq, b_.getInt64(l->GetInputs().size())});
+      } else {
+        seq = CallRt("kura_rt_seq_new", ptr_ty_, {b_.getInt64(l->GetInputs().size())});
+      }
       uint64_t index = 0;
       for (const auto input : l->GetInputs())
         CallRt("kura_rt_store_index", void_ty_, {seq, b_.getInt64(index++), As(input, CompileType::Any())});
@@ -1017,8 +1058,20 @@ class Generator {
       return Define(l, CallRt("kura_rt_len", i64_, {object}), CompileType::Int());
     }
 
-    if (const auto r = instr->AsNewRecord())
-      return Define(r, CallRt("kura_rt_record_new", ptr_ty_, {}), r->GetCompileType());
+    if (const auto r = instr->AsNewRecord()) {
+      if (r->IsStackAllocated()) {
+        const auto record = StackBlock(heap::RecordObj::PayloadSize(static_cast<uint32_t>(r->GetProperties())));
+        CallRt("kura_rt_stack_record", void_ty_, {record, b_.getInt64(r->GetProperties())});
+        return Define(r, record, r->GetCompileType());
+      }
+      // its room: the entries it is given, and as many fields as each record that is spread into it has
+      llvm::Value* capacity = b_.getInt64(r->GetProperties());
+      for (const auto spread : r->GetInputs()) {
+        const auto count = CallRt("kura_rt_record_count", i64_, {ObjectPtr(Val(spread), Type(spread))});
+        capacity = b_.CreateAdd(capacity, count);
+      }
+      return Define(r, CallRt("kura_rt_record_new", ptr_ty_, {capacity}), r->GetCompileType());
+    }
     if (const auto s = instr->AsStoreProperty()) {
       const auto object = ObjectPtr(Val(s->GetInstance()), Type(s->GetInstance()));
       const auto name = std::string(s->GetProperty()->GetPropertyName()->GetData());
@@ -1057,8 +1110,12 @@ class Generator {
         return Define(v, Val(v->GetPayload()), Type(v->GetPayload()));
       variants_.insert(v->GetVariantName());
       llvm::Value* box = llvm::ConstantPointerNull::get(ptr_ty_);
-      if (v->HasPayload())
+      if (v->HasPayload() && v->IsStackAllocated()) {
+        box = StackBlock(heap::BoxObj::PayloadSize());
+        CallRt("kura_rt_stack_box", void_ty_, {box, As(v->GetPayload(), CompileType::Any())});
+      } else if (v->HasPayload()) {
         box = CallRt("kura_rt_box", ptr_ty_, {As(v->GetPayload(), CompileType::Any())});
+      }
       return Define(v, Pack(b_.getInt64(rt::VariantTag(v->GetVariantName())), b_.CreatePtrToInt(box, i64_)),
                     CompileType::Any());
     }
@@ -1322,7 +1379,7 @@ class Generator {
 
   // Builds a record from the fields of a struct in C memory.
   auto LoadCRecord(const CRecord& rec, llvm::Value* src, const std::string& what) -> llvm::Value* {
-    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {});
+    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {b_.getInt64(rec.fields.size())});
     for (const auto& field : rec.fields) {
       const auto where = FieldPtr(src, field.offset);
       const auto kura = field.type.ToKuraType();
@@ -1522,7 +1579,8 @@ class Generator {
     if (!c.HasOuts())
       return result;
 
-    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {});
+    // the result, and every parameter that is an out
+    const auto record = CallRt("kura_rt_record_new", ptr_ty_, {b_.getInt64(c.params.size() + 1)});
     const auto set = [&](const std::string& field, llvm::Value* value, CompileType* type) {
       CallRt("kura_rt_record_set", void_ty_,
              {record, b_.getInt64(rt::HashName(field)), NameConstant(field), Convert(value, type, CompileType::Any())});

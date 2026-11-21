@@ -1,0 +1,36 @@
+// Text inputs: what is typed is a Message with the new text in it, like the counter's `Set(Int)`, and the view says what
+// the text is. Click an input to type in it; Escape or a click elsewhere gives the keyboard up.
+type Message = NameChanged(String) | SearchChanged(String) | Clear
+
+type State = {
+  name: String,
+  search: String,
+}
+
+fn init(): State => { name: "", search: "" }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    NameChanged(text) => { state | name: text }
+    SearchChanged(text) => { state | search: text }
+    Clear => { state | name: "", search: "" }
+  }
+
+fn view(state: State): Node =>
+  set text(size: 20px)
+  #block(direction: "column", gap: 12px, padding: 24px){
+    #text("Name")
+    #input(:name, value: state.name, on-input: NameChanged, placeholder: "Your name",
+           width: 280px, fill: white, color: black, radius: 4px)
+
+    #text("Search")
+    #input(:search, value: state.search, on-input: SearchChanged, placeholder: "Search...",
+           width: 280px, fill: white, color: black, radius: 4px)
+
+    #text("Hello, {state.name}")
+    #input(:echo, value: state.name, readonly: true, width: 280px, fill: gray, color: black, radius: 4px)
+
+    #button(on-click: Clear, padding: 8px, fill: white, radius: 4px){
+      #text("Clear")
+    }
+  }

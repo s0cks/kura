@@ -9,6 +9,22 @@ static inline auto Name(const Value* value) -> std::string {
   return "%" + std::to_string(value->GetDefinition()->GetId());
 }
 
+auto AllocImageInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "AllocImageInstr(";
+  ss << "source=" << Name(GetSource());
+  ss << ")";
+  return ss.str();
+}
+
+auto DrawImageInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "DrawImageInstr(";
+  ss << "source=" << Name(GetSource());
+  ss << ")";
+  return ss.str();
+}
+
 auto RectIntersectsInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "RectIntersctsInstr(";
@@ -150,6 +166,22 @@ auto DrawTextInstr::ToString() const -> std::string {
   ss << "text=" << Name(GetValue()) << ", ";
   ss << "color=" << Name(GetColor()) << ", ";
   ss << "opacity=" << Name(GetOpacity()) << ", ";
+  ss << "align=" << GetAlign();
+  ss << ")";
+  return ss.str();
+}
+
+auto DrawInputInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "DrawInput(";
+  ss << "layout=" << GetPlan()->GetIndex() << ", ";
+  ss << "node=" << GetNode() << ", ";
+  ss << "value=" << Name(GetValue()) << ", ";
+  ss << "color=" << Name(GetColor()) << ", ";
+  ss << "opacity=" << Name(GetOpacity()) << ", ";
+  ss << "placeholder=" << Name(GetPlaceholder()) << ", ";
+  ss << "message=" << Name(GetMessage()) << ", ";
+  ss << "readonly=" << Name(GetReadonly()) << ", ";
   ss << "align=" << GetAlign();
   ss << ")";
   return ss.str();

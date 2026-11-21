@@ -177,7 +177,14 @@ auto GraphEntryInstr::GetLastInstruction() -> Instruction* {
 }
 
 auto NewRecordInstr::ToString() const -> std::string {
-  return "NewRecord()";
+  std::stringstream ss{};
+  ss << "NewRecord(properties=" << GetProperties();
+  for (const auto input : GetInputs())
+    ss << ", spread=" << Name(input);
+  if (IsStackAllocated())
+    ss << ", stack";
+  ss << ")";
+  return ss.str();
 }
 
 auto StorePropertyInstr::ToString() const -> std::string {
@@ -205,6 +212,8 @@ auto NewListInstr::ToString() const -> std::string {
       ss << ", ";
   }
 
+  if (IsStackAllocated())
+    ss << (values.empty() ? "stack" : ", stack");
   ss << ")";
   return ss.str();
 }
@@ -255,6 +264,8 @@ auto NewVariantInstr::ToString() const -> std::string {
   if (HasPayload())
     ss << ", " << Name(GetPayload());
 
+  if (IsStackAllocated())
+    ss << ", stack";
   ss << ")";
   return ss.str();
 }
@@ -273,6 +284,8 @@ auto NewClosureInstr::ToString() const -> std::string {
   for (const auto& capture : GetCaptures())
     ss << ", " << Name(capture);
 
+  if (IsStackAllocated())
+    ss << ", stack";
   ss << ")";
   return ss.str();
 }

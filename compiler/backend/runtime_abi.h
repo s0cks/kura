@@ -54,6 +54,51 @@ static inline constexpr auto IsVariantTag(const uint64_t tag) -> bool {
 
 auto Format(const KuraValue& value) -> std::string;
 
+// Where the objects a program allocates live. The runtime doesn't take a space with every allocation: the phase of the
+// program says. While a `view` runs, what it makes is for one frame, so it goes in the frame's arena, which is reset
+// when the next frame begins; while `init` or `update` run, and for anything the host makes, it goes in the model
+// space, where most of it is garbage soon and the rest is the model. (A value read from the model can be used by the
+// view as it is, but never the other way: see Session::Send, which moves a Message out of the frame.)
+enum class Phase {
+  kModel,
+  kFrame,
+  // The program is being loaded: what its top-level bindings make never moves and is never freed, so it goes in the
+  // tenured space, with the constants.
+  kConstant,
+};
+
+void SetPhase(Phase phase);
+auto GetPhase() -> Phase;
+
+// Sets the phase for as long as it lives.
+class PhaseScope {
+ private:
+  Phase previous_;
+
+ public:
+  explicit PhaseScope(const Phase phase) :
+    previous_(GetPhase()) {
+    SetPhase(phase);
+  }
+  ~PhaseScope() {
+    SetPhase(previous_);
+  }
+  PhaseScope(const PhaseScope&) = delete;
+  auto operator=(const PhaseScope&) -> PhaseScope& = delete;
+};
+
+// A variant from the tag of one (the payload is boxed in the current phase's space), for what makes a Message of a
+// variant that something else named, like what is typed into an input.
+auto MakeVariantWithTag(uint64_t tag, const KuraValue& payload) -> KuraValue;
+
+// A value that can be kept: everything it reaches that is in the frame's arena is copied into the model space, and the
+// rest (the model's, the tenured space's, code) is shared, because it will outlive the frame. A Message made by `view`
+// is moved this way before `update` sees it, so that nothing in the model can point into a frame that is reset.
+auto MoveOutOfFrame(const KuraValue& value) -> KuraValue;
+
+// The text of a String (or a Color) value: `bits` is its `bits`. It lives as long as the string object.
+auto StringView(uint64_t bits) -> std::string_view;
+
 // A variant, which is what a Message is: `MakeVariant("Increment")`, or with a payload,
 // `MakeVariant("Set", &five)`. The payload is copied. It is the same value compiled code builds for
 // `Increment` or `Set(5)`, so a host can send it to `update`.
@@ -83,9 +128,12 @@ enum EventKind : uint64_t {
   kEventScroll = 2,
   // The node has a tooltip: the message is the String to show, when the pointer has been over it for a while.
   kEventTooltip = 3,
+  // The node is an input: the runtime keeps it, as `kura_rt_draw_input` draws it, and the message is the index of the
+  // input among the frame's (see runtime_input.h). A click on it gives the input the keyboard.
+  kEventInput = 4,
 };
 
-auto MakeString(const std::string& value) -> KuraValue;
+auto MakeString(std::string_view value) -> KuraValue;
 }  // namespace kura::rt
 
 // clang-format off
@@ -104,6 +152,7 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_len)                  \
   V(kura_rt_store_index)          \
   V(kura_rt_record_new)           \
+  V(kura_rt_record_count)         \
   V(kura_rt_record_set)           \
   V(kura_rt_record_get)           \
   V(kura_rt_record_spread)        \
@@ -116,6 +165,10 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_closure_get_capture)  \
   V(kura_rt_closure_fn)           \
   V(kura_rt_box)                  \
+  V(kura_rt_stack_seq)            \
+  V(kura_rt_stack_record)         \
+  V(kura_rt_stack_closure)        \
+  V(kura_rt_stack_box)            \
   V(kura_rt_unbox)                \
   V(kura_rt_binop)                \
   V(kura_rt_unop)                 \
@@ -136,6 +189,7 @@ auto MakeString(const std::string& value) -> KuraValue;
   V(kura_rt_pop_clip)             \
   V(kura_rt_draw_rect)            \
   V(kura_rt_draw_text)            \
+  V(kura_rt_draw_input)           \
   V(kura_rt_draw_line)            \
   V(kura_rt_viewport_width)       \
   V(kura_rt_viewport_height)      \
@@ -206,6 +260,13 @@ void kura_rt_draw_rect();
 // with `kura_rt_layout_set_text`, wrapped to its box and placed in it. `color` is a packed RGBA8.
 void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_t color, uint64_t opacity_bits,
                        uint64_t align);
+// Draws the input node `node` of the layout `table`: its text in the font and size it was given with
+// `kura_rt_layout_set_text`, or the placeholder (a String, or anything else for none) when that is empty, inside its
+// padding and clipped to it; and when the input has the keyboard, its selection and its caret. `message` is what
+// `on-input` is, an open variant or None, and `readonly` a Bool: see runtime_input.h.
+void kura_rt_draw_input(const void* table, uint64_t count, uint64_t node, uint64_t color, uint64_t opacity_bits,
+                        uint64_t align, uint64_t placeholder_tag, uint64_t placeholder_bits, uint64_t message_tag,
+                        uint64_t message_bits, uint64_t readonly_tag, uint64_t readonly_bits);
 // The renderer call under `kura_rt_draw_text`: draws one run of text with the top-left of its box at (x, y).
 // `family` is the `font-family`, NULL (or a zero length) for the default font. Not called by compiled code.
 void kura_rt_render_text(double x, double y, const char* utf8, uint64_t length, float size, const char* family,
@@ -255,7 +316,9 @@ void kura_rt_layout_slot_end(const void* table, uint64_t count, uint64_t slot);
 // coordinates. A node that isn't there has an empty box at the origin.
 void kura_rt_layout_rect(const void* table, uint64_t count, uint64_t node, KuraRect* out);
 
-void* kura_rt_record_new();
+// A record with room for `capacity` fields: a record is as big as it is made, and a field set past that is an error.
+void* kura_rt_record_new(uint64_t capacity);
+uint64_t kura_rt_record_count(void* object);
 void kura_rt_record_set(void* object, uint64_t hash, const char* name, uint64_t tag, uint64_t bits);
 KuraValue kura_rt_record_get(void* object, uint64_t hash);
 void kura_rt_record_spread(void* dst, void* src);
@@ -266,6 +329,13 @@ KuraValue kura_rt_get_safe(uint64_t tag, uint64_t bits, uint64_t hash);
 void* kura_rt_node_new(const char* kind);
 
 void* kura_rt_closure_new(void* function, uint64_t arity, uint64_t captures);
+// Objects in a block of the caller's stack, where the escape analysis found they don't outlive the call: `memory` is
+// the block, which the code generator made as big as the object is, and these make it one (a header that says it isn't
+// the heap's, and the fixed fields) and zero the rest.
+void kura_rt_stack_seq(void* memory, uint64_t capacity);
+void kura_rt_stack_record(void* memory, uint64_t capacity);
+void kura_rt_stack_closure(void* memory, void* function, uint64_t arity, uint64_t captures);
+void kura_rt_stack_box(void* memory, uint64_t tag, uint64_t bits);
 void kura_rt_closure_capture(void* closure, uint64_t index, uint64_t tag, uint64_t bits);
 KuraValue kura_rt_closure_get_capture(void* closure, uint64_t index);
 void* kura_rt_closure_fn(void* closure, uint64_t arguments);

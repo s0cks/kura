@@ -5,6 +5,7 @@
 #include <llvm/Support/InitLLVM.h>
 #include <llvm/Support/TargetSelect.h>
 
+#include "backend/escape_analysis.h"
 #include "backend/flow_graph.h"
 #include "backend/llvm_codegen.h"
 #include "backend/purity_analysis.h"
@@ -15,6 +16,9 @@ namespace kura {
 auto FlowGraphCompiler::Compile(Module* m, ModuleGraph* graphs, std::vector<std::string>& errors) -> bool {
   if (!graphs || !TypeAnalysis::Run(m, graphs, &errors) || !PurityAnalysis::Run(m, graphs, &errors))
     return false;
+
+  // what stays in its function goes on the stack: the rest is the heap's, by phase
+  EscapeAnalysis::Run(graphs);
 
   context_ = std::make_unique<llvm::LLVMContext>();
   std::string error;

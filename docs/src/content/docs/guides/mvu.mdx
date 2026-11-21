@@ -110,14 +110,20 @@ A few rules:
 - With no `update`, there is no state to change, and a Message goes straight to the listeners.
 - A click goes to the topmost element under it that has an `on-click`. A click on nothing is not an
   error (`handled` is false).
+- A click on an `#input` also gives it the keyboard. The host then sends what is typed with
+  `TextInput(utf8, &handled, &error)` and the editing keys with `KeyDown(key, mods, &handled, &error)`
+  (`rt::input::Key`: backspace, delete, the arrows, home, end, select-all and escape). A change is the Message that
+  the input's `on-input` names, with the new text in it, sent like any other. `handled` says whether the keyboard
+  was an input's. Copy and cut are the host's: it reads `SelectedText()`, and a paste is `TextInput` of the
+  clipboard. A host that draws only when something changes also draws while `InputBlinking()`.
 - A `Session` belongs to one thread: `Render` and `Click` go on the thread that draws.
 
 There are no subscriptions, and your own Messages are yours: the runtime never invents one for you.
 
 The fixed exception is the set of built-in **event payloads** that elements can carry
 (`on-click`, `on-input`, `on-scroll`). They are predefined so the runtime and the host
-agree on how user input gets back into your UI as Messages. Only `on-click`, on blocks and
-buttons, is routed so far.
+agree on how user input gets back into your UI as Messages. `on-click`, on blocks and buttons,
+`on-scroll` and `on-input`, on inputs, are routed.
 
 ## Built-in messages
 

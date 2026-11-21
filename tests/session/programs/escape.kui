@@ -1,0 +1,32 @@
+// What stays in a function and what doesn't: `kura::EscapeAnalysis` puts the first group's allocations on the stack
+// and leaves the second's to the heap. Each function makes one thing, so a test can look at it by name.
+type Pair = { first: Number, second: Number }
+
+fn count(items: Seq<Number>): Number => items[0]
+
+// stays: it is only read here
+fn reads-a-list(a: Number, b: Number): Number => [a, b][0] + [a, b][1]
+fn reads-a-record(a: Number): Number => { x: a, y: 2 }.x
+fn calls-with-a-number(a: Number): Number => count2(a)
+fn count2(a: Number): Number => a
+
+// leaves: returned, or in what is returned, or given to a call
+fn returns-a-list(a: Number): Seq<Number> => [a, a]
+fn returns-a-record(a: Number): Pair => { first: a, second: a }
+fn nested-in-a-record(a: Number) => { items: [a] }
+fn passes-to-a-call(a: Number): Number => count([a, a])
+fn nested-in-a-list(a: Number) => [[a]]
+
+// stays: a variant that is taken apart here, and a closure that is only called here
+type Held = Hold(Number) | Empty
+
+fn unwraps(n: Number): Number =>
+  match Hold(n) {
+    Hold(x) => x + 1
+    Empty => 0
+  }
+
+fn calls-a-closure(k: Number): Number => ((x) => x + k)(1)
+
+// in a loop: one block of stack couldn't be all of them, so they are the heap's
+fn loops(items: Seq<Number>): Seq<Number> => for _, n in items => [n, n][1]

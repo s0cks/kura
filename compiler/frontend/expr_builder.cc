@@ -1611,6 +1611,8 @@ auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
 
   const auto node = NodeExpr::New(*kind, std::move(properties))->AsNode();
   node->SetDirectives(BuildDirectives(ctx->directives));
+  if (ctx->has_id)
+    node->SetId(ctx->id.text);
   if (ctx->has_children)
     BuildUiChildren(node, ctx);
   return static_cast<Expr*>(node);

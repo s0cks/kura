@@ -70,7 +70,8 @@ if(TARGET kura-renderer-gl)
 
   # a Kura program, from source to pixels
   add_executable(kura-gl-program-tests
-    test_gl_program.cc)
+    test_gl_program.cc
+    gl_program_environment.cc)
   target_compile_definitions(kura-gl-program-tests
     PRIVATE KURA_EXAMPLES_DIR="${PROJECT_SOURCE_DIR}/examples")
   target_link_libraries(kura-gl-program-tests

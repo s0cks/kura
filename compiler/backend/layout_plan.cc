@@ -92,7 +92,7 @@ auto LayoutPlan::Convert(dom::Node* node, layout::Style* style, const layout::No
       continue;
 
     const std::string name(property.def->name);
-    if (name == "size" && node->IsText()) {
+    if (name == "size" && (node->IsText() || node->IsInput())) {
       double size = 0;
       if (!property.IsConstant() || !NumberOf(property.constant, &size)) {
         if (property.IsConstant() && property.constant->GetType() == kPxType) {
@@ -106,7 +106,7 @@ auto LayoutPlan::Convert(dom::Node* node, layout::Style* style, const layout::No
       continue;
     }
 
-    if (name == "font-family" && node->IsText()) {
+    if (name == "font-family" && (node->IsText() || node->IsInput())) {
       // Like `size`, it has to be known when the text is measured, which is before the view runs.
       if (!property.IsConstant() || property.constant->GetType() != kStringType) {
         *error = tag + " 'font-family' has to be a constant string for now: text is measured before the view runs";
@@ -263,7 +263,16 @@ auto LayoutPlan::Add(dom::Node* node, dom::Node* root, const layout::NodeId pare
     return true;
   }
 
-  layout::AddNode(&nodes_, parent, style, node->IsText());
+  if (node->IsInput()) {
+    // One line, as wide as it is told to be: the text in it doesn't decide that, so it has a width of its own
+    // unless it grows or is given one, and room around the text unless it is given padding.
+    style.single_line = true;
+    if (style.width.IsAuto() && style.basis.IsAuto() && style.grow == 0 && !node->HasProperty("width"))
+      style.width = layout::Length::Px(kDefaultInputWidth);
+    if (!node->HasProperty("padding"))
+      style.padding = layout::Edges::All(layout::Length::Px(kDefaultInputPadding));
+  }
+  layout::AddNode(&nodes_, parent, style, node->IsText() || node->IsInput());
   ids_[node] = id;
   for (const auto child : node->GetChildren()) {
     if (!Add(child, root, id, error))

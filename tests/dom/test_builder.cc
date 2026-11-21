@@ -77,6 +77,35 @@ TEST(DomBuilder, ElementsAndChildren) {
   EXPECT_EQ(static_cast<String*>(value->constant)->GetValue(), "Go");
 }
 
+TEST(DomBuilder, ElementsKeepTheirIds) {
+  Built built{};
+  const auto button = Element(NodeExpr::kButton, {}, {Element(NodeExpr::kText), Element(NodeExpr::kText)});
+  button->SetId("my-button");
+  static_cast<NodeExpr*>(button->GetChildAt(0))->SetId("label");
+  ASSERT_TRUE(Build(button, &built));
+
+  const auto node = built.root->GetChildAt(0);
+  EXPECT_EQ(node->GetId(), "my-button");
+  EXPECT_TRUE(node->HasId());
+  EXPECT_EQ(node->GetChildAt(0)->GetId(), "label");
+  EXPECT_FALSE(node->GetChildAt(1)->HasId());
+  EXPECT_EQ(built.tree.FindById("label"), node->GetChildAt(0));
+  EXPECT_EQ(built.tree.FindById("my-button"), node);
+  EXPECT_EQ(built.tree.FindById("nothing"), nullptr);
+  EXPECT_EQ(built.tree.FindById(""), nullptr);
+  EXPECT_NE(Dump(&built).find(":my-button"), std::string::npos);
+}
+
+TEST(DomBuilder, AnIdNamesOneElement) {
+  Built built{};
+  const auto block = Element(NodeExpr::kBlock, {}, {Element(NodeExpr::kText), Element(NodeExpr::kText)});
+  static_cast<NodeExpr*>(block->GetChildAt(0))->SetId("same");
+  static_cast<NodeExpr*>(block->GetChildAt(1))->SetId("same");
+  EXPECT_FALSE(Build(block, &built));
+  ASSERT_EQ(built.errors.size(), 1U);
+  EXPECT_NE(built.errors[0].find("'same' is already used"), std::string::npos) << built.errors[0];
+}
+
 TEST(DomBuilder, SequenceRendersEveryNodeInOrder) {
   Built built{};
   ASSERT_TRUE(Build(

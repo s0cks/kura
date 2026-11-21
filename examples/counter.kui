@@ -1,10 +1,11 @@
-type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int)
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int) | InitValue(String)
 
 type State = {
   value: Int,
   width: Float,
   height: Float,
   items: Seq<String>,
+  message: String,
 }
  
 fn init(): State =>
@@ -13,6 +14,7 @@ fn init(): State =>
     width: 0.0,
     height: 0.0,
     items: [  ],
+    message: "",
   }
 
 fn update(msg: Message, state: State): State =>
@@ -27,6 +29,7 @@ fn update(msg: Message, state: State): State =>
         width: size.width,
         height: size.height,
       }
+    InitValue(t) => { state | message: t, }
     Append(n) => { state | items += [ "{n}"] }
     _ => state
   }
@@ -56,6 +59,7 @@ fn view(state: State): Node => {
   set text(size: 24px)
   set button(justify: "center", padding: 16px, fill: white)
   set block(gap: 16px, padding: 32px, justify: "center")
+  set line(fill: blue)
 
   #block(direction: "column",
          width: 1fr,
@@ -68,17 +72,19 @@ fn view(state: State): Node => {
     #block(direction: "column",
            min-height: 25%,
            grow: 1){
+      #input(size: 24px, placeholder: "Init value...", on-input: InitValue, state.message)
+
       #block(direction: "row"){
-        #text("value: {state.value}")
+        #text("{10} value: {state.value} {11}")
       }
 
-      #line(fill: blue)
+      #line
 
       #button(on-click: Append(state.value), radius: 16px){
         #text("Append")
       }
 
-      #line(fill: blue)
+      #line
 
       counter-buttons()
     }

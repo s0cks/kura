@@ -1,0 +1,28 @@
+// Inputs: three of them in a column, 200px wide and as tall as a line of text with its padding, 10px apart.
+//   :name     takes what is typed (`Typed`), and has a placeholder
+//   :locked   is readonly, though it has an `on-input`
+//   :plain    has no `on-input`, so it only shows
+//   :picky    asks for what is typed (`Asked`), and the program doesn't take it
+type Message = Typed(String) | Asked(String) | Locked(String)
+
+type State = {
+  text: String,
+  asked: String,
+}
+
+fn init(): State => { text: "hi", asked: "" }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Typed(text) => { state | text: text }
+    Asked(text) => { state | asked: state.asked }
+    _ => state
+  }
+
+fn view(state: State): Node =>
+  #block(direction: "column", gap: 10px, width: 400px){
+    #input(:name, on-input: Typed, placeholder: "Name", value: state.text)
+    #input(:locked, readonly: true, on-input: Locked, value: "fixed")
+    #input(:plain, value: "plain")
+    #input(:picky, on-input: Asked, value: state.asked, placeholder: "Pick")
+  }

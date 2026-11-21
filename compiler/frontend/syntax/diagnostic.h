@@ -48,7 +48,8 @@ namespace kura::syntax {
   V(WhenWithElse,             29, "'when' with an 'else'")                             \
   V(BadForBinding,            30, "malformed 'for' binding")                           \
   V(BadStaticAssert,          31, "malformed 'static-assert'")                         \
-  V(StyleError,               32, "style error")
+  V(StyleError,               32, "style error")                                     \
+  V(BadElementId,             33, "element id is malformed")
 // clang-format on
 
 enum class Severity : uint8_t {

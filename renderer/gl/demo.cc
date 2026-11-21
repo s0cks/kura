@@ -74,7 +74,16 @@ void OnGlfwError(const int code, const char* message) {
 // Deadzone in logical window points before a touch/click becomes a scroll drag
 constexpr double kDragThreshold = 8.0;
 
+// What the keyboard did, in the order it did it: characters that were typed, and keys that were pressed.
+struct KeyboardEvent {
+  bool text = false;
+  std::string utf8{};
+  int key = 0;
+  int mods = 0;
+};
+
 struct WindowState {
+  std::vector<KeyboardEvent> keyboard{};
   bool focus_changed = false;
   bool focused = false;
   double wheel_x = 0;
@@ -91,6 +100,110 @@ struct WindowState {
 
 // How far a notch of the wheel scrolls, in pixels.
 constexpr double kPixelsPerNotch = 40.0;
+
+void OnChar(GLFWwindow* window, const unsigned int codepoint) {
+  const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
+  std::string utf8{};
+  if (codepoint < 0x80) {
+    utf8.push_back(static_cast<char>(codepoint));
+  } else if (codepoint < 0x800) {
+    utf8.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+    utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else if (codepoint < 0x10000) {
+    utf8.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+    utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else {
+    utf8.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+    utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+    utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  }
+  state->keyboard.push_back(KeyboardEvent{true, std::move(utf8), 0, 0});
+}
+
+void OnKey(GLFWwindow* window, const int key, const int, const int action, const int mods) {
+  if (action == GLFW_RELEASE)
+    return;
+  const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
+  state->keyboard.push_back(KeyboardEvent{false, {}, key, mods});
+}
+
+// What the keyboard does to the UI: typed text goes to the input that has the keyboard, and so do the keys that edit
+// it, with the clipboard for copy, cut and paste. A key that no input takes is the window's: Escape closes it.
+void HandleKeyboard(GLFWwindow* window, WindowState* state, kura::Session* session) {
+  std::string error{};
+  const auto check = [&](const bool ok) {
+    if (!ok) {
+      std::cerr << "failed to deliver input: " << error << std::endl;
+      std::exit(1);
+    }
+  };
+
+  for (const auto& event : state->keyboard) {
+    bool handled = false;
+    if (event.text) {
+      check(session->TextInput(event.utf8, &handled, &error));
+      continue;
+    }
+
+    using kura::rt::input::Key;
+    const auto control = (event.mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)) != 0;
+    const auto mods = ((event.mods & GLFW_MOD_SHIFT) != 0 ? kura::rt::input::kShift : 0) |
+                      ((event.mods & GLFW_MOD_CONTROL) != 0 ? kura::rt::input::kControl : 0);
+    switch (event.key) {
+      case GLFW_KEY_BACKSPACE:
+        check(session->KeyDown(Key::kBackspace, mods, &handled, &error));
+        break;
+      case GLFW_KEY_DELETE:
+        check(session->KeyDown(Key::kDelete, mods, &handled, &error));
+        break;
+      case GLFW_KEY_LEFT:
+        check(session->KeyDown(Key::kLeft, mods, &handled, &error));
+        break;
+      case GLFW_KEY_RIGHT:
+        check(session->KeyDown(Key::kRight, mods, &handled, &error));
+        break;
+      case GLFW_KEY_HOME:
+        check(session->KeyDown(Key::kHome, mods, &handled, &error));
+        break;
+      case GLFW_KEY_END:
+        check(session->KeyDown(Key::kEnd, mods, &handled, &error));
+        break;
+      case GLFW_KEY_A:
+        if (control)
+          check(session->KeyDown(Key::kSelectAll, mods, &handled, &error));
+        break;
+      case GLFW_KEY_C:
+      case GLFW_KEY_X:
+        if (control && session->HasTextFocus()) {
+          const auto selected = session->SelectedText();
+          if (!selected.empty())
+            glfwSetClipboardString(window, selected.c_str());
+          handled = true;
+          if (event.key == GLFW_KEY_X)
+            check(session->KeyDown(Key::kBackspace, 0, &handled, &error));
+        }
+        break;
+      case GLFW_KEY_V:
+        if (control && session->HasTextFocus()) {
+          if (const auto pasted = glfwGetClipboardString(window))
+            check(session->TextInput(pasted, &handled, &error));
+          handled = true;
+        }
+        break;
+      case GLFW_KEY_ESCAPE:
+        check(session->KeyDown(Key::kEscape, mods, &handled, &error));
+        // nothing had the keyboard: the key is the window's
+        if (!handled)
+          glfwSetWindowShouldClose(window, true);
+        break;
+      default:
+        break;
+    }
+  }
+  state->keyboard.clear();
+}
 
 void OnScroll(GLFWwindow* window, const double x, const double y) {
   const auto state = static_cast<WindowState*>(glfwGetWindowUserPointer(window));
@@ -138,7 +251,7 @@ int main(const int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  const auto heap = new heap::Heap(heap::Heap::SmallOptions());
+  const auto heap = new heap::Heap();
   KASSERT(heap);
   heap::Heap::SetCurrent(heap);
 
@@ -190,6 +303,8 @@ int main(const int argc, char** argv) {
   glfwSetWindowUserPointer(window, &window_state);
   glfwSetWindowFocusCallback(window, &OnFocus);
   glfwSetScrollCallback(window, &OnScroll);
+  glfwSetCharCallback(window, &OnChar);
+  glfwSetKeyCallback(window, &OnKey);
   glfwMakeContextCurrent(window);
   glfwSwapInterval(1);
 
@@ -254,10 +369,9 @@ int main(const int argc, char** argv) {
     }
 
     {
-      // Check if the Escape key is pressed
-      if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, true);
-      }
+      // host => UI: what was typed, and the keys that edit it (Escape is in there: it closes the window unless an
+      // input had the keyboard)
+      HandleKeyboard(window, &window_state, session.get());
 
       // Check continuous movement keys
       if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {

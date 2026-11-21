@@ -371,6 +371,90 @@ class DrawTextInstr : public TemplateGraphicsInstr<3> {
   }
 };
 
+// Draws an input: its text (or its placeholder when it is empty) inside its padding, and, when it has the focus,
+// its selection and caret. The box (fill, border) is drawn before, like any other node's. What the text is, and
+// where, is the layout's, like a text node's; the value input is only there so that it is computed first.
+//
+// The message is the one `on-input` is, an open variant or none; the runtime keeps it with the box for the frame
+// so that what is typed can be made into it. A readonly input can be selected from but not changed.
+//
+// The opacity (0 to 1) is multiplied into the color's alpha, and the alignment is a text's: 0 at its start, 1
+// in the middle and 2 at its end.
+class DrawInputInstr : public TemplateGraphicsInstr<6> {
+ public:
+  static const auto kValuePos = 0;
+  static const auto kColorPos = 1;
+  static const auto kOpacityPos = 2;
+  static const auto kPlaceholderPos = 3;
+  static const auto kMessagePos = 4;
+  static const auto kReadonlyPos = 5;
+
+ private:
+  std::shared_ptr<LayoutPlan> plan_;
+  layout::NodeId node_;
+  int align_;
+
+ public:
+  DrawInputInstr(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color,
+                 Value* opacity, Value* placeholder, Value* message, Value* readonly, const int align) :
+    plan_(std::move(plan)),
+    node_(node),
+    align_(align) {
+    SetInputAt(kValuePos, value);
+    SetInputAt(kColorPos, color);
+    SetInputAt(kOpacityPos, opacity);
+    SetInputAt(kPlaceholderPos, placeholder);
+    SetInputAt(kMessagePos, message);
+    SetInputAt(kReadonlyPos, readonly);
+  }
+  ~DrawInputInstr() override = default;
+
+  inline auto GetPlan() const -> const std::shared_ptr<LayoutPlan>& {
+    return plan_;
+  }
+
+  inline auto GetNode() const -> layout::NodeId {
+    return node_;
+  }
+
+  inline auto GetValue() const -> Value* {
+    return GetInputAt(kValuePos);
+  }
+
+  inline auto GetColor() const -> Value* {
+    return GetInputAt(kColorPos);
+  }
+
+  inline auto GetOpacity() const -> Value* {
+    return GetInputAt(kOpacityPos);
+  }
+
+  inline auto GetPlaceholder() const -> Value* {
+    return GetInputAt(kPlaceholderPos);
+  }
+
+  inline auto GetMessage() const -> Value* {
+    return GetInputAt(kMessagePos);
+  }
+
+  inline auto GetReadonly() const -> Value* {
+    return GetInputAt(kReadonlyPos);
+  }
+
+  inline auto GetAlign() const -> int {
+    return align_;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(DrawInput);
+
+ public:
+  static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId node, Value* value, Value* color,
+                         Value* opacity, Value* placeholder, Value* message, Value* readonly,
+                         const int align = DrawTextInstr::kAlignStart) -> DrawInputInstr* {
+    return new DrawInputInstr(std::move(plan), node, value, color, opacity, placeholder, message, readonly, align);
+  }
+};
+
 // Says that the box of a node means a Message when an event of `kind` (`rt::EventKind`) happens in it. It is
 // emitted where the node is drawn, after layout, so the box is the one that was drawn, and the runtime keeps
 // it for the frame for a host to look up.
@@ -806,6 +890,66 @@ class LayoutSlotEndInstr : public GraphicsInstr {
  public:
   static inline auto New(std::shared_ptr<LayoutPlan> plan, const layout::NodeId slot) -> LayoutSlotEndInstr* {
     return new LayoutSlotEndInstr(std::move(plan), slot);
+  }
+};
+
+class AllocImageInstr : public TemplateGraphicsInstr<1> {
+  static constexpr const auto kSourcePos = 0;
+
+ public:
+  AllocImageInstr(Value* source = nullptr) {
+    if (source)
+      SetSource(source);
+  }
+  ~AllocImageInstr() override = default;
+
+  auto GetSource() const -> Value* {
+    return GetInputAt(kSourcePos);
+  }
+
+  inline auto HasSource() const -> bool {
+    return GetSource() != nullptr;
+  }
+
+  void SetSource(Value* rhs) {
+    return SetInputAt(kSourcePos, rhs);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(AllocImage);
+
+ public:
+  static inline auto New(Value* source = nullptr) -> AllocImageInstr* {
+    return new AllocImageInstr(source);
+  }
+};
+
+class DrawImageInstr : public GraphicsInstr {
+  static constexpr const auto kSourcePos = 0;
+
+ public:
+  DrawImageInstr(Value* source) {
+    if (source)
+      SetSource(source);
+  }
+  ~DrawImageInstr() override = default;
+
+  auto GetSource() const -> Value* {
+    return GetInputAt(kSourcePos);
+  }
+
+  inline auto HasSource() const -> bool {
+    return GetSource() != nullptr;
+  }
+
+  void SetSource(Value* rhs) {
+    return SetInputAt(kSourcePos, rhs);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(DrawImage);
+
+ public:
+  static inline auto New(Value* source = nullptr) -> DrawImageInstr* {
+    return new DrawImageInstr(source);
   }
 };
 

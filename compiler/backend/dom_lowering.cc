@@ -26,7 +26,14 @@ auto DomLowering::ResolveProperties(dom::Node* node, Resolved* resolved) -> bool
     if (property.IsConstant())
       continue;
 
-    const auto value = host_->Eval(property.expr);
+    // `on-input: Typed` names the variant that the typed text goes in, so it has no payload here: the runtime gives
+    // it one every time the text changes.
+    Value* value = nullptr;
+    const auto variant = property.def->name == "on-input" && property.expr ? property.expr->AsVariant() : nullptr;
+    if (variant && !variant->HasPayload())
+      value = host_->Bind(NewVariantInstr::NewOpen(variant->GetVariantName()));
+    else
+      value = host_->Eval(property.expr);
     if (!value)
       return false;
 
@@ -76,6 +83,12 @@ auto DomLowering::EmitPassRange(const size_t begin, const size_t end) -> bool {
       } else if (op.node->IsLine()) {
         if (!DrawLine(*op.node))
           return false;
+      } else if (op.node->IsInput()) {
+        if (!DrawInputBox(op.node))
+          return false;
+      } else if (op.node->IsImage()) {
+        if (!DrawImage(op.node))
+          return false;
       }
     }
   }
@@ -86,6 +99,9 @@ auto DomLowering::EmitPassRange(const size_t begin, const size_t end) -> bool {
       const auto& op = ops_[i];
       if (op.node->IsText()) {
         if (!DrawText(op))
+          return false;
+      } else if (op.node->IsInput()) {
+        if (!DrawInputText(op))
           return false;
       }
     }
@@ -288,6 +304,26 @@ auto DomLowering::VisitText(dom::Node* node) -> bool {
   return true;
 }
 
+// An input is a box, painted with the boxes, and its text, painted with the text over every box in the clip. Its
+// value is what layout makes room for, as a text's is, and what the view says it is.
+auto DomLowering::VisitInput(dom::Node* node) -> bool {
+  auto& resolved = resolved_[node];
+  if (!ResolveProperties(node, &resolved))
+    return false;
+
+  EmitLayoutProperties(node, resolved);
+  auto value = ResolvePropertyByName(node, "value", resolved);
+  if (!value)
+    value = host_->Bind(ConstantInstr::New(String::New("")));
+
+  const auto id = plan_->FindId(node);
+  if (id && !drawing_hole_)
+    host_->Emit(LayoutSetTextInstr::New(plan_, *id, value, plan_->GetFontSize(*id), plan_->GetFontFamily(*id)));
+
+  ops_.push_back(Op{node, value});
+  return true;
+}
+
 auto DomLowering::VisitDynamic(dom::Node* node) -> bool {
   ops_.push_back(Op{node, nullptr});
   // its instances are made now, before the layout; when they are drawn, they are there already
@@ -477,6 +513,79 @@ auto DomLowering::DrawText(const Op& op) -> bool {
   }
 
   EmitRenderCall(DrawTextInstr::New(plan_, *id, op.text, color, opacity, align));
+  EmitTooltip(op.node);
+  return true;
+}
+
+// The box of an input: what it says is its `fill` and border, and a click on it is a click on its box like any
+// other's. The text is drawn later, with the others'.
+auto DomLowering::DrawInputBox(dom::Node* node) -> bool {
+  if (!EmitBox(node, false))
+    return false;
+
+  EmitEvents(node);
+  return true;
+}
+
+auto DomLowering::DrawImage(dom::Node* node) -> bool {
+  if (!EmitBox(node, false))
+    return false;
+
+  auto& resolved = resolved_[node];
+
+  Value* source = ResolvePropertyByName(node, "source", resolved);
+  if (source)
+    return Fail("internal error: #" + std::string(node->GetTag()) + " has source value");
+
+  EmitRenderCall(DrawImageInstr::New(source));
+  EmitEvents(node);
+  return true;
+}
+
+auto DomLowering::DrawInputText(const Op& op) -> bool {
+  const auto id = plan_->FindId(op.node);
+  if (!id)
+    return Fail("internal error: #" + std::string(op.node->GetTag()) + " has no place in the layout");
+
+  auto& resolved = resolved_[op.node];
+  const auto constant = [this](Object* value) {
+    return host_->Bind(ConstantInstr::New(value));
+  };
+
+  Value* color = ResolvePropertyByName(op.node, "color", resolved);
+  if (!color)
+    color = constant(Int::New(0x000000FF));
+  Value* opacity = ResolvePropertyByName(op.node, "opacity", resolved);
+  if (!opacity)
+    opacity = constant(Float::New(1.0));
+  Value* placeholder = ResolvePropertyByName(op.node, "placeholder", resolved);
+  if (!placeholder)
+    placeholder = constant(String::New(""));
+  Value* readonly = ResolvePropertyByName(op.node, "readonly", resolved);
+  if (!readonly)
+    readonly = constant(Bool::False());
+
+  // what `on-input` is, or None: without it there is nowhere for what is typed to go, and the input only shows
+  Value* message = nullptr;
+  if (const auto property = op.node->FindProperty("on-input")) {
+    if (const auto it = resolved.find(property->def); it != resolved.end())
+      message = it->second;
+  }
+  if (!message)
+    message = constant(None::Get());
+
+  auto align = DrawTextInstr::kAlignStart;
+  if (const auto property = op.node->FindProperty("text-align")) {
+    if (!property->IsConstant())
+      return Fail(
+          "#input 'text-align' has to be a constant for now: it is a word like \"center\", not a value that changes");
+    const auto word = static_cast<String*>(property->constant)->GetValue();
+    align = word == "center" ? DrawTextInstr::kAlignCenter
+          : word == "right"  ? DrawTextInstr::kAlignEnd
+                             : DrawTextInstr::kAlignStart;
+  }
+
+  EmitRenderCall(DrawInputInstr::New(plan_, *id, op.text, color, opacity, placeholder, message, readonly, align));
   EmitTooltip(op.node);
   return true;
 }

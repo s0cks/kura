@@ -77,6 +77,9 @@ class DomLowering : public dom::Visitor {
   auto EmitBox(dom::Node* node, bool always, Value* rect = nullptr) -> bool;
   auto DrawLine(dom::Node& op) -> bool;
   auto DrawText(const Op& op) -> bool;
+  auto DrawInputBox(dom::Node* node) -> bool;
+  auto DrawImage(dom::Node* node) -> bool;
+  auto DrawInputText(const Op& op) -> bool;
   auto RunHole(dom::Node* node, bool draw) -> bool;
 
  public:
@@ -93,6 +96,7 @@ class DomLowering : public dom::Visitor {
   auto VisitList(dom::Node* node) -> bool override;
   auto VisitScrollable(dom::Node* node) -> bool;
   auto VisitText(dom::Node* node) -> bool override;
+  auto VisitInput(dom::Node* node) -> bool override;
   auto VisitDynamic(dom::Node* node) -> bool override;
   auto VisitBind(dom::Node* node) -> bool override;
   auto VisitLine(dom::Node* node) -> bool override;

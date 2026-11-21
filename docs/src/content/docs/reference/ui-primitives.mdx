@@ -242,32 +242,61 @@ A single-line <Node name="box" /> for user input.
   <Property name="text-align" types={["String"]}>
     Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
   </Property>
+  <Property name="placeholder" types={["String"]}>
+    What is shown, dimmed, while the input is empty.
+  </Property>
+  <Property name="readonly" types={["Bool"]}>
+    An input that is `readonly` can be selected from and copied, but not changed. Default `false`.
+  </Property>
   <Property name="on-input" types={["Message"]}>
-    Message dispatched when the user edits the text.
+    The variant that the text goes in when the user changes it: `on-input: UpdateQuery` sends
+    `UpdateQuery("the new text")`, so `UpdateQuery` has to carry a `String`. An input without an `on-input`
+    has nowhere to send a change, so it is read-only.
   </Property>
   <TableSeparator text="Positional Properties" />
   <Property name="value" types={["String"]}>
-    The current text value inside the input.
+    The text in the input.
   </Property>
 </PropertyTable>
 
 <Example>
 
 ```kura
-#input(size: 16px,
-       padding: 8px,
-       border-color: #444444,
-       border-width: 1px,
-       on-input: UpdateQuery,
-       "Search....")
+type Message = UpdateQuery(String)
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    UpdateQuery(text) => { state | query: text }
+  }
+
+fn view(state: State): Node =>
+  #input(:search,
+         size: 16px,
+         padding: 8px,
+         border-color: #444444,
+         border-width: 1px,
+         placeholder: "Search...",
+         on-input: UpdateQuery,
+         state.query)
 ```
 </Example>
+
+An input is controlled: the view's `value` is the text, and a change is a Message that goes through `update` and
+comes back as the next `value`. If `update` doesn't take the change, the text goes back to what it was. What the
+program has no say in is which input has the keyboard (an input is clicked to get it, and Escape or a click elsewhere
+gives it up), where the caret and the selection are, and how far a long text is scrolled to keep the caret in view.
+
+An input is one line, 200px wide unless it is given a `width` (or grows), and as tall as a line of text with its padding.
+`padding` is 4px unless it is given.
 
 <Aside>
 
 Like `#text`, `font-family` and `size` are constants used to measure text metrics prior to layout.
 
 </Aside>
+
+A host sends what is typed with `Session::TextInput` and the editing keys with `Session::KeyDown`; see the
+[MVU guide](/kura/guides/mvu/).
 
 ## Image
 

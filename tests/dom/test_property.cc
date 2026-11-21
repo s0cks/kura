@@ -36,6 +36,8 @@ TEST(DomProperty, AppliesToTheRightKinds) {
   EXPECT_EQ(FindProperty(Kind::kFragment, "width"), nullptr);
   EXPECT_EQ(FindProperty(Kind::kText, "placeholder"), nullptr);
   EXPECT_NE(FindProperty(Kind::kInput, "placeholder"), nullptr);
+  EXPECT_EQ(FindProperty(Kind::kText, "readonly"), nullptr);
+  EXPECT_NE(FindProperty(Kind::kInput, "readonly"), nullptr);
 }
 
 TEST(DomProperty, ValueDependsOnTheKind) {

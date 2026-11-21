@@ -77,7 +77,6 @@ static bool try_parse_tag(const bbcode_parser* p, size_t pos, parsed_tag* out) {
   return true;
 }
 
-// Forward declaration for recursive descent
 static bbcode_node_list parse_until(bbcode_parser* p, const char* stop_tag, bool stop_on_list_item);
 
 static bbcode_node* parse_list(bbcode_parser* p, const parsed_tag* open) {
@@ -85,7 +84,6 @@ static bbcode_node* parse_list(bbcode_parser* p, const parsed_tag* open) {
   if (!node)
     return NULL;
 
-  // Ordered if [list=1], [list=a], [list=i], etc.
   node->list.ordered = (open->attr.length > 0);
 
   bbcode_node temp_items[128];
@@ -115,7 +113,6 @@ static bbcode_node* parse_list(bbcode_parser* p, const parsed_tag* open) {
       }
     }
 
-    // Skip stray whitespace/newlines between [list] and the first [*]
     p->pos++;
   }
 
@@ -133,7 +130,6 @@ static bbcode_node* parse_list(bbcode_parser* p, const parsed_tag* open) {
 static bbcode_node* parse_tag_element(bbcode_parser* p, const parsed_tag* open) {
   p->pos = open->full_end;
 
-  // [code] is raw text until [/code]
   if (span_eq_ci(open->name, "code")) {
     bbcode_node* node = alloc_node(p, kCodeBlockNode);
     if (!node)

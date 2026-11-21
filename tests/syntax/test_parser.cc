@@ -163,6 +163,43 @@ TEST(ParserExprTest, UiElements) {
   EXPECT_FALSE(row->children[2]->As<UiElement>()->has_props);
 }
 
+TEST(ParserExprTest, UiElementIds) {
+  const auto tree = Tree(
+      "fn view(): Content =>\n"
+      "  #button(:my-button, fill: red) {\n"
+      "    #text(:label, \"Hello World\")\n"
+      "    #block(:only)\n"
+      "    #spacer\n"
+      "  }");
+  ASSERT_TRUE(tree->IsValid()) << RenderToString(tree->GetSource(), tree->GetDiagnostics());
+  const auto* button = tree->GetRoot()->items[0]->As<FnDecl>()->body->As<UiElement>();
+  ASSERT_NE(button, nullptr);
+  EXPECT_TRUE(button->has_id);
+  EXPECT_EQ(button->id.text, "my-button");
+  // the id is not one of the arguments
+  ASSERT_EQ(button->props.size(), 1U);
+  EXPECT_EQ(button->props[0]->As<Arg>()->form, Arg::kNamed);
+
+  ASSERT_EQ(button->children.size(), 3U);
+  const auto* text = button->children[0]->As<UiElement>();
+  EXPECT_EQ(text->id.text, "label");
+  ASSERT_EQ(text->props.size(), 1U);
+  EXPECT_EQ(text->props[0]->As<Arg>()->form, Arg::kPositional);
+
+  const auto* only = button->children[1]->As<UiElement>();
+  EXPECT_TRUE(only->has_id);
+  EXPECT_TRUE(only->has_props);
+  EXPECT_TRUE(only->props.empty());
+
+  EXPECT_FALSE(button->children[2]->As<UiElement>()->has_id);
+}
+
+TEST(ParserExprTest, AnElementWithoutAnIdHasNone) {
+  const auto tree = Tree("fn view(): Content => #button(fill: red)");
+  ASSERT_TRUE(tree->IsValid()) << RenderToString(tree->GetSource(), tree->GetDiagnostics());
+  EXPECT_FALSE(tree->GetRoot()->items[0]->As<FnDecl>()->body->As<UiElement>()->has_id);
+}
+
 // ---- declarations -----------------------------------------------------------
 
 TEST(ParserDeclTest, TypeDeclarations) {

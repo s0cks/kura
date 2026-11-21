@@ -8,6 +8,9 @@ add_executable(kura-session-tests
   test_scroll.cc
   test_paint.cc
   test_tooltip.cc
+  test_input.cc
+  test_text_edit.cc
+  test_heap_wiring.cc
   environment.cc)
 target_compile_definitions(kura-session-tests
   PRIVATE KURA_EXAMPLES_DIR="${PROJECT_SOURCE_DIR}/examples"

@@ -59,6 +59,15 @@ FOR_EACH_EXPR(DECLARE_EXPR)
 // clang-format on
 
 class ExprVisitor {
+ protected:
+  static inline constexpr auto Continue() -> VisitResult {
+    return VisitResult::kContinue;
+  }
+
+  static inline constexpr auto Stop() -> VisitResult {
+    return VisitResult::kStop;
+  }
+
  public:
   ExprVisitor() = default;
   virtual ~ExprVisitor() = default;
@@ -470,7 +479,6 @@ class StoreLocalExpr : public TemplateExpr<1> {
   LocalVariable* local_;
   TypeExpr* annotation_ = nullptr;  // `let x: Number = ...`
   DirectiveList directives_{};
-
 
   inline void SetLocal(LocalVariable* local) {
     local_ = local;
@@ -1099,7 +1107,7 @@ class NodeExpr : public DynamicTemplateExpr {
   static inline auto ToString(const Kind& rhs) -> std::string_view {
     switch (rhs) {
 #define DEFINE_CHECK(Name, Tag) \
-  case Kind::k##Name:      \
+  case Kind::k##Name:           \
     return #Name;
       FOR_EACH_ELEMENT_NODE(DEFINE_CHECK)
 #undef DEFINE_CHECK
@@ -1115,6 +1123,8 @@ class NodeExpr : public DynamicTemplateExpr {
  private:
   Kind kind_;
   DirectiveList directives_{};
+  // `#button(:my-button)`: what the element is called, or empty
+  std::string id_{};
 
  public:
   explicit NodeExpr(const Kind kind, const PropertyList properties) :
@@ -1137,7 +1147,19 @@ class NodeExpr : public DynamicTemplateExpr {
     directives_ = std::move(rhs);
   }
 
-#define DEFINE_TYPE_CHECK(Name, Tag)          \
+  auto GetId() const -> const std::string& {
+    return id_;
+  }
+
+  auto HasId() const -> bool {
+    return !id_.empty();
+  }
+
+  void SetId(std::string rhs) {
+    id_ = std::move(rhs);
+  }
+
+#define DEFINE_TYPE_CHECK(Name, Tag)     \
   inline auto Is##Name() const -> bool { \
     return GetKind() == Kind::k##Name;   \
   }
@@ -1151,7 +1173,7 @@ class NodeExpr : public DynamicTemplateExpr {
     return new NodeExpr(kind, std::move(properties));
   }
 
-#define DEFINE_NEW(Name, Tag)                                                      \
+#define DEFINE_NEW(Name, Tag)                                                 \
   static inline auto New##Name(const PropertyList properties = {}) -> Expr* { \
     return New(Kind::k##Name, std::move(properties));                         \
   }

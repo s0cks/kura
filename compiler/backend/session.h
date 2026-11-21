@@ -10,6 +10,7 @@
 
 #include "backend/program.h"
 #include "backend/runtime_abi.h"
+#include "backend/runtime_input.h"
 
 namespace kura {
 // A running UI: a Program, the state its `init` and `update` produce, and the way Messages get in and out.
@@ -104,6 +105,24 @@ class Session {
   // node with an `on-click`, that Message is sent, `*handled` is set, and the result is `Send`'s. A click that
   // landed on nothing isn't an error: `*handled` is false.
   auto Click(double x, double y, bool* handled, std::string* error) -> bool;
+
+  // Host => UI. Inputs: a `#input` takes the keyboard when it is clicked (`Click` does that, and gives it up when the
+  // click is anywhere else), and the host then says what is typed and what keys are pressed. What they change is the
+  // text, and the text is the program's: the input's `on-input` Message is sent with the new text in it, as `Send`
+  // does, and the next `Render` shows what `update` made of it. `*handled` is whether the keyboard was an input's, and
+  // so whether the host should render again and leave the key alone; it is false when nothing has the keyboard, or
+  // the input can't be changed (it is `readonly`, or has no `on-input`).
+  //
+  // `TextInput` is characters, as the host's window gives them: typed or pasted, in UTF-8. `KeyDown` is the keys that
+  // do something else (see `rt::input::Key`), with what is held (`rt::input::Mod`). Copy and cut are the host's: it
+  // reads `SelectedText` and, for a cut, sends `kBackspace`; a paste is `TextInput` of what is on its clipboard.
+  //
+  // A host that renders only when something changes has to render again while `InputBlinking`: the caret blinks.
+  auto TextInput(std::string_view utf8, bool* handled, std::string* error) -> bool;
+  auto KeyDown(rt::input::Key key, int mods, bool* handled, std::string* error) -> bool;
+  auto HasTextFocus() const -> bool;
+  auto SelectedText() const -> std::string;
+  auto InputBlinking() const -> bool;
 
   // Host => UI. Tooltips: a node's `tooltip` shows next to the pointer once the pointer has been over it for a while, over
   // everything else in the frame. The host says where the pointer is and what time it is, and the frames that it

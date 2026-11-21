@@ -109,6 +109,8 @@ auto ExprPrinter::VisitMatch(MatchExpr* expr) -> VisitResult {
 
 auto ExprPrinter::VisitNode(NodeExpr* expr) -> VisitResult {
   stream() << "(#" << expr->GetKind();
+  if (expr->HasId())
+    stream() << " :" << expr->GetId();
   PrintDirectives(expr->GetDirectives());
   for (const auto& property : expr->GetProperties()) {
     stream() << ' ';

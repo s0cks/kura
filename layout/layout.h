@@ -168,6 +168,9 @@ struct Style {
   bool wrap = false;
   Display display = Display::kFlex;
   Overflow overflow = Overflow::kVisible;
+  // A measured text that is never wrapped, and that is as tall as a line even when it is empty: what an input is.
+  // Its width is whatever the node is given, not the text's.
+  bool single_line = false;
 };
 
 struct Node {

@@ -358,6 +358,10 @@ auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
 }
 
 auto EffectVisitor::VisitNode(expr::NodeExpr* expr) -> VisitResult {
+  if (expr->GetKind() == expr::NodeExpr::kText) {
+    std::cout << "compiling text node" << std::endl;
+  }
+
   const auto node = Bind(NewNodeInstr::New(static_cast<NewNodeInstr::Kind>(expr->GetKind())));
   for (const auto property : expr->GetProperties()) {
     const auto value = Eval(property->GetValue());
@@ -581,23 +585,36 @@ auto EffectVisitor::VisitFold(expr::FoldExpr* expr) -> VisitResult {
 }
 
 auto EffectVisitor::VisitRecord(expr::RecordExpr* expr) -> VisitResult {
-  const auto record = Bind(NewRecordInstr::New());
+  // What goes in the record is worked out first: its room has to be known when it is made.
+  std::vector<std::pair<expr::Expr*, Value*>> entries{};
+  ValueList spreads{};
+  uint64_t properties = 0;
   for (const auto entry : expr->GetEntries()) {
     if (const auto spread = entry->AsSpread()) {
       const auto value = Eval(spread->GetValue());
       if (!value)
         return false;
 
-      Emit(SpreadInstr::New(record, value));
+      entries.emplace_back(entry, value);
+      spreads.push_back(Value::New(value->GetDefinition()));
     } else if (const auto property = entry->AsStoreProperty()) {
       const auto value = Eval(property->GetValue());
       if (!value)
         return false;
 
-      Emit(StorePropertyInstr::New(record, property->GetProperty(), value));
+      entries.emplace_back(entry, value);
+      properties++;
     } else {
       return Fail("unexpected record entry");
     }
+  }
+
+  const auto record = Bind(NewRecordInstr::New(properties, std::move(spreads)));
+  for (const auto& [entry, value] : entries) {
+    if (entry->AsSpread())
+      Emit(SpreadInstr::New(record, value));
+    else
+      Emit(StorePropertyInstr::New(record, entry->AsStoreProperty()->GetProperty(), value));
   }
 
   if (WantsValue())

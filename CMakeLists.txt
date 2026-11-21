@@ -24,6 +24,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 include(FetchContent)
 
+option(KURA_ADD_TRACING_SUPPORT "" ON)
+if(KURA_ADD_TRACING_SUPPORT)
+  find_package(Tracy CONFIG REQUIRED)
+endif()
+
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 add_subdirectory(libs)
 add_subdirectory(heap)

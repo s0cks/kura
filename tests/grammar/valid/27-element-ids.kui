@@ -1,0 +1,9 @@
+fn view(): Node =>
+  #block(:root, direction: "column"){
+    #button(:save, fill: red, on-click: Save){
+      #text(:save-label, "Save")
+    }
+    #input(:name)
+    #input(:search, placeholder: "Search", value: "")
+    #spacer
+  }

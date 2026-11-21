@@ -3,4 +3,5 @@ target_sources(kura-compiler
          expr.cc
          expr_printer.cc
          expr_builder.cc
-         parser.cc)
+         parser.cc
+         expr_bbcode_expander.cc)

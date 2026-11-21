@@ -200,7 +200,7 @@ auto main(int argc, char** argv) -> int {
   if (!compile)
     std::println("running kurac v{}", KURA_VERSION);
 
-  const auto heap = new heap::Heap(heap::Heap::SmallOptions());
+  const auto heap = new heap::Heap();
   KASSERT(heap);
   heap::Heap::SetCurrent(heap);
   Type::Init();

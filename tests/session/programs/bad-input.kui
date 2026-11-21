@@ -1,0 +1,8 @@
+// `on-input` is given a variant that carries an Int, but what is typed is a String.
+type Message = Typed(Int)
+
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node =>
+  #input(on-input: Typed, value: "x")

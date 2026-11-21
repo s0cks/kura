@@ -1,0 +1,19 @@
+// A Message that `view` makes (its payload is a string interpolated in the frame) and `update` keeps in the model:
+// it has to be moved out of the frame before the frame is reset.
+type Message = Say(String)
+
+type State = { said: String, count: Number }
+
+fn init(): State => { said: "", count: 0 }
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Say(text) => { said: text, count: state.count + 1 }
+  }
+
+fn view(state: State): Node =>
+  #block(width: 200px, height: 100px){
+    #button(on-click: Say("count {state.count}, said {state.said}"), width: 100px, height: 40px){
+      #text("go")
+    }
+  }

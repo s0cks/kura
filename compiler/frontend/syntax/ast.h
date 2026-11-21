@@ -659,11 +659,14 @@ struct Lambda : Node {
   }
 };
 
-// `#tag(props) { children }`
+// `#tag(:id, props) { children }`
 struct UiElement : Node {
   DEFINE_NODE(UiElement)
   std::vector<Node*> directives{};
   Name tag{};
+  // `#button(:my-button, fill: red)`: a name for the element, first in its arguments, written with a colon.
+  bool has_id = false;
+  Name id{};
   bool has_props = false;
   std::vector<Node*> props{};  // Arg
   bool has_children = false;

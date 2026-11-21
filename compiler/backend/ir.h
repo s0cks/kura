@@ -45,6 +45,7 @@ namespace kura {
   V(StoreLocal)                 \
   V(LoadLocal)                  \
   V(Alloc)                      \
+  V(AllocImage)                 \
   V(RectIntersects)             \
   V(CheckRendererStatus)        \
   V(BeginFrame)                 \
@@ -72,6 +73,8 @@ namespace kura {
   V(DrawEllipse)                \
   V(DrawPolygon)                \
   V(DrawText)                   \
+  V(DrawInput)                  \
+  V(DrawImage)                  \
   V(DrawStrokeBezier)           \
   V(DrawQuadBezier)             \
   V(RegisterEvent)              \
@@ -388,6 +391,7 @@ class DynamicTemplateInstruction : public Instruction {
 class Definition : public Instruction {
  private:
   CompileType* compile_type_ = nullptr;
+  bool stack_allocated_ = false;
 
  protected:
   Definition() = default;
@@ -405,6 +409,16 @@ class Definition : public Instruction {
 
   void SetCompileType(CompileType* type) {
     compile_type_ = type;
+  }
+
+  // Set by the escape analysis on an allocation that doesn't leave its function: it is a block of the function's
+  // stack, not an object in a heap space.
+  inline auto IsStackAllocated() const -> bool {
+    return stack_allocated_;
+  }
+
+  inline void SetStackAllocated(const bool rhs = true) {
+    stack_allocated_ = rhs;
   }
 
   auto IsDefinition() const -> bool override {
@@ -556,16 +570,30 @@ class New : public Definition {
   ~New() override = default;
 };
 
+// A record, with the room it will need: a heap record is as big as it is made, so the number of entries it is given
+// (`properties`) and the records that are spread into it (the inputs, which are read only for how many fields they
+// have) are here, and the StoreProperty and Spread instructions that fill it follow.
 class NewRecordInstr : public New {
+ private:
+  uint64_t properties_ = 0;
+
  public:
   NewRecordInstr() = default;
+  explicit NewRecordInstr(const uint64_t properties, const ValueList spreads = {}) :
+    properties_(properties),
+    inputs_(std::move(spreads)) {}
   ~NewRecordInstr() override = default;
 
+  inline auto GetProperties() const -> uint64_t {
+    return properties_;
+  }
+
+  HAS_INPUT_LIST;
   DECLARE_INSTRUCTION_TYPE(NewRecord);
 
  public:
-  static inline auto New() -> NewRecordInstr* {
-    return new NewRecordInstr();
+  static inline auto New(const uint64_t properties = 0, const ValueList spreads = {}) -> NewRecordInstr* {
+    return new NewRecordInstr(properties, std::move(spreads));
   }
 };
 
@@ -702,6 +730,9 @@ class NewVariantInstr : public Definition {
  private:
   std::string name_;
   Value* payload_;
+  // A variant that is written without its payload where something other than the program fills it in: the
+  // message of `on-input` is `Typed`, and the runtime makes it `Typed("what was typed")`.
+  bool open_ = false;
 
  public:
   NewVariantInstr(const std::string name, Value* payload) :
@@ -709,6 +740,14 @@ class NewVariantInstr : public Definition {
     name_(std::move(name)),
     payload_(payload) {}
   ~NewVariantInstr() override = default;
+
+  inline auto IsOpen() const -> bool {
+    return open_;
+  }
+
+  inline void SetOpen(const bool rhs = true) {
+    open_ = rhs;
+  }
 
   auto GetVariantName() const -> const std::string& {
     return name_;
@@ -735,6 +774,12 @@ class NewVariantInstr : public Definition {
  public:
   static inline auto New(const std::string name, Value* payload = nullptr) -> NewVariantInstr* {
     return new NewVariantInstr(std::move(name), payload);
+  }
+
+  static inline auto NewOpen(const std::string name) -> NewVariantInstr* {
+    const auto instr = new NewVariantInstr(std::move(name), nullptr);
+    instr->SetOpen();
+    return instr;
   }
 };
 

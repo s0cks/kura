@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "backend/runtime_abi.h"
+#include "backend/runtime_input.h"
 #include "backend/runtime_text.h"
 #include "layout/layout.h"
 #include "object.h"
@@ -133,7 +134,8 @@ auto Equal(const lay::Style& a, const lay::Style& b) -> bool {
          Equal(a.max_height, b.max_height) && Equal(a.basis, b.basis) && Equal(a.padding, b.padding) &&
          Equal(a.margin, b.margin) && Equal(a.gap, b.gap) && a.grow == b.grow && a.shrink == b.shrink &&
          a.direction == b.direction && a.align == b.align && a.align_self == b.align_self &&
-         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display && a.overflow == b.overflow;
+         a.justify == b.justify && a.wrap == b.wrap && a.display == b.display && a.overflow == b.overflow &&
+         a.single_line == b.single_line;
 }
 
 // Whether an instance was made from this table: tables are constant, so the same shape is the same values. They
@@ -295,6 +297,12 @@ auto Wrap(const std::string& text, const float size, const std::string& family, 
 auto Measure(void* user, const lay::NodeId id, const lay::Scalar max_width) -> lay::Size {
   const auto& flat = *static_cast<Flat*>(user);
   lay::Size size{};
+  if (flat.nodes[id].style.single_line) {
+    // an input is a line tall, whatever is in it (and when there is nothing, a line of what it would hold)
+    const auto& text = flat.texts[id];
+    size.height = MeasureLine(text.empty() ? "Mg" : text, flat.sizes[id], flat.families[id]).height;
+    return size;
+  }
   for (const auto& line : Wrap(flat.texts[id], flat.sizes[id], flat.families[id], max_width)) {
     size.width = std::max(size.width, line.width);
     size.height += line.height;
@@ -324,7 +332,7 @@ auto ToLength(const uint64_t tag, const uint64_t bits, lay::Length* out) -> bool
       *out = lay::Length::Px(static_cast<float>(static_cast<int64_t>(bits)));
       return true;
     case kura::rt::kTagString:
-      if (static_cast<kura::String*>(reinterpret_cast<void*>(bits))->GetValue() != "auto")
+      if (kura::rt::StringView(bits) != "auto")
         return false;
       *out = lay::Length::Auto();
       return true;
@@ -373,7 +381,7 @@ auto Apply(lay::Style* style, const lay::Property property, const uint64_t tag, 
   float number = 0;
   std::string name{};
   if (tag == kura::rt::kTagString)
-    name = static_cast<kura::String*>(reinterpret_cast<void*>(bits))->GetValue();
+    name = std::string(kura::rt::StringView(bits));
 
   switch (property) {
     case lay::Property::kWidth:
@@ -499,7 +507,7 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
   auto& context = ContextFor(table, count);
   if (node >= count)
     return;
-  const auto& value = static_cast<kura::String*>(text)->GetValue();
+  const std::string value(kura::rt::StringView(reinterpret_cast<uint64_t>(text)));
   const auto font_size = static_cast<float>(size);
   const auto font_family = family == nullptr ? std::string{} : std::string(family, static_cast<size_t>(family_length));
   if (context.texts[node] == value && context.sizes[node] == font_size && context.families[node] == font_family)
@@ -550,6 +558,45 @@ void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t n
     }
     y += line.height;
   }
+}
+
+void kura_rt_draw_input(const void* table, const uint64_t count, const uint64_t node, const uint64_t color,
+                        const uint64_t opacity_bits, const uint64_t align, const uint64_t placeholder_tag,
+                        const uint64_t placeholder_bits, const uint64_t message_tag, const uint64_t message_bits,
+                        const uint64_t readonly_tag, const uint64_t readonly_bits) {
+  auto& context = ContextFor(table, count);
+  if (node >= count)
+    return;
+
+  // The text starts inside its padding, like a text's does. (A percentage padding is left out.)
+  const auto& padding = context.nodes[node].style.padding;
+  const auto pixels = [](const lay::Length& length) {
+    return length.unit == lay::Unit::kPx ? std::max(length.value, 0.0f) : 0.0f;
+  };
+  const auto& box = context.boxes[node];
+
+  double opacity = 1.0;
+  std::memcpy(&opacity, &opacity_bits, sizeof(opacity));
+  opacity = std::clamp(opacity, 0.0, 1.0);
+  const auto alpha = static_cast<uint64_t>(std::lround(static_cast<double>(color & 0xFF) * opacity));
+
+  kura::rt::input::Field field{};
+  // the context stands for the input among the others, and not the table: what a hole makes from one table has many
+  field.owner = &context;
+  field.node = node;
+  field.box = KuraRect{box.x, box.y, box.width, box.height};
+  field.padding_left = pixels(padding.left);
+  field.padding_right = pixels(padding.right);
+  field.text = context.texts[node];
+  field.size = context.sizes[node];
+  field.family = context.families[node];
+  field.color = (color & ~uint64_t{0xFF}) | alpha;
+  field.align = static_cast<int>(align);
+  if (placeholder_tag == kura::rt::kTagString && placeholder_bits != 0)
+    field.placeholder = std::string(kura::rt::StringView(placeholder_bits));
+  field.message = KuraValue{message_tag, message_bits};
+  field.readonly = readonly_tag == kura::rt::kTagBool && readonly_bits != 0;
+  kura::rt::input::Draw(field);
 }
 
 void kura_rt_layout_run(const void* table, const uint64_t count) {
@@ -632,6 +679,7 @@ void kura_rt_register_event(const void* table, const uint64_t count, const uint6
 }
 
 void kura_rt_layout_reset() {
+  kura::rt::input::Reset();
   tl_scrollers.clear();
   tl_bindings.clear();
   tl_contexts.clear();

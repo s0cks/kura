@@ -13,6 +13,7 @@
 #include <string>
 
 #include "backend/runtime_abi.h"
+#include "backend/runtime_input.h"
 #include "backend/runtime_text.h"
 #include "object.h"
 
@@ -89,6 +90,7 @@ void kura_rt_pointer_left() {
 }
 
 void kura_rt_set_time(const double seconds) {
+  kura::rt::input::SetClock(seconds);
   tl_state.clock_set = true;
   tl_state.clock = seconds;
 }
@@ -144,7 +146,7 @@ void kura_rt_tooltip_draw() {
     return;
   }
 
-  const auto text = reinterpret_cast<kura::String*>(message.bits)->GetValue();
+  const std::string text(kura::rt::StringView(message.bits));
   if (!state.hovering || !Same(anchor, text, state.box, state.text)) {
     // over something new: it starts being waited for, and what was dismissed is forgotten
     state.hovering = true;

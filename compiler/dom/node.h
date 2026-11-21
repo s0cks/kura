@@ -71,6 +71,7 @@ class Node {
   PropertyValueList properties_{};
   expr::Expr* expr_ = nullptr;
   TagList tags_{};
+  std::string id_{};
 
   explicit Node(const Kind kind) :
     kind_(kind) {}
@@ -161,6 +162,19 @@ class Node {
     expr_ = rhs;
   }
 
+  // What the element is called (`#button(:my-button)`): empty for one that isn't. Ids are unique in a tree.
+  inline auto GetId() const -> const std::string& {
+    return id_;
+  }
+
+  inline auto HasId() const -> bool {
+    return !id_.empty();
+  }
+
+  inline void SetId(std::string rhs) {
+    id_ = std::move(rhs);
+  }
+
   inline auto GetTags() const -> const TagList& {
     return tags_;
   }
@@ -194,6 +208,9 @@ class Tree {
   }
 
   auto New(Kind kind) -> Node*;
+
+  // The node called `id`, or null if there isn't one.
+  auto FindById(std::string_view id) const -> Node*;
 };
 }  // namespace dom
 }  // namespace kura
