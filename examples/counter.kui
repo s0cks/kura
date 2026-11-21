@@ -38,6 +38,7 @@ fn counter-buttons() =>
   set text(size: 24px, 
            text-align: "center")
   set button(justify: "center", padding: 16px, fill: white, radius: 16px)
+
   #fragment{
     #button(on-click: Increment){
       #text("Increment")
@@ -51,13 +52,14 @@ fn counter-buttons() =>
 
 fn row(label: String) =>
   set text(size: 24px)
-  #block(direction: "row", justify: "center", padding: 4px, fill: white){
+
+  #block(width: 100%, direction: "row", justify: "center", padding: 4px){
     #text(label)
   }
 
 fn view(state: State): Node => {
   set text(size: 24px)
-  set button(justify: "center", padding: 16px, fill: white)
+  set button(justify: "center", padding: 16px, fill: white, radius: 16px)
   set block(gap: 16px, padding: 32px, justify: "center")
   set line(fill: blue)
 
@@ -71,8 +73,14 @@ fn view(state: State): Node => {
               }){
     #block(direction: "column",
            min-height: 25%,
-           grow: 1){
-      #input(size: 24px, placeholder: "Init value...", on-input: InitValue, state.message)
+           shrink: 1){
+      #block(direction: "row", gap: 16px){
+        #input(size: 24px, grow: 1, placeholder: "Init value...", on-input: InitValue, state.message)
+
+        #button(shrink: 0){
+          #text("Set")
+        }
+      }
 
       #block(direction: "row"){
         #text("{10} value: {state.value} {11}")
@@ -80,7 +88,7 @@ fn view(state: State): Node => {
 
       #line
 
-      #button(on-click: Append(state.value), radius: 16px){
+      #button(on-click: Append(state.value)){
         #text("Append")
       }
 
@@ -89,11 +97,13 @@ fn view(state: State): Node => {
       counter-buttons()
     }
 
-    #block(direction: "row", max-height: 75%){
-      #scroll{
-        #list{
-          for _, item in state.items =>
-            row(item)
+    #block(direction: "column", min-height: 75%, grow: 1){
+      #scroll(width: 100%){
+        #block(direction: "column"){
+          #list(width: 100%){
+            for _, item in state.items =>
+              row(item)
+          }
         }
       }
     }

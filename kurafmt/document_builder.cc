@@ -14,7 +14,194 @@ static inline auto FormatName(const syntax::Name& rhs) -> NodePtr {
   return NewText(!rhs.missing ? rhs.text : "");
 }
 
+static inline bool IsBracedBlock(const syntax::Node* node) {
+  return node && (node->Is<syntax::Block>() || node->Is<syntax::RecordType>() || node->Is<syntax::RecordLit>() ||
+                  node->Is<syntax::RecordUpdate>() || node->Is<syntax::MatchExpr>());
+}
+
 #define LOWER_FN(Name) static inline auto Lower##Name(const Config& config, const syntax::Name& rhs) -> NodePtr
+
+LOWER_FN(MatchArm) {
+  std::vector<NodePtr> parts{};
+  parts.push_back(Lower(config, *rhs.pattern));
+
+  if (rhs.guard) {
+    parts.push_back(NewText(" if "));
+    parts.push_back(Lower(config, *rhs.guard));
+  }
+
+  parts.push_back(NewText(" =>"));
+
+  if (IsBracedBlock(rhs.body)) {
+    parts.push_back(NewText(" "));
+    parts.push_back(Lower(config, *rhs.body));
+  } else {
+    parts.push_back(NewBreakIf(NewEmpty(), NewText(" ")));
+    parts.push_back(NewIndent(2, NewConcat({
+                                     NewSoftLine(),
+                                     Lower(config, *rhs.body),
+                                 })));
+  }
+
+  return NewGroup(NewConcat(parts));
+}
+
+LOWER_FN(MatchExpr) {
+  if (rhs.arms.empty())
+    return NewConcat({NewText("match "), Lower(config, *rhs.scrutinee), NewText(" {}")});
+
+  std::vector<NodePtr> arms{};
+  for (const auto& arm : rhs.arms)
+    arms.push_back(Lower(config, *arm));
+
+  return NewConcat({
+      NewText("match "),
+      Lower(config, *rhs.scrutinee),
+      NewText(" {"),
+      NewIndent(2, NewConcat({
+                       NewHardLine(),
+                       Punctuate(NewConcat({NewText(","), NewHardLine()}), arms),
+                       NewText(","),
+                   })),
+      NewHardLine(),
+      NewText("}"),
+  });
+}
+
+LOWER_FN(UiElement) {
+  std::vector<NodePtr> parts{};
+
+  for (const auto& dir : rhs.directives) {
+    parts.push_back(NewConcat({
+        Lower(config, *dir),
+        NewHardLine(),
+    }));
+  }
+
+  parts.push_back(NewText("#"));
+  parts.push_back(FormatName(rhs.tag));
+
+  if (rhs.has_props) {
+    std::vector<NodePtr> props{};
+    if (rhs.has_id)
+      props.push_back(NewConcat({NewText(":"), FormatName(rhs.id)}));
+    for (const auto& prop : rhs.props)
+      props.push_back(Lower(config, *prop));
+
+    if (props.empty()) {
+      parts.push_back(NewText("()"));
+    } else {
+      parts.push_back(NewGroup(NewConcat({
+          NewText("("),
+          NewIndent(2, NewConcat({
+                           NewSoftLine(),
+                           Punctuate(NewConcat({NewText(","), NewLine()}), props),
+                           NewBreakIf(NewText(","), NewEmpty()),
+                       })),
+          NewSoftLine(),
+          NewText(")"),
+      })));
+    }
+  }
+
+  if (rhs.has_children) {
+    std::vector<NodePtr> children{};
+    for (const auto& child : rhs.children)
+      children.push_back(Lower(config, *child));
+
+    if (children.empty()) {
+      parts.push_back(NewText(" {}"));
+    } else {
+      parts.push_back(NewConcat({
+          NewText(" {"),
+          NewIndent(2, NewConcat({
+                           NewHardLine(),
+                           Punctuate(NewConcat({
+                                         NewHardLine(),
+                                         NewHardLine(),
+                                     }),
+                                     children),
+                       })),
+          NewHardLine(),
+          NewText("}"),
+      }));
+    }
+  }
+
+  return NewGroup(NewConcat(parts));
+}
+
+LOWER_FN(RecordType) {
+  if (rhs.fields.empty())
+    return NewText("{}");
+
+  std::vector<NodePtr> parts{};
+  for (const auto& field : rhs.fields)
+    parts.push_back(Lower(config, *field));
+
+  return NewConcat({
+      NewText("{"),
+      NewIndent(2, NewConcat({
+                       NewHardLine(),
+                       Punctuate(NewConcat({NewText(","), NewHardLine()}), parts),
+                       NewText(","),
+                   })),
+      NewHardLine(),
+      NewText("}"),
+  });
+}
+
+LOWER_FN(FnDecl) {
+  std::vector<NodePtr> parts{};
+
+  for (const auto& dir : rhs.directives)
+    parts.push_back(NewConcat({
+        Lower(config, *dir),
+        NewHardLine(),
+    }));
+
+  parts.push_back(NewText("fn "));
+  parts.push_back(FormatName(rhs.name));
+
+  std::vector<NodePtr> args{};
+  for (const auto& arg : rhs.params)
+    args.push_back(Lower(config, *arg));
+
+  if (args.empty()) {
+    parts.push_back(NewText("()"));
+  } else {
+    parts.push_back(NewGroup(NewConcat({
+        NewText("("),
+        NewIndent(2, NewConcat({
+                         NewSoftLine(),
+                         Punctuate(NewConcat({NewText(","), NewLine()}), args),
+                         NewBreakIf(NewText(","), NewEmpty()),
+                     })),
+        NewSoftLine(),
+        NewText(")"),
+    })));
+  }
+
+  if (rhs.result) {
+    parts.push_back(NewText(": "));
+    parts.push_back(Lower(config, *rhs.result));
+  }
+
+  parts.push_back(NewText(" =>"));
+
+  if (IsBracedBlock(rhs.body)) {
+    parts.push_back(NewText(" "));
+    parts.push_back(Lower(config, *rhs.body));
+  } else {
+    parts.push_back(NewBreakIf(NewEmpty(), NewText(" ")));
+    parts.push_back(NewIndent(2, NewConcat({
+                                     NewSoftLine(),
+                                     Lower(config, *rhs.body),
+                                 })));
+  }
+
+  return NewGroup(NewConcat(parts));
+}
 
 LOWER_FN(SeqLit) {
   std::vector<NodePtr> parts{};
@@ -251,26 +438,6 @@ LOWER_FN(Binary) {
   }));
 }
 
-LOWER_FN(MatchArm) {
-  std::vector<NodePtr> parts{};
-
-  parts.push_back(Lower(config, *rhs.pattern));
-
-  if (rhs.guard) {
-    parts.push_back(NewText(" if "));
-    parts.push_back(Lower(config, *rhs.guard));
-  }
-
-  parts.push_back(NewText(" => "));
-
-  parts.push_back(NewIndent(2, NewConcat({
-                                   NewSoftLine(),
-                                   Lower(config, *rhs.body),
-                               })));
-
-  return NewGroup(NewConcat(parts));
-}
-
 LOWER_FN(NonePattern) {
   return NewText("None");
 }
@@ -287,30 +454,10 @@ LOWER_FN(LiteralPattern) {
   return NewConcat(parts);
 }
 
-LOWER_FN(MatchExpr) {
-  std::vector<NodePtr> arms{};
-  for (const auto& arm : rhs.arms)
-    arms.push_back(Lower(config, *arm));
-
-  return NewGroup(NewConcat({
-      NewText("match "),
-      Lower(config, *rhs.scrutinee),
-      NewText(" {"),
-      NewIndent(2, NewConcat({
-                       NewHardLine(),
-                       Punctuate(NewConcat({
-                                     NewText(","),
-                                     NewLine(),
-                                 }),
-                                 arms),
-                       NewText(","),
-                   })),
-      NewHardLine(),
-      NewText("}"),
-  }));
-}
-
 LOWER_FN(RecordLit) {
+  if (rhs.entries.empty())
+    return NewText("{}");
+
   std::vector<NodePtr> fields{};
   for (const auto& prop : rhs.entries)
     fields.push_back(Lower(config, *prop));
@@ -320,12 +467,8 @@ LOWER_FN(RecordLit) {
       NewBreakIf(NewEmpty(), NewText(" ")),
       NewIndent(2, NewConcat({
                        NewSoftLine(),
-                       Punctuate(NewConcat({
-                                     NewText(", "),
-                                     NewLine(),
-                                 }),
-                                 fields),
-                       NewText(","),
+                       Punctuate(NewConcat({NewText(","), NewLine()}), fields),
+                       NewBreakIf(NewText(","), NewEmpty()),
                    })),
       NewSoftLine(),
       NewBreakIf(NewEmpty(), NewText(" ")),
@@ -396,35 +539,38 @@ LOWER_FN(ForExpr) {
   parts.push_back(NewText("for "));
   parts.push_back(FormatName(rhs.first));
   parts.push_back(NewText(", "));
-
   parts.push_back(Lower(config, *rhs.second));
-  parts.push_back(NewText(" "));
-
-  parts.push_back(NewText("in "));
+  parts.push_back(NewText(" in "));
   parts.push_back(Lower(config, *rhs.iterable));
 
   if (rhs.guard) {
-    parts.push_back(NewText("if "));
+    parts.push_back(NewText(" if "));
     parts.push_back(Lower(config, *rhs.guard));
   }
 
   if (rhs.has_fold) {
-    parts.push_back(NewText("fold "));
+    parts.push_back(NewText(" fold "));
     parts.push_back(FormatName(rhs.accumulator));
     parts.push_back(NewText(" = "));
     parts.push_back(Lower(config, *rhs.initial));
   }
 
-  parts.push_back(NewText(" => "));
-  if (rhs.bracketed)
-    parts.push_back(NewText("{"));
-
-  parts.push_back(NewSoftLine());
-
-  parts.push_back(Lower(config, *rhs.body));
-
-  if (rhs.bracketed)
+  parts.push_back(NewText(" =>"));
+  if (rhs.bracketed) {
+    parts.push_back(NewText(" {"));
+    parts.push_back(NewIndent(2, NewConcat({
+                                     NewSoftLine(),
+                                     Lower(config, *rhs.body),
+                                 })));
+    parts.push_back(NewSoftLine());
     parts.push_back(NewText("}"));
+  } else {
+    parts.push_back(NewBreakIf(NewEmpty(), NewText(" ")));
+    parts.push_back(NewIndent(2, NewConcat({
+                                     NewSoftLine(),
+                                     Lower(config, *rhs.body),
+                                 })));
+  }
 
   return NewGroup(NewConcat(parts));
 }
@@ -449,39 +595,20 @@ LOWER_FN(VariantRef) {
 }
 
 LOWER_FN(Lambda) {
-  return NewEmpty();
-}
-
-LOWER_FN(UiElement) {
   std::vector<NodePtr> parts{};
 
-  for (const auto& dir : rhs.directives) {
-    parts.push_back(NewConcat({
-        Lower(config, *dir),
-        NewHardLine(),
-    }));
-  }
+  std::vector<NodePtr> args{};
+  for (const auto& arg : rhs.params)
+    args.push_back(FormatName(arg));
 
-  parts.push_back(NewText("#"));
-  parts.push_back(FormatName(rhs.tag));
-
-  if (rhs.has_props) {
-    std::vector<NodePtr> props{};
-    // the id is the first argument: `#button(:my-button, fill: red)`
-    if (rhs.has_id)
-      props.push_back(NewConcat({NewText(":"), FormatName(rhs.id)}));
-    for (const auto& prop : rhs.props)
-      props.push_back(Lower(config, *prop));
-
+  if (args.empty()) {
+    parts.push_back(NewText("()"));
+  } else {
     parts.push_back(NewGroup(NewConcat({
         NewText("("),
         NewIndent(2, NewConcat({
                          NewSoftLine(),
-                         Punctuate(NewConcat({
-                                       NewText(","),
-                                       NewLine(),
-                                   }),
-                                   props),
+                         Punctuate(NewConcat({NewText(","), NewLine()}), args),
                          NewBreakIf(NewText(","), NewEmpty()),
                      })),
         NewSoftLine(),
@@ -489,71 +616,18 @@ LOWER_FN(UiElement) {
     })));
   }
 
-  if (rhs.has_children) {
-    std::vector<NodePtr> children{};
-    for (const auto& child : rhs.children)
-      children.push_back(Lower(config, *child));
-
-    parts.push_back(NewConcat({
-        NewText(" {"),
-        NewIndent(2, NewConcat({
-                         NewHardLine(),
-                         Punctuate(NewConcat({
-                                       NewLine(),
-                                       NewLine(),
-                                   }),
-                                   children),
-                     })),
-        NewHardLine(),
-        NewText("}"),
-    }));
-  }
-
-  return NewGroup(NewConcat(parts));
-}
-
-LOWER_FN(FnDecl) {
-  std::vector<NodePtr> parts{};
-
-  for (const auto& dir : rhs.directives)
-    parts.push_back(NewConcat({
-        Lower(config, *dir),
-        NewHardLine(),
-    }));
-
-  parts.push_back(NewText("fn "));
-  parts.push_back(FormatName(rhs.name));
-
-  std::vector<NodePtr> args{};
-  for (const auto& arg : rhs.params)
-    args.push_back(Lower(config, *arg));
-
-  parts.push_back(NewGroup(NewConcat({
-      NewText("("),
-      NewIndent(2, NewConcat({
-                       NewSoftLine(),
-                       Punctuate(NewConcat({
-                                     NewText(","),
-                                     NewLine(),
-                                 }),
-                                 args),
-                       NewBreakIf(NewText(","), NewEmpty()),
-                   })),
-      NewSoftLine(),
-      NewText(")"),
-  })));
-
-  if (rhs.result) {
-    parts.push_back(NewText(": "));
-    parts.push_back(Lower(config, *rhs.result));
-  }
-
   parts.push_back(NewText(" =>"));
-  parts.push_back(NewBreakIf(NewEmpty(), NewText(" ")));
-  parts.push_back(NewIndent(2, NewConcat({
-                                   NewSoftLine(),
-                                   Lower(config, *rhs.body),
-                               })));
+
+  if (rhs.body && IsBracedBlock(rhs.body)) {
+    parts.push_back(NewText(" "));
+    parts.push_back(Lower(config, *rhs.body));
+  } else if (rhs.body) {
+    parts.push_back(NewBreakIf(NewEmpty(), NewText(" ")));
+    parts.push_back(NewIndent(2, NewConcat({
+                                     NewSoftLine(),
+                                     Lower(config, *rhs.body),
+                                 })));
+  }
 
   return NewGroup(NewConcat(parts));
 }
@@ -572,7 +646,7 @@ LOWER_FN(Block) {
   }
 
   if (num_sets > 0)
-    parts.push_back(NewHardLine());
+    parts.push_back(NewEmpty());
 
   for (const auto& stmt : rhs.statements) {
     if (const auto* set = stmt->As<syntax::SetRule>())
@@ -679,27 +753,6 @@ LOWER_FN(Field) {
   return NewGroup(NewConcat(parts));
 }
 
-LOWER_FN(RecordType) {
-  std::vector<NodePtr> parts{};
-  for (const auto& field : rhs.fields)
-    parts.push_back(Lower(config, *field));
-
-  return NewGroup(NewConcat({
-      NewText("{"),
-      NewIndent(2, NewConcat({
-                       NewHardLine(),
-                       Punctuate(NewConcat({
-                                     NewText(","),
-                                     NewLine(),
-                                 }),
-                                 parts),
-                       NewText(","),
-                   })),
-      NewHardLine(),
-      NewText("}"),
-  }));
-}
-
 LOWER_FN(TypeDecl) {
   std::vector<NodePtr> parts{};
 
@@ -725,10 +778,6 @@ LOWER_FN(TypeDecl) {
     parts.push_back(Lower(config, *rhs.type));
 
   return NewGroup(NewConcat(parts));
-}
-
-static inline bool IsBracedBlock(syntax::Node* node) {
-  return node && (node->Is<syntax::Block>() || node->Is<syntax::RecordType>() || node->Is<syntax::MatchExpr>());
 }
 
 LOWER_FN(WhenExpr) {
@@ -821,78 +870,82 @@ LOWER_FN(BindingPattern) {
 }
 
 LOWER_FN(RecordUpdate) {
-  std::vector<NodePtr> parts{};
-  parts.push_back(NewText("{ "));
-  parts.push_back(NewSoftLine());
-  parts.push_back(Lower(config, *rhs.base));
-  parts.push_back(NewText(" | "));
-
   std::vector<NodePtr> entries{};
   for (const auto& e : rhs.entries)
     entries.push_back(Lower(config, *e));
 
-  parts.push_back(Punctuate(NewConcat({
-                                NewText(", "),
-                            }),
-                            entries));
-
-  parts.push_back(NewSoftLine());
-  parts.push_back(NewText(" }"));
-  return NewGroup(NewConcat(parts));
+  return NewGroup(NewConcat({
+      NewText("{"),
+      NewBreakIf(NewEmpty(), NewText(" ")),
+      NewIndent(2, NewConcat({
+                       NewSoftLine(),
+                       Lower(config, *rhs.base),
+                       NewText(" |"),
+                       NewLine(),
+                       Punctuate(NewConcat({NewText(","), NewLine()}), entries),
+                       NewBreakIf(NewText(","), NewEmpty()),
+                   })),
+      NewSoftLine(),
+      NewBreakIf(NewEmpty(), NewText(" ")),
+      NewText("}"),
+  }));
 }
 
 LOWER_FN(SetRule) {
-  std::vector<NodePtr> parts{};
-
-  parts.push_back(NewText("set "));
-  parts.push_back(FormatName(rhs.tag));
-
   std::vector<NodePtr> props{};
   for (const auto& p : rhs.props)
     props.push_back(Lower(config, *p));
 
-  parts.push_back(Enclose("(", ")",
-                          Punctuate(NewConcat({
-                                        NewText(", "),
-                                    }),
-                                    props),
-                          0, false));
-
-  return NewGroup(NewConcat(parts));
+  return NewGroup(NewConcat({
+      NewText("set "),
+      FormatName(rhs.tag),
+      NewGroup(NewConcat({
+          NewText("("),
+          NewIndent(2, NewConcat({
+                           NewSoftLine(),
+                           Punctuate(NewConcat({NewText(","), NewLine()}), props),
+                           NewBreakIf(NewText(","), NewEmpty()),
+                       })),
+          NewSoftLine(),
+          NewText(")"),
+      })),
+  }));
 }
 
 LOWER_FN(UpdateEntry) {
   std::vector<NodePtr> parts{};
 
-  for (auto i = 0; i < rhs.path.size(); i++) {
+  for (size_t i = 0; i < rhs.path.size(); ++i) {
     parts.push_back(FormatName(rhs.path[i]));
-    if (i < (parts.size() - 1))
+    if (i + 1 < rhs.path.size())
       parts.push_back(NewText("."));
   }
-  parts.push_back(NewSoftLine());
 
   switch (rhs.op) {
     case syntax::UpdateEntry::Op::kAdd:
-      parts.push_back(NewText(" += "));
+      parts.push_back(NewText(" +="));
       break;
     case syntax::UpdateEntry::Op::kDiv:
-      parts.push_back(NewText(" /= "));
+      parts.push_back(NewText(" /="));
       break;
     case syntax::UpdateEntry::Op::kMod:
-      parts.push_back(NewText(" %= "));
+      parts.push_back(NewText(" %="));
       break;
     case syntax::UpdateEntry::Op::kMul:
-      parts.push_back(NewText(" *= "));
+      parts.push_back(NewText(" *="));
       break;
     case syntax::UpdateEntry::Op::kSub:
-      parts.push_back(NewText(" -= "));
+      parts.push_back(NewText(" -="));
       break;
     case syntax::UpdateEntry::Op::kSet:
-      parts.push_back(NewText(": "));
+      parts.push_back(NewText(":"));
       break;
   }
-  parts.push_back(NewSoftLine());
-  parts.push_back(Lower(config, *rhs.value));
+
+  parts.push_back(NewIndent(2, NewConcat({
+                                   NewLine(),
+                                   Lower(config, *rhs.value),
+                               })));
 
   return NewGroup(NewConcat(parts));
 }

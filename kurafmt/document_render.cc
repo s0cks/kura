@@ -12,13 +12,11 @@ struct PrintItem {
   NodePtr node;
 };
 
-static inline bool Fits(NodePtr node, int max_width, int initial_col) {
-  struct FitsItem {
-    Mode mode;
-    NodePtr node;
-  };
+static inline bool Fits(NodePtr group_node, const std::vector<PrintItem>& render_stack, int max_width,
+                        int initial_col) {
+  std::vector<PrintItem> stack = render_stack;
+  stack.push_back({0, Mode::kFlat, group_node});
 
-  std::vector<FitsItem> stack = {{Mode::kFlat, node}};
   int current_col = initial_col;
 
   while (!stack.empty()) {
@@ -26,8 +24,10 @@ static inline bool Fits(NodePtr node, int max_width, int initial_col) {
       return false;
     }
 
-    auto [mode, current_node] = stack.back();
+    auto [indent, mode, current_node] = stack.back();
     stack.pop_back();
+
+    bool line_resolved = false;
 
     std::visit(
         [&](auto&& arg) {
@@ -37,30 +37,34 @@ static inline bool Fits(NodePtr node, int max_width, int initial_col) {
           } else if constexpr (std::is_same_v<T, Text>) {
             current_col += arg.text.size();
           } else if constexpr (std::is_same_v<T, Line>) {
-            if (arg.hard) {
-              current_col = max_width + 1;
-            } else if (mode == Mode::kFlat) {
-              if (arg.soft)
+            if (mode == Mode::kFlat && !arg.hard) {
+              if (arg.soft) {
                 current_col += 1;
+              }
             } else {
-              current_col = max_width + 1;
+              line_resolved = true;
             }
           } else if constexpr (std::is_same_v<T, BreakIf>) {
             stack.push_back({
+                indent,
                 mode,
                 mode == Mode::kFlat ? arg.when_flat : arg.when_break,
             });
           } else if constexpr (std::is_same_v<T, Indent>) {
-            stack.push_back({mode, arg.node});
+            stack.push_back({indent + arg.amount, mode, arg.node});
           } else if constexpr (std::is_same_v<T, Concat>) {
             for (auto it = arg.nodes.rbegin(); it != arg.nodes.rend(); ++it) {
-              stack.push_back({mode, *it});
+              stack.push_back({indent, mode, *it});
             }
           } else if constexpr (std::is_same_v<T, Group>) {
-            stack.push_back({mode, arg.node});
+            stack.push_back({indent, mode, arg.node});
           }
         },
         current_node->value);
+
+    if (line_resolved) {
+      return current_col <= max_width;
+    }
   }
 
   return current_col <= max_width;
@@ -119,7 +123,7 @@ auto Render(NodePtr root, const int max_width) -> std::string {
               });
             }
           } else if constexpr (std::is_same_v<T, Group>) {
-            Mode next = Fits(arg.node, max_width, current_col) ? Mode::kFlat : Mode::kBreak;
+            Mode next = Fits(arg.node, stack, max_width, current_col) ? Mode::kFlat : Mode::kBreak;
             stack.push_back({
                 indent,
                 next,
