@@ -34,24 +34,24 @@ class TypeExpr {
   virtual auto GetName() const -> std::string_view = 0;
   virtual auto ToString() const -> std::string = 0;
 
-#define DEFINE_AS(Name)                          \
-  virtual auto As##Name() -> Name##TypeExpr* {   \
-    return nullptr;                              \
-  }                                              \
-  inline auto Is##Name() -> bool {               \
-    return As##Name() != nullptr;                \
+#define DEFINE_AS(Name)                        \
+  virtual auto As##Name() -> Name##TypeExpr* { \
+    return nullptr;                            \
+  }                                            \
+  inline auto Is##Name() -> bool {             \
+    return As##Name() != nullptr;              \
   }
   FOR_EACH_TYPE_EXPR(DEFINE_AS)
 #undef DEFINE_AS
 };
 
-#define DECLARE_TYPE_EXPR(Name)                                \
- public:                                                       \
-  auto GetName() const -> std::string_view override {          \
-    return #Name;                                              \
-  }                                                            \
-  auto As##Name() -> Name##TypeExpr* override {                \
-    return this;                                               \
+#define DECLARE_TYPE_EXPR(Name)                       \
+ public:                                              \
+  auto GetName() const -> std::string_view override { \
+    return #Name;                                     \
+  }                                                   \
+  auto As##Name() -> Name##TypeExpr* override {       \
+    return this;                                      \
   }
 
 // `Number`, `Seq<Px>`, `None`, `Optional<Node>`
@@ -87,6 +87,11 @@ class NamedTypeExpr : public TypeExpr {
   }
 
   DECLARE_TYPE_EXPR(Named);
+
+ public:
+  static inline auto None() -> NamedTypeExpr* {
+    return new NamedTypeExpr("None");
+  }
 };
 
 // `Click(Position)`. A member of a union that carries a payload. A payload-free
@@ -143,7 +148,8 @@ class RecordTypeExpr : public TypeExpr {
     std::stringstream ss{};
     ss << "{ ";
     for (size_t i = 0; i < fields_.size(); i++)
-      ss << (i ? ", " : "") << fields_[i].name << (fields_[i].optional ? "?" : "") << ": " << fields_[i].type->ToString();
+      ss << (i ? ", " : "") << fields_[i].name << (fields_[i].optional ? "?" : "") << ": "
+         << fields_[i].type->ToString();
     ss << " }";
     return ss.str();
   }

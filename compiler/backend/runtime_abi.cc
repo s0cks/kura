@@ -603,11 +603,17 @@ void ReleaseObj(void* ptr) {
 using namespace kura::rt;
 
 extern "C" {
-void kura_rt_panic(const char* message) {
+[[noreturn]] void kura_rt_panic(const char* message) {
+  if (suite_.in_test) {
+    suite_.panicked = true;
+    suite_.panic_message = message ? message : "runtime panic";
+    std::longjmp(suite_.panic_jmp, 1);
+  }
+
   std::fflush(stdout);
-  std::fprintf(stderr, "kura: panic: %s\n", message);
+  std::fprintf(stderr, "panic: %s\n", message ? message : "runtime error");
   std::fflush(stderr);
-  std::_Exit(101);
+  std::abort();
 }
 
 [[noreturn]] static inline void Panic(const std::string& message) {

@@ -11,6 +11,34 @@
 #include "backend/llvm_codegen.h"
 
 namespace kura {
+auto Jit::RunTests(const char* filter, const bool fail_fast, uint64_t* failed, std::string* error) -> bool {
+  auto sym = jit_->lookup("kura_run_tests");
+  if (!sym) {
+    if (error)
+      *error = llvm::toString(sym.takeError());
+    return false;
+  }
+  auto* fn = sym->toPtr<uint64_t (*)(const char*, bool)>();
+  const uint64_t count = fn(filter, fail_fast);
+  if (failed)
+    *failed = count;
+  return true;
+}
+
+auto Jit::RunBenchmarks(const char* filter, uint64_t* over_budget, std::string* error) -> bool {
+  auto sym = jit_->lookup("kura_run_benchmarks");
+  if (!sym) {
+    if (error)
+      *error = llvm::toString(sym.takeError());
+    return false;
+  }
+  auto* fn = sym->toPtr<uint64_t (*)(const char*)>();
+  const uint64_t count = fn(filter);
+  if (over_budget)
+    *over_budget = count;
+  return true;
+}
+
 auto Jit::Create(std::string* error) -> std::unique_ptr<Jit> {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();

@@ -245,6 +245,10 @@ class FreeLocals : public expr::ExprVisitor {
     return Walk(expr->GetValue());
   }
 
+  auto VisitAssert(expr::AssertExpr* expr) -> VisitResult override {
+    return Walk(expr->GetCond()) && (expr->GetMessage() != nullptr ? ((bool)Walk(expr->GetMessage())) : true);
+  }
+
   auto VisitBinary(expr::BinaryExpr* expr) -> VisitResult override {
     return Walk(expr->GetLeft()) && Walk(expr->GetRight());
   }

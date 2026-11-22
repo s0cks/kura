@@ -53,7 +53,8 @@ namespace kura::expr {
   V(Call)                \
   V(MathCall)            \
   V(CastColor)           \
-  V(NewColor)
+  V(NewColor)            \
+  V(Assert)
 
 class Expr;
 // clang-format off
@@ -1440,6 +1441,63 @@ class MathCallExpr : public TemplateExpr<1> {
  public:
   static inline auto New(MathOp op, const ExprList args = {}) -> Expr* {
     return new MathCallExpr(op, std::move(args));
+  }
+};
+
+class AssertExpr : public TemplateExpr<2> {
+ private:
+  std::string file_;
+  uint32_t line_;
+  uint32_t column_;
+  bool fail_fast_;
+
+ public:
+  AssertExpr(Expr* cond, Expr* message) {
+    SetCond(cond);
+    if (message)
+      SetMessage(message);
+  }
+  ~AssertExpr() override = default;
+
+  auto GetFile() const -> std::string_view {
+    return file_;
+  }
+
+  auto SetFile(const std::string rhs) {
+    file_ = rhs;
+  }
+
+  auto GetLine() const -> uint32_t {
+    return line_;
+  }
+
+  void SetLine(const uint32_t rhs) {
+    line_ = rhs;
+  }
+
+  auto GetColumn() const -> uint32_t {
+    return column_;
+  }
+
+  void SetColumn(const uint32_t rhs) {
+    column_ = rhs;
+  }
+
+  auto ShouldFailFast() const -> bool {
+    return fail_fast_;
+  }
+
+  void SetFailFast(const bool rhs) {
+    fail_fast_ = rhs;
+  }
+
+  HAS_NAMED_INPUT(Cond, 0);
+  HAS_NAMED_INPUT(Message, 1);
+  DECLARE_EXPR_TYPE(Assert);
+
+ public:
+  static inline auto New(Expr* cond, Expr* message) -> AssertExpr* {
+    return new AssertExpr(cond, message);
   }
 };
 

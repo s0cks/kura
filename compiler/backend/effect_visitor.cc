@@ -15,6 +15,26 @@ void EffectVisitor::ReturnDefinition(Definition* defn) {
   }
 }
 
+auto EffectVisitor::VisitAssert(expr::AssertExpr* expr) -> VisitResult {
+  const auto cond = Eval(expr->GetCond());
+  if (!cond)
+    return false;
+  const auto msg = Eval(expr->GetMessage());
+  if (!msg)
+    return false;
+
+  const auto a = AssertInstr::New(cond, msg);
+  a->SetFile(expr->GetFile());
+  a->SetLine(expr->GetLine());
+  a->SetColumn(expr->GetColumn());
+  a->SetFailFast(expr->ShouldFailFast());
+
+  Emit(a);
+  if (WantsValue())
+    ReturnValue(NoneValue());
+  return true;
+}
+
 auto EffectVisitor::Eval(expr::Expr* expr) -> Value* {
   if (!expr) {
     Fail("missing expression");

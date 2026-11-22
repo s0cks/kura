@@ -1,5 +1,6 @@
 #include "frontend/expr_printer.h"
 
+#include "common.h"
 #include "local_scope.h"
 
 namespace kura::expr {
@@ -90,15 +91,23 @@ auto ExprPrinter::VisitCase(CaseExpr* expr) -> VisitResult {
 }
 
 auto ExprPrinter::VisitNewColor(NewColorExpr* expr) -> VisitResult {
-  return false;
+  NOT_IMPLEMENTED;
+  return true;
 }
 
 auto ExprPrinter::VisitCastColor(CastColorExpr* expr) -> VisitResult {
-  return false;
+  NOT_IMPLEMENTED;
+  return true;
 }
 
 auto ExprPrinter::VisitMathCall(MathCallExpr* expr) -> VisitResult {
-  return false;
+  NOT_IMPLEMENTED;
+  return true;
+}
+
+auto ExprPrinter::VisitAssert(AssertExpr* expr) -> VisitResult {
+  NOT_IMPLEMENTED;
+  return true;
 }
 
 auto ExprPrinter::VisitMatch(MatchExpr* expr) -> VisitResult {

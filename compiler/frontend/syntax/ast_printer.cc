@@ -105,6 +105,9 @@ auto Details(const Node* node) -> std::string {
     }
     case Node::kFnDecl:
       return N(node->As<FnDecl>()->name);
+    case Node::kTestDecl:
+      return Quote(node->As<TestDecl>()->name);
+      // TODO(@s0cks): handle kAssert
     case Node::kExternDecl: {
       const auto* d = node->As<ExternDecl>();
       return N(d->c_name) + (d->has_symbol ? " symbol=" + Quote(d->symbol) : "") + (d->variadic ? " variadic" : "");

@@ -20,6 +20,7 @@ target_sources(kura-compiler
          runtime_abi.cc
          runtime_events.cc
          runtime_input.cc
+         runtime_test.cc
          runtime_layout.cc
          session.cc
          runtime_renderer.cc

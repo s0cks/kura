@@ -20,17 +20,19 @@ static inline auto ReadContentsFrom(const std::string& filename, std::string& co
   return true;
 }
 
-auto Parser::ParseModuleFromFile(const std::string filename, Module** m) -> ParseResult {
+auto Parser::ParseModuleFromFile(const std::string filename, Module** m, const bool is_test, const bool is_bench)
+    -> ParseResult {
   std::string source{};
   if (!ReadContentsFrom(filename, source)) {
     std::stringstream ss{};
     ss << "failed to read source from: " << filename;
     return Fail(ss);
   }
-  return ParseModuleFromSource(filename, std::move(source), m);
+  return ParseModuleFromSource(filename, std::move(source), m, is_test, is_bench);
 }
 
-auto Parser::ParseModuleFromSource(const std::string& name, std::string text, Module** m) -> ParseResult {
+auto Parser::ParseModuleFromSource(const std::string& name, std::string text, Module** m, const bool is_test,
+                                   const bool is_bench) -> ParseResult {
   const auto tree = syntax::ParseText(name, std::move(text));
   if (!tree->IsValid()) {
     // Every problem the parser found, not just the first, each with its line.
@@ -43,7 +45,7 @@ auto Parser::ParseModuleFromSource(const std::string& name, std::string text, Mo
     return Fail(ss);
   }
 
-  expr::ModuleBuilder builder(GetScope());
+  expr::ModuleBuilder builder(GetScope(), is_test);
   try {
     (*m) = builder(*tree);
   } catch (const expr::BuildError& err) {

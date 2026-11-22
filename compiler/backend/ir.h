@@ -88,7 +88,8 @@ namespace kura {
   V(Retain)                     \
   V(Release)                    \
   V(NewColor)                   \
-  V(CastColor)
+  V(CastColor)                  \
+  V(Assert)
 
 class Instruction;
 class EntryInstr;
@@ -1746,6 +1747,67 @@ class CastColorInstr : public TemplateDefinition<1> {
  public:
   static inline auto New(const ColorModel target, Value* value) -> CastColorInstr* {
     return new CastColorInstr(target, value);
+  }
+};
+
+class AssertInstr : public TemplateInstruction<2> {
+ private:
+  std::string file_{};
+  uint32_t line_ = 0;
+  uint32_t column_ = 0;
+  bool fail_fast_ = false;
+
+ public:
+  AssertInstr(Value* cond, Value* message = nullptr) {
+    SetCond(cond);
+    if (message)
+      SetMessage(message);
+  }
+  ~AssertInstr() override = default;
+
+  auto GetFile() const -> std::string_view {
+    return file_;
+  }
+
+  void SetFile(const std::string rhs) {
+    file_ = rhs;
+  }
+
+  void SetFile(const std::string_view rhs) {
+    file_ = rhs;
+  }
+
+  auto GetLine() const -> uint32_t {
+    return line_;
+  }
+
+  void SetLine(const uint32_t rhs) {
+    line_ = rhs;
+  }
+
+  auto GetColumn() const -> uint32_t {
+    return column_;
+  }
+
+  void SetColumn(const uint32_t rhs) {
+    column_ = rhs;
+  }
+
+  auto ShouldFailFast() const -> bool {
+    return fail_fast_;
+  }
+
+  void SetFailFast(const bool rhs) {
+    fail_fast_ = rhs;
+  }
+
+  HAS_NAMED_INPUT(Cond, 0);
+  HAS_NAMED_INPUT(Message, 1);
+  DECLARE_INSTRUCTION_TYPE(Assert);
+
+ public:
+  static inline auto New(Value* cond, Value* message = nullptr) -> AssertInstr* {
+    return new AssertInstr(cond, message);
   }
 };
 

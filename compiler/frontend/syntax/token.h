@@ -13,25 +13,27 @@ namespace kura::syntax {
 // Name, spelling. Fixed tokens spell themselves; the rest are described in
 // angle brackets and rendered as "an identifier" and so on in diagnostics.
 // clang-format off
-#define FOR_EACH_KEYWORD_TOKEN(V) \
-  V(Let,    "let")                \
-  V(Fn,     "fn")                 \
-  V(Type,   "type")               \
-  V(If,     "if")                 \
-  V(Else,   "else")               \
-  V(Match,  "match")              \
-  V(For,    "for")                \
-  V(In,     "in")                 \
-  V(Fold,   "fold")               \
-  V(Use,    "use")                \
-  V(As,     "as")                 \
-  V(Extern, "extern")             \
-  V(When,   "when")               \
-  V(Is,     "is")                 \
+#define FOR_EACH_KEYWORD_TOKEN(V)  \
+  V(Let,    "let")                 \
+  V(Fn,     "fn")                  \
+  V(Type,   "type")                \
+  V(If,     "if")                  \
+  V(Else,   "else")                \
+  V(Match,  "match")               \
+  V(For,    "for")                 \
+  V(In,     "in")                  \
+  V(Fold,   "fold")                \
+  V(Use,    "use")                 \
+  V(As,     "as")                  \
+  V(Extern, "extern")              \
+  V(When,   "when")                \
+  V(Is,     "is")                  \
   V(StaticAssert, "static-assert") \
-  V(True,   "true")               \
-  V(False,  "false")              \
-  V(None,   "None")
+  V(True,   "true")                \
+  V(False,  "false")               \
+  V(None,   "None")                \
+  V(Test, "test")                  \
+  V(Assert, "assert")
 
 #define FOR_EACH_PUNCTUATION_TOKEN(V) \
   V(BinMinus, "-")                    \

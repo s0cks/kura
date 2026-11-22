@@ -7,6 +7,7 @@
 #include "frontend/c_decl.h"
 #include "frontend/expr.h"
 #include "function.h"
+#include "test_suite.h"
 #include "view.h"
 
 namespace kura {
@@ -20,6 +21,7 @@ struct Module {
   std::vector<Function*> functions{};
   std::vector<expr::TypeDecl*> types{};
   std::vector<expr::UseDecl*> uses{};
+  std::vector<TestCase> tests{};
   // Top-level `let` / redefinition, in source order.
   std::vector<expr::StoreLocalExpr*> bindings{};
   View* view = nullptr;
@@ -48,7 +50,6 @@ struct Module {
   inline void AddUse(expr::UseDecl* decl) {
     uses.push_back(decl);
   }
-
 
   inline void AddBinding(expr::StoreLocalExpr* binding) {
     bindings.push_back(binding);

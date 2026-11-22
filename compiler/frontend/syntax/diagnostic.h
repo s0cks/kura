@@ -50,7 +50,10 @@ namespace kura::syntax {
   V(BadStaticAssert,          31, "malformed 'static-assert'")                         \
   V(StyleError,               32, "style error")                                       \
   V(BadElementId,             33, "element id is malformed")                           \
-  V(ButtonMissingOnClick,     34, "button element is missing on-click")
+  V(ButtonMissingOnClick,     34, "button element is missing on-click")                \
+  V(TestWithoutName,          35, "test is missing name")                              \
+  V(BadAssert,                36, "malformed 'assert'")                                               \
+  V(AssertOutsideTest,        37, "'assert' outside 'test' block")
 // clang-format on
 
 enum class Severity : uint8_t {

@@ -28,6 +28,7 @@ namespace kura::syntax {
   V(Param)               \
   V(Field)               \
   V(TypeDecl)            \
+  V(TestDecl)            \
   V(FnDecl)              \
   V(ExternDecl)          \
   V(UseDecl)             \
@@ -76,6 +77,7 @@ namespace kura::syntax {
   V(RecordUpdate)        \
   V(UpdateEntry)         \
   V(SetRule)             \
+  V(Assert)              \
   V(StaticAssert)        \
   V(RecordPattern)       \
   V(FieldPattern)        \
@@ -297,6 +299,29 @@ struct FnDecl : Node {
     detail::Visit(fn, result);
     detail::VisitAll(fn, set_rules);
     detail::Visit(fn, body);
+  }
+};
+
+struct TestDecl : Node {
+  DEFINE_NODE(TestDecl)
+  std::vector<Node*> directives{};
+  std::string name{};
+  Node* body = nullptr;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, directives);
+    detail::Visit(fn, body);
+  }
+};
+
+struct Assert : Node {
+  DEFINE_NODE(Assert);
+  Node* cond = nullptr;
+  Node* message = nullptr;
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::Visit(fn, cond);
+    detail::Visit(fn, message);
   }
 };
 

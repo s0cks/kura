@@ -4,8 +4,8 @@
 #include <cstddef>
 
 #include "backend/runtime_abi.h"
-#include "runtime/geometry.h"
 #include "heap/value.h"
+#include "runtime/geometry.h"
 
 namespace kura::heap {
 namespace {

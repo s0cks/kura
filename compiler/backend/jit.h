@@ -25,6 +25,8 @@ class Jit {
   auto Add(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context, std::string* error)
       -> bool;
   auto Initialize(std::string* error) -> bool;
+  auto RunTests(const char* filter, bool fail_fast, uint64_t* failed, std::string* error) -> bool;
+  auto RunBenchmarks(const char* filter, uint64_t* over_budget, std::string* error) -> bool;
   auto Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
             std::string* error) -> bool;
 

@@ -409,4 +409,17 @@ auto CastColorInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto AssertInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "Assert(";
+  ss << "cond=" << Name(GetCond()) << ", ";
+  if (GetMessage())
+    ss << "message=" << Name(GetMessage()) << ", ";
+  ss << "file=" << file_ << ", ";
+  ss << "line=" << line_ << ", ";
+  ss << "column=" << column_ << ", ";
+  ss << "fail_fast=" << fail_fast_;
+  ss << ")";
+  return ss.str();
+}
 }  // namespace kura

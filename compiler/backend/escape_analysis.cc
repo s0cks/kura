@@ -219,7 +219,7 @@ class Analyzer {
         user->AsDrawLine() || user->AsDrawRect() || user->AsDrawRoundRect() || user->AsDrawCircle() ||
         user->AsDrawEllipse() || user->AsDrawPolygon() || user->AsDrawText() || user->AsDrawStrokeBezier() ||
         user->AsDrawQuadBezier() || user->AsPushClip() || user->AsLayoutRect() || user->AsRectIntersects() ||
-        user->AsCastColor() || user->AsNewColor() || user->AsMathCall())
+        user->AsCastColor() || user->AsNewColor() || user->AsMathCall() || user->AsAssert() || user->AsAssert())
       return nullptr;
     if (const auto d = user->AsDrawInput()) {
       // the message is kept with the box for the frame; the rest is read now

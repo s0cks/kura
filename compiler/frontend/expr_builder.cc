@@ -153,6 +153,7 @@ auto ExprBuilder::BuildCall(Expr* target, ExprList args) -> Expr* {
 // ╰──────────────╯
 auto ModuleBuilder::Build(const syntax::SyntaxTree& tree) -> Module* {
   ExprBuilder builder(this, tree);
+  builder.include_tests_ = include_tests_;
   return builder();
 }
 
@@ -286,6 +287,45 @@ auto ExprBuilder::BuildModule() -> Module* {
     func->SetBody(BuildSeq(body));
     m->AddFunction(func);
   }
+
+  if (include_tests_) {
+    for (const auto* item : items) {
+      if (const auto* test = item->As<syntax::TestDecl>()) {
+        uint32_t flags = 0;
+        for (const auto* dir_node : test->directives) {
+          const auto* dir = dir_node->As<syntax::Directive>();
+          if (dir->name.text == "fail-fast")
+            flags |= TestFlag::kFailFast;
+          else if (dir->name.text == "should-fail")
+            flags |= TestFlag::kShouldFail;
+          else if (dir->name.text == "skip")
+            flags |= TestFlag::kSkip;
+          else
+            Error(dir, "unknown test directive @" + dir->name.text);
+        }
+
+        in_test_ = true;
+        active_test_flags_ = flags;
+
+        LocalsScope test_scope(GetOwner());
+        const auto fn = Function::New(std::format("%test.{}", num_tests_++));
+        fn->SetReturnType(new NamedTypeExpr("None"));
+        fn->SetBody(BuildSeq(test->body));
+        fn->SetDirectives(BuildDirectives(test->directives));
+
+        in_test_ = false;
+        active_test_flags_ = 0;
+
+        m->AddFunction(fn);
+        m->tests.push_back({
+            test->name,
+            fn,
+            flags,
+        });
+      }
+    }
+  }
+
   return m;
 }
 
@@ -1749,6 +1789,19 @@ auto ExprBuilder::BuildBlock(const syntax::Block* block) -> SeqExpr* {
         body.push_back(store);
     } else if (const auto* rule = stmt->As<syntax::SetRule>()) {
       AddSetRule(rule);
+    } else if (const auto* assertion = stmt->As<syntax::Assert>()) {
+      if (!in_test_)
+        Error(assertion, "`assert` can only be used inside a `test` block");
+      const auto pos = tree_.GetSource().GetPosition(assertion->span.begin);
+      const auto cond = Build(assertion->cond);
+      const auto msg = assertion->message ? Build(assertion->message) : Literal(String::New("assertion failed"));
+      const bool fail_fast = (active_test_flags_ & TestFlag::kFailFast) != 0;
+      const auto a = AssertExpr::New(cond, msg);
+      a->SetFile(tree_.GetSource().GetName());
+      a->SetLine(pos.line + 1);
+      a->SetColumn(pos.column);
+      a->SetFailFast(fail_fast);
+      body.push_back(a);
     } else {
       BuildStaticAssert(stmt->As<syntax::StaticAssert>());
     }

@@ -1,13 +1,18 @@
 #ifndef KURA_RUNTIME_ABI_H
 #define KURA_RUNTIME_ABI_H
 
+#include <csetjmp>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "renderer/renderer_abi.h"
+#include "runtime/test_suite.h"
 
 namespace kura::rt {
+using kura::TestFlags;
+
 struct KuraValue {
   uint64_t tag;
   uint64_t bits;
@@ -53,6 +58,30 @@ static inline constexpr auto IsVariantTag(const uint64_t tag) -> bool {
 }
 
 auto Format(const KuraValue& value) -> std::string;
+
+struct FailedTest {
+  std::string file{};
+  uint64_t line = 0;
+  uint64_t column = 0;
+  std::string message{};
+};
+
+struct TestSuiteState {
+  uint64_t total = 0;
+  uint64_t passed = 0;
+  uint64_t failed = 0;
+  uint64_t skipped = 0;
+  std::string name{};
+  kura::TestFlags flags = 0;
+  std::vector<FailedTest> failures{};
+  bool global_fail_fast = false;
+  bool in_test = false;
+  std::jmp_buf panic_jmp{};
+  bool panicked = false;
+  std::string panic_message{};
+};
+
+extern TestSuiteState suite_;
 
 // Where the objects a program allocates live. The runtime doesn't take a space with every allocation: the phase of the
 // program says. While a `view` runs, what it makes is for one frame, so it goes in the frame's arena, which is reset
@@ -203,9 +232,16 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_register_event)       \
   V(kura_rt_seq_append)           \
   V(kura_rt_destroy)              \
-  V(kura_rt_record_clone) \
-  V(kura_rt_color_new) \
-  V(kura_rt_color_unbox)
+  V(kura_rt_record_clone)         \
+  V(kura_rt_color_new)            \
+  V(kura_rt_color_unbox)          \
+  V(kura_rt_test_fail)            \
+  V(kura_rt_test_suite_begin)     \
+  V(kura_rt_test_begin)           \
+  V(kura_rt_test_end)             \
+  V(kura_rt_test_suite_end)       \
+  V(kura_rt_test_matches)         \
+  V(kura_rt_test_invoke)
 // clang-format on
 
 extern "C" {
@@ -364,6 +400,14 @@ void* kura_rt_string_from_cstr(const char* data, const char* what);
 void* kura_rt_string_from_cstr_opt(const char* data);
 [[noreturn]] void kura_rt_ffi_overflow(int64_t value, const char* what);
 [[noreturn]] void kura_rt_ffi_error(const char* message);
+
+void kura_rt_test_suite_begin(const uint64_t total, const char* filter, const bool fail_fast);
+void kura_rt_test_begin(const char* name, uint32_t flags);
+void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, void* msg);
+void kura_rt_test_end();
+bool kura_rt_test_matches(const char* name, const char* filter);
+uint64_t kura_rt_test_suite_end();
+void kura_rt_test_invoke(void (*fn)(void));
 }
 
 // ── events ─────────────────────────────────────────────────────────────────

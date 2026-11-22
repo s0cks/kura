@@ -1560,7 +1560,36 @@ class TreeBuilder {
     return Is(K::kLet) || (Is(K::kIdent) && PeekKind(1) == K::kAssign);
   }
 
-  auto ParseBlock() -> Node* {
+  auto ParseAssert(const bool allow_assert) -> Node* {
+    const auto begin = Here();
+    const auto kw = Next();  // `assert`
+    if (!allow_assert) {
+      Report(DiagnosticCode::kAssertOutsideTest, kw.span, "`assert` can only be used inside a `test` block",
+             "not inside a `test`")
+          .WithHelp(
+              "move this into a `test \"...\" { ... }` block, or use `static-assert(...)` for compile-time checks");
+    }
+    auto* node = New<Assert>(begin);
+    const auto open = Peek();
+    if (!Expect(K::kLParen)) {
+      node->cond = NewMissing();
+      node->span = SpanFrom(begin);
+      return node;
+    }
+    node->cond = ParseExpression();
+    if (Accept(K::kComma) && !Is(K::kRParen)) {
+      node->message = ParseExpression();
+      if (!node->message->Is<StringLit>() && !node->message->Is<StringTemplate>() && !node->message->Is<Error>()) {
+        Report(DiagnosticCode::kBadAssert, node->message->span, "the message of an `assert` must be a string",
+               "not a string");
+      }
+    }
+    ExpectClosing(K::kRParen, open.span);
+    node->span = SpanFrom(begin);
+    return node;
+  }
+
+  auto ParseBlock(const bool allow_set_rules = true, const bool allow_assert = false) -> Node* {
     const auto begin = Here();
     auto* block = New<Block>(begin);
     const auto open = Peek();
@@ -1574,7 +1603,13 @@ class TreeBuilder {
       auto directives = ParseDirectives();
       if (AtBindingStart()) {
         block->statements.push_back(ParseBinding(std::move(directives)));
+      } else if (directives.empty() && Is(K::kAssert)) {
+        block->statements.push_back(ParseAssert(allow_assert));
       } else if (directives.empty() && AtSetRule()) {
+        if (!allow_set_rules) {
+          // TODO(@s0cks): implement disallowing set rules
+        }
+
         block->statements.push_back(ParseSetRule());
       } else if (directives.empty() && Is(K::kStaticAssert)) {
         block->statements.push_back(ParseStaticAssert());
@@ -2179,6 +2214,27 @@ class TreeBuilder {
     }
   }
 
+  auto ParseTestDecl(std::vector<Node*> directives) -> Node* {
+    const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
+    auto* decl = TestDecl::New(Span(begin, begin));
+    decl->directives = std::move(directives);
+    const auto use_token = Next();
+    if (Is(K::kString)) {
+      const auto name = Next();
+      if (HasInterpolation(source_.GetText(name.span)))
+        ReportInterpolationNotAllowed(name, "as a test name");
+      decl->name = Unescape(source_.GetText(name.span));
+    } else {
+      ReportHere(DiagnosticCode::kTestWithoutName, "`test` needs a name in quotes, found " + Found(Peek()),
+                 "expected a string like \"my test\" here")
+          .WithLabel(use_token.span, "in this `test`");
+    }
+
+    decl->body = ParseBlock(false, true);
+    decl->span = SpanFrom(begin);
+    return decl;
+  }
+
   auto ParseFnDecl(std::vector<Node*> directives) -> Node* {
     const auto begin = directives.empty() ? Here() : directives.front()->span.begin;
     auto* decl = FnDecl::New(Span(begin, begin));
@@ -2285,6 +2341,8 @@ class TreeBuilder {
         return ParseTypeDecl(std::move(directives));
       case K::kFn:
         return ParseFnDecl(std::move(directives));
+      case K::kTest:
+        return ParseTestDecl(std::move(directives));
       case K::kExtern:
         return ParseExternDecl(std::move(directives));
       case K::kUse:

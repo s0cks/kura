@@ -29,6 +29,11 @@ VISIT_FN(Binary) {
   return Stop();
 }
 
+VISIT_FN(Assert) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
 VISIT_FN(Seq) {
   // TODO(@s0cks): implement
   return Stop();

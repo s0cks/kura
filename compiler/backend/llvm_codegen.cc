@@ -462,6 +462,32 @@ class Generator {
                    Convert(b, tb, CompileType::Any())});
   }
 
+  LOWER_FN(Assert) {
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+    auto* pass_bb = llvm::BasicBlock::Create(ctx_, "assert.pass", fn);
+    auto* fail_bb = llvm::BasicBlock::Create(ctx_, "assert.fail", fn);
+
+    llvm::Value* cond = As(instr->GetCond(), CompileType::Bool());
+    b_.CreateCondBr(cond, pass_bb, fail_bb);
+
+    b_.SetInsertPoint(fail_bb);
+    CallRt("kura_rt_test_fail", void_ty_,
+           {
+               StringLiteral(std::string(instr->GetFile())),
+               b_.getInt64(instr->GetLine()),
+               b_.getInt64(instr->GetColumn()),
+               As(instr->GetMessage(), CompileType::String()),
+           });
+
+    if (instr->ShouldFailFast()) {
+      b_.CreateRet(b_.getInt8(0));  // immediate early return from test function
+    } else {
+      b_.CreateBr(pass_bb);
+    }
+
+    b_.SetInsertPoint(pass_bb);
+  }
+
   LOWER_FN(RegisterEvent) {
     const auto plan = instr->GetPlan().get();
     CallRt("kura_rt_register_event", void_ty_,
@@ -1698,6 +1724,7 @@ class Generator {
     CHECK(NewColor);
     CHECK(CastColor);
     CHECK(MathCall);
+    CHECK(Assert);
 
 #undef CHECK
 
@@ -2553,6 +2580,50 @@ class Generator {
     b_.CreateRetVoid();
   }
 
+  void DefineRunTests(Module* kura_module) {
+    auto* i32_ty = llvm::Type::getInt32Ty(ctx_);
+    auto* fn_ty = llvm::FunctionType::get(i64_, {ptr_ty_, i1_}, false);
+    const auto run = llvm::Function::Create(fn_ty, llvm::GlobalValue::ExternalLinkage, "kura_run_tests", module_.get());
+
+    llvm::Value* filter_arg = run->getArg(0);     // const char* filter (nullable)
+    llvm::Value* fail_fast_arg = run->getArg(1);  // bool global fail_fast
+
+    b_.SetInsertPoint(llvm::BasicBlock::Create(ctx_, "entry", run));
+
+    const auto& tests = kura_module->tests;
+    CallRt("kura_rt_test_suite_begin", void_ty_, {b_.getInt64(tests.size()), filter_arg, fail_fast_arg});
+
+    for (size_t idx = 0; idx < tests.size(); idx++) {
+      const auto& test = tests[idx];
+      llvm::Value* name_ptr = NameConstant(test.name);
+
+      // Check filter (returns false if filter != nullptr && strstr(name, filter) == nullptr)
+      auto* run_bb = llvm::BasicBlock::Create(ctx_, "test.run." + std::to_string(idx), run);
+      auto* next_bb = llvm::BasicBlock::Create(ctx_, "test.next." + std::to_string(idx), run);
+
+      llvm::Value* matches = CallRt("kura_rt_test_matches", i1_, {name_ptr, filter_arg});
+      b_.CreateCondBr(matches, run_bb, next_bb);
+
+      b_.SetInsertPoint(run_bb);
+      CallRt("kura_rt_test_begin", void_ty_, {name_ptr, llvm::ConstantInt::get(i32_ty, test.flags)});
+
+      if ((test.flags & TestFlag::kSkip) == 0) {
+        const auto graph = graphs_->GetGraphFor(test.fn);
+        if (graph && natives_.contains(graph)) {
+          CallRt("kura_rt_test_invoke", void_ty_, {natives_[graph]});
+        }
+      }
+
+      CallRt("kura_rt_test_end", void_ty_, {});
+      b_.CreateBr(next_bb);
+
+      b_.SetInsertPoint(next_bb);
+    }
+
+    llvm::Value* failed = CallRt("kura_rt_test_suite_end", i64_, {});
+    b_.CreateRet(failed);
+  }
+
  public:
   Generator(llvm::LLVMContext& ctx, ModuleGraph* graphs) :
     ctx_(ctx),
@@ -2569,9 +2640,10 @@ class Generator {
     value_ty_ = llvm::StructType::get(ctx, {i64_, i64_});
   }
 
-  auto Generate(std::string* error) -> std::unique_ptr<llvm::Module> {
+  auto Generate(Module* m, std::string* error) -> std::unique_ptr<llvm::Module> {
     for (const auto graph : graphs_->GetGraphs())
       Declare(graph);
+
     for (const auto graph : graphs_->GetGraphs()) {
       if (natives_.contains(graph)) {
         DefineNative(graph);
@@ -2582,6 +2654,7 @@ class Generator {
       }
     }
     DefineInit();
+    DefineRunTests(m);
 
     if (error_.empty()) {
       std::string problems;
@@ -2602,7 +2675,7 @@ class Generator {
 auto GenerateLLVM(llvm::LLVMContext& context, Module* module, ModuleGraph* graphs, std::string* error)
     -> std::unique_ptr<llvm::Module> {
   Generator generator(context, graphs);
-  auto result = generator.Generate(error);
+  auto result = generator.Generate(module, error);
   if (!result)
     return nullptr;
 

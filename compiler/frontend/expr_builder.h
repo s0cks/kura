@@ -24,7 +24,8 @@
 
 namespace kura {
 struct Module;
-}
+class Parser;
+}  // namespace kura
 
 namespace kura::expr {
 // Raised when the syntax tree is well formed but cannot be turned into an Expr
@@ -66,10 +67,12 @@ class BuildError : public std::runtime_error {
 
 class ExprBuilder;
 class ModuleBuilder {
+  friend class kura::Parser;
   friend class ExprBuilder;
   DEFINE_NON_COPYABLE_TYPE(ModuleBuilder);
 
  private:
+  bool include_tests_ = false;
   LocalScope* scope_;
 
   inline auto PushScope() -> LocalScope* {
@@ -87,12 +90,21 @@ class ModuleBuilder {
   }
 
  public:
-  explicit ModuleBuilder(LocalScope* scope) :
-    scope_(scope) {}
+  explicit ModuleBuilder(LocalScope* scope, const bool include_tests = false) :
+    scope_(scope),
+    include_tests_(include_tests) {}
   ~ModuleBuilder() = default;
 
   auto GetScope() const -> LocalScope* {
     return scope_;
+  }
+
+  void SetIncludeTests(const bool rhs) {
+    include_tests_ = rhs;
+  }
+
+  auto ShouldIncludeTests() const -> bool {
+    return include_tests_;
   }
 
   // `tree` must be valid (no syntax errors). Throws BuildError.
@@ -107,6 +119,8 @@ class ModuleBuilder {
 // C headers are imported and the semantic rules of the language are checked;
 // the syntax tree itself knows none of that.
 class ExprBuilder {
+  friend class ModuleBuilder;
+
  protected:
   class LocalsScope {
    private:
@@ -145,6 +159,10 @@ class ExprBuilder {
   // The call whose placeholders are being turned into parameters.
   const syntax::Call* partial_ = nullptr;
   uint32_t pipe_count_ = 0;
+  bool include_tests_ = false;
+  bool in_test_ = false;
+  uint32_t active_test_flags_ = 0;
+  uint32_t num_tests_ = 0;
 
   [[noreturn]] void Error(const syntax::Span& where, const std::string& message) const;
   [[noreturn]] void Error(const syntax::Node* where, const std::string& message) const;
