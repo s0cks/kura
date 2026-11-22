@@ -53,7 +53,7 @@ struct Field {
   float size = 16;
   std::string family{};
   // 0xRRGGBBAA, with the opacity in it already
-  uint64_t color = 0x000000FF;
+  KuraColor color = KuraColor{.r = 0.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f};
   // 0 at the start, 1 in the middle and 2 at the end: for text that fits
   int align = 0;
   std::string placeholder{};

@@ -58,6 +58,15 @@ auto RecordExpr::VisitChildren(const std::function<VisitResult(Expr*)> vis) -> V
   return VisitResult::kContinue;
 }
 
+auto MathCallExpr::VisitChildren(ExprVisitor* vis) -> VisitResult {
+  for (const auto& arg : args_) {
+    if (!arg->Accept(vis))
+      return VisitResult::kStop;
+  }
+
+  return VisitResult::kContinue;
+}
+
 auto CallExpr::VisitChildren(ExprVisitor* vis) -> VisitResult {
   if (!GetTarget()->Accept(vis))
     return VisitResult::kStop;

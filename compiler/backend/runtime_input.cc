@@ -15,7 +15,12 @@ namespace {
 // How long the caret is shown, and then hidden, in seconds.
 constexpr double kBlinkPeriod = 1.0;
 // What a selection is painted with, over the text it is behind (0xRRGGBBAA).
-constexpr uint64_t kSelectionColor = 0x4A90E266;
+constexpr KuraColor kSelectionColor{
+    .r = 74.0f / 255.0f,
+    .g = 144.0f / 255.0f,
+    .b = 226.0f / 255.0f,
+    .a = 102.0f / 255.0f,
+};
 
 struct Id {
   const void* owner = nullptr;
@@ -157,9 +162,9 @@ void Touch(State* state) {
   state->blink_from = Now();
 }
 
-auto Faded(const uint64_t color, const double factor) -> uint64_t {
-  const auto alpha = static_cast<uint64_t>(std::lround(static_cast<double>(color & 0xFF) * factor));
-  return (color & ~uint64_t{0xFF}) | alpha;
+auto Faded(KuraColor color, const double factor) -> KuraColor {
+  color.a *= static_cast<float>(factor);
+  return color;
 }
 }  // namespace
 
@@ -210,16 +215,17 @@ void Draw(const Field& field) {
     const auto from = origin + OffsetX(text, state.edit.SelectionBegin(), field.size, field.family);
     const auto to = origin + OffsetX(text, state.edit.SelectionEnd(), field.size, field.family);
     const KuraRect selection{from, top, to - from, line};
-    kura_rt_fill_rect(&selection, kSelectionColor);
+    kura_rt_fill_rect(&selection, &kSelectionColor);
   }
 
   if (!text.empty()) {
     kura_rt_render_text(origin, top, text.data(), text.size(), field.size, FamilyData(field.family),
-                        field.family.size(), field.color);
+                        field.family.size(), &field.color);
   } else if (!field.placeholder.empty()) {
     // what is there to say, in a lighter color, from where the text would start
+    const auto placeholder_color = Faded(field.color, 0.4);
     kura_rt_render_text(field.box.x + field.padding_left, top, field.placeholder.data(), field.placeholder.size(),
-                        field.size, FamilyData(field.family), field.family.size(), Faded(field.color, 0.4));
+                        field.size, FamilyData(field.family), field.family.size(), &placeholder_color);
   }
 
   if (focused && editable) {
@@ -227,7 +233,7 @@ void Draw(const Field& field) {
     if (phase < kBlinkPeriod / 2) {
       const auto at = origin + OffsetX(text, state.edit.GetCaret(), field.size, field.family);
       const KuraRect caret{at, top, 1.0f + field.size / 24.0f, line};
-      kura_rt_fill_rect(&caret, field.color);
+      kura_rt_fill_rect(&caret, &field.color);
     }
   }
 

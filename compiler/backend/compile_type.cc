@@ -4,6 +4,8 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "heap/color_model.h"
+
 namespace kura {
 static auto Table() -> std::unordered_map<std::string, CompileType*>& {
   static std::unordered_map<std::string, CompileType*> table{};
@@ -37,9 +39,13 @@ auto CompileType::Intern(CompileType* proto) -> CompileType* {
     case kString:
       ss << "String";
       break;
-    case kColor:
-      ss << "Color";
-      break;
+#define DEFINE_TOSTRING(Name) \
+  case k##Name:               \
+    ss << #Name;              \
+    break;
+
+      FOR_EACH_COLOR_MODEL(DEFINE_TOSTRING)
+#undef DEFINE_TOSTRING
     case kVec2:
       ss << "Vec2";
       break;
@@ -122,7 +128,6 @@ DEFINE_SIMPLE(Int)
 DEFINE_SIMPLE(Float)
 DEFINE_SIMPLE(Number)
 DEFINE_SIMPLE(String)
-DEFINE_SIMPLE(Color)
 DEFINE_SIMPLE(Vec2)
 DEFINE_SIMPLE(Vec3)
 DEFINE_SIMPLE(Rect)
@@ -130,7 +135,19 @@ DEFINE_SIMPLE(Px)
 DEFINE_SIMPLE(Pct)
 DEFINE_SIMPLE(Fr)
 DEFINE_SIMPLE(Node)
+FOR_EACH_COLOR_MODEL(DEFINE_SIMPLE);
 #undef DEFINE_SIMPLE
+
+auto CompileType::Color(ColorModel model) -> CompileType* {
+  switch (model) {
+#define DEFINE_CASE(Name)   \
+  case ColorModel::k##Name: \
+    return CompileType::Name();
+
+    FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
+  }
+}
 
 auto CompileType::Seq(CompileType* element) -> CompileType* {
   const auto type = new CompileType(kSeq);
@@ -269,6 +286,14 @@ auto CompileType::IsAssignable(CompileType* from, CompileType* to) -> bool {
       return from->IsNumeric();
     case kSeq:
       return from->IsSeq() && IsAssignable(from->element_, to->element_);
+
+#define DEFINE_CASE(Name) \
+  case k##Name:           \
+    return from->IsColor();
+
+      FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_COLOR
+
     case kVec2:
     case kVec3:
     case kRect:
@@ -339,6 +364,8 @@ auto CompileType::Join(CompileType* a, CompileType* b) -> CompileType* {
     }
     return Record(fields);
   }
+  if (a->IsColor() && b->IsColor())
+    return a == b ? a : CompileType::RgbaColor();
   return Union({a, b});
 }
 }  // namespace kura

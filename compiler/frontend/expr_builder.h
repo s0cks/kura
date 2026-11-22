@@ -17,6 +17,7 @@
 #include "frontend/syntax/ast.h"
 #include "frontend/syntax/parser.h"
 #include "function.h"
+#include "heap/color_storage.h"
 #include "local_scope.h"
 #include "object.h"
 #include "property.h"
@@ -233,12 +234,14 @@ class ExprBuilder {
 
   // A value the compiler can compute: what `static-assert` conditions are made of.
   struct Constant {
-    enum Kind { kBool, kInt, kFloat, kString };
+    enum Kind { kBool, kInt, kFloat, kPct, kString, kColor };
     Kind kind = kBool;
     bool boolean = false;
     int64_t integer = 0;
     double real = 0.0;
     std::string text{};
+    ColorModel color_model = ColorModel::kRgbaColor;
+    ColorStorage color{};
   };
 
   auto Fold(Expr* expr) const -> std::optional<Constant>;

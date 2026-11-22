@@ -64,13 +64,6 @@ inline auto Coordinate(const uint64_t bits) -> float {
   std::memcpy(&value, &bits, sizeof(value));
   return static_cast<float>(value);
 }
-
-inline auto UnpackColor(const uint64_t packed) -> KuraColor {
-  const auto channel = [&](const int shift) {
-    return static_cast<float>((packed >> shift) & 0xFF) / 255.0f;
-  };
-  return KuraColor{channel(24), channel(16), channel(8), channel(0)};
-}
 }  // namespace
 
 namespace {
@@ -137,20 +130,19 @@ inline auto Scaled(KuraColor color, const float opacity) -> KuraColor {
 }  // namespace
 
 extern "C" {
-void kura_rt_paint_box(const KuraRect* rect, const uint64_t fill, const uint64_t border_color,
+void kura_rt_paint_box(const KuraRect* rect, const KuraColor* fill, const KuraColor* border_color,
                        const uint64_t border_width_bits, const uint64_t radius_bits, const uint64_t opacity_bits) {
   const auto& ops = Current("kura_rt_paint_box");
   const auto box = *rect;
   if (box.width <= 0 || box.height <= 0)
     return;
 
-  // what is rounded, bordered or faded can't be more than half the box
   const auto half = std::min(box.width, box.height) / 2;
   const auto radius = std::clamp(static_cast<float>(Coordinate(radius_bits)), 0.0f, half);
   const auto border = std::clamp(static_cast<float>(Coordinate(border_width_bits)), 0.0f, half);
   const auto opacity = static_cast<float>(Coordinate(opacity_bits));
-  const auto fill_color = Scaled(UnpackColor(fill), opacity);
-  const auto border_rgba = Scaled(UnpackColor(border_color), opacity);
+  const auto fill_color = fill ? Scaled(*fill, opacity) : KuraColor{0, 0, 0, 0};
+  const auto border_rgba = border_color ? Scaled(*border_color, opacity) : KuraColor{0, 0, 0, 0};
 
   // the shape, rounded by `radius`
   if (fill_color.a > 0) {
@@ -228,14 +220,22 @@ void kura_rt_end_frame() {
   Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
 }
 
-void kura_rt_fill_rect(const KuraRect* rect, const uint64_t color) {
+void kura_rt_fill_rect(const KuraRect* rect, const KuraColor* color) {
   const auto& ops = Current("kura_rt_fill_rect");
-  Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, *rect, UnpackColor(color)));
+  Record("kura_rt_fill_rect", ops.fill_rect(tl_renderer.self, *rect, *color));
 }
 
-void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, uint64_t color) {
+void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, const KuraColor* color) {
   const auto& ops = Current("kura_rt_draw_line");
-  Record("kura_rt_draw_line", ops.draw_line(tl_renderer.self, *start, *end, UnpackColor(color)));
+  Record("kura_rt_draw_line", ops.draw_line(tl_renderer.self, *start, *end, *color));
+}
+
+void kura_rt_render_text(const double x, const double y, const char* utf8, const uint64_t length, const float size,
+                         const char* family, const uint64_t family_length, const KuraColor* color) {
+  const auto& ops = Current("kura_rt_draw_text");
+  const KuraVec2 pos{static_cast<float>(x), static_cast<float>(y)};
+  const KuraTextStyle style{size, family, family == nullptr ? 0 : static_cast<size_t>(family_length)};
+  Record("kura_rt_draw_text", ops.draw_text(tl_renderer.self, pos, utf8, static_cast<size_t>(length), style, *color));
 }
 
 void kura_rt_push_clip(const KuraRect* rect) {
@@ -261,15 +261,6 @@ uint32_t kura_rt_viewport_width() {
 
 uint32_t kura_rt_viewport_height() {
   return tl_viewport_height;
-}
-
-void kura_rt_render_text(const double x, const double y, const char* utf8, const uint64_t length, const float size,
-                         const char* family, const uint64_t family_length, const uint64_t color) {
-  const auto& ops = Current("kura_rt_draw_text");
-  const KuraVec2 pos{static_cast<float>(x), static_cast<float>(y)};
-  const KuraTextStyle style{size, family, family == nullptr ? 0 : static_cast<size_t>(family_length)};
-  Record("kura_rt_draw_text",
-         ops.draw_text(tl_renderer.self, pos, utf8, static_cast<size_t>(length), style, UnpackColor(color)));
 }
 
 int kura_rt_measure_text(const char* utf8, const uint64_t length, const float size, const char* family,

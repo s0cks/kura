@@ -5,8 +5,10 @@
 #include <vector>
 
 #include "backend/ir.h"
+#include "color.h"
 #include "function.h"
 #include "gir.h"
+#include "heap/color_model.h"
 #include "ir.h"
 #include "type_id.h"
 
@@ -32,7 +34,8 @@ static inline auto HasNoSideEffects(Instruction* instr) -> bool {
   return instr->IsConstant() || instr->IsBinaryOp() || instr->IsUnaryOp() || instr->IsLoadProperty() ||
          instr->IsLoadIndex() || instr->IsLoadLength() || instr->IsLoadVariantPayload() || instr->IsTestVariant() ||
          instr->IsNewVariant() || instr->IsNewList() || instr->IsNewRecord() || instr->IsLayoutRect() ||
-         instr->IsRectIntersects() || instr->IsRectPastClip();
+         instr->IsRectIntersects() || instr->IsRectPastClip() || instr->IsNewColor() || instr->IsCastColor() ||
+         instr->IsMathCall();
 }
 
 static inline auto IsZeroAlphaConstant(Definition* def) -> bool {
@@ -49,8 +52,12 @@ static inline auto IsZeroAlphaConstant(Definition* def) -> bool {
     return rgba == 0 || (rgba & 0xFF) == 0;
   }
 
-  if (val->GetType() == BuiltinTypes::kColorType)
-    return static_cast<Color*>(val)->GetAlpha() <= 0.0f;
+#define DEFINE_CHECK(Name)                           \
+  if (val->GetType() == BuiltinTypes::k##Name##Type) \
+    return static_cast<Name*>(val)->IsTransparent();
+
+  FOR_EACH_COLOR_MODEL(DEFINE_CHECK)
+#undef DEFINE_CHECK
 
   return false;
 }
@@ -211,6 +218,9 @@ static inline auto GetCSEKey(Instruction* instr) -> std::optional<std::string> {
   if (instr->IsLoadIndex())
     return "LoadIndex" + inputs_key();
 
+  if (const auto mc = instr->AsMathCall())
+    return "MathCall:" + std::to_string(static_cast<int>(mc->GetOp())) + inputs_key();
+
   if (const auto bin = instr->AsBinaryOp())
     return "BinaryOp:" + std::to_string(static_cast<int>(bin->GetOp())) + inputs_key();
 
@@ -223,6 +233,12 @@ static inline auto GetCSEKey(Instruction* instr) -> std::optional<std::string> {
 
     return std::nullopt;
   }
+
+  if (const auto nc = instr->AsNewColor())
+    return "NewColor:" + std::to_string(static_cast<int>(nc->GetModel())) + inputs_key();
+
+  if (const auto cc = instr->AsCastColor())
+    return "CastColor:" + std::to_string(static_cast<int>(cc->GetTarget())) + inputs_key();
 
   return std::nullopt;
 }
@@ -566,7 +582,9 @@ auto TypeNeedsARC(const CompileType* type) -> bool {
     case CompileType::kInt:
     case CompileType::kFloat:
     case CompileType::kNumber:
-    case CompileType::kColor:
+#define DEFINE_CASE(Name) case CompileType::k##Name:
+      FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
     case CompileType::kVec2:
     case CompileType::kVec3:
     case CompileType::kRect:

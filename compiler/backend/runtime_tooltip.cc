@@ -1,7 +1,7 @@
 // Tooltips. A node with a `tooltip` registers its box and the text as a place of kind `kEventTooltip` as it is drawn
 // (see DomLowering::EmitTooltip). When a frame ends, the runtime looks for the topmost of those places that the pointer
-// is over, and once the pointer has been over it for `delay` seconds draws its text next to the pointer, over everything
-// that was drawn.
+// is over, and once the pointer has been over it for `delay` seconds draws its text next to the pointer, over
+// everything that was drawn.
 //
 // The topmost is the one that was drawn last, so what is inside another node has its own tooltip, and what has none
 // has the tooltip of the node it is in. The place is cut to the clips it was drawn in, so what is scrolled out of a
@@ -30,8 +30,8 @@ constexpr KuraTooltipStyle kDefaultStyle{
     .radius = 4,
     .gap = 8,
     .margin = 4,
-    .background = 0x222222F2,
-    .color = 0xF5F5F5FF,
+    .background = KuraColor{0x22 / 255.0f, 0x22 / 255.0f, 0x22 / 255.0f, 0xF2 / 255.0f},
+    .color = KuraColor{0xF5 / 255.0f, 0xF5 / 255.0f, 0xF5 / 255.0f, 1.0f},
 };
 
 struct State {
@@ -173,7 +173,8 @@ void kura_rt_tooltip_draw() {
   const auto& style = state.style;
 
   // The text is wrapped to what is left of the widest a tooltip is, or of the viewport if that is less.
-  const auto widest = std::max(1.0f, std::min(style.max_width, viewport_width - 2 * style.margin) - 2 * style.padding_x);
+  const auto widest =
+      std::max(1.0f, std::min(style.max_width, viewport_width - 2 * style.margin) - 2 * style.padding_x);
   const auto lines = kura::rt::WrapText(text, style.font_size, "", widest);
   float text_width = 0;
   float text_height = 0;
@@ -193,13 +194,14 @@ void kura_rt_tooltip_draw() {
   x = std::max(style.margin, std::min(x, viewport_width - width - style.margin));
   y = std::max(style.margin, std::min(y, viewport_height - height - style.margin));
 
+  constexpr KuraColor kNoBorder{0.0f, 0.0f, 0.0f, 0.0f};
   const KuraRect box{x, y, width, height};
-  kura_rt_paint_box(&box, style.background, 0, Bits(0), Bits(style.radius), Bits(1));
+  kura_rt_paint_box(&box, &style.background, &kNoBorder, Bits(0), Bits(style.radius), Bits(1));
   auto line_y = y + style.padding_y;
   for (const auto& line : lines) {
     if (!line.text.empty()) {
       kura_rt_render_text(x + style.padding_x, line_y, line.text.data(), line.text.size(), style.font_size, nullptr, 0,
-                          style.color);
+                          &style.color);
     }
     line_y += line.height;
   }

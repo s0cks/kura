@@ -18,7 +18,11 @@ constexpr KindMask kFields = MaskOf(Kind::kText) | MaskOf(Kind::kInput);
 
 constexpr TypeMask kBool = TypeBit(CompileType::kBool);
 constexpr TypeMask kString = TypeBit(CompileType::kString);
-constexpr TypeMask kColor = TypeBit(CompileType::kColor);
+constexpr TypeMask kColor =
+#define DEFINE_BIT(Name) TypeBit(CompileType::k##Name) |
+    FOR_EACH_COLOR_MODEL(DEFINE_BIT)
+#undef DEFINE_BIT
+        0;
 constexpr TypeMask kPx = TypeBit(CompileType::kPx);
 constexpr TypeMask kLengths = TypeBit(CompileType::kPx) | TypeBit(CompileType::kPct);
 constexpr TypeMask kSizes = kLengths | TypeBit(CompileType::kFr);
@@ -114,8 +118,13 @@ auto TypeName(const CompileType::Kind kind) -> std::string_view {
       return "Number";
     case CompileType::kString:
       return "String";
-    case CompileType::kColor:
-      return "Color";
+#define DEFINE_COLOR_NAME(Name) \
+  case CompileType::k##Name:    \
+    return #Name;
+
+      FOR_EACH_COLOR_MODEL(DEFINE_COLOR_NAME)
+#undef DEFINE_COLOR_NAME
+
     case CompileType::kPx:
       return "Px";
     case CompileType::kPct:
@@ -165,8 +174,14 @@ auto ConstantKind(Object* value) -> std::optional<CompileType::Kind> {
       return CompileType::kFloat;
     case kStringType:
       return CompileType::kString;
-    case kColorType:
-      return CompileType::kColor;
+
+#define DEFINE_COLOR_KIND(Name) \
+  case k##Name##Type:           \
+    return CompileType::k##Name;
+
+      FOR_EACH_COLOR_MODEL(DEFINE_COLOR_KIND)
+#undef DEFINE_COLOR_KIND
+
     case kPxType:
       return CompileType::kPx;
     case kPctType:
@@ -258,25 +273,18 @@ auto SuggestProperty(const Kind kind, const std::string_view name) -> const Prop
 auto DescribeAccepted(const PropertyDef& def) -> std::string {
   std::vector<std::string> items{};
   constexpr CompileType::Kind kScalars[] = {CompileType::kBool,   CompileType::kInt,    CompileType::kFloat,
-                                            CompileType::kNumber, CompileType::kString, CompileType::kColor,
-                                            CompileType::kPx,     CompileType::kPct,    CompileType::kFr};
+                                            CompileType::kNumber, CompileType::kString, CompileType::kPx,
+                                            CompileType::kPct,    CompileType::kFr};
   for (const auto kind : kScalars) {
     if (!def.Accepts(kind))
       continue;
-
     if (kind == CompileType::kString && !def.words.empty())
       continue;
-
     items.emplace_back(TypeName(kind));
   }
 
-  if (def.Accepts(CompileType::kString)) {
-    for (const auto word : def.words)
-      items.push_back(Quote(word));
-  }
-
-  if ((def.accepts & kMessages) != 0)
-    items.emplace_back("a Message");
+  if ((def.accepts & kColor) != 0)
+    items.emplace_back("Color");
 
   return Join(items);
 }

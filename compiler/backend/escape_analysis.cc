@@ -54,7 +54,9 @@ class Analyzer {
       case CompileType::kFloat:
       case CompileType::kNumber:
       case CompileType::kString:
-      case CompileType::kColor:
+#define DEFINE_COLOR_CASE(Name) case CompileType::k##Name:
+        FOR_EACH_COLOR_MODEL(DEFINE_COLOR_CASE)
+#undef DEFINE_COLOR_CASE
       case CompileType::kVec2:
       case CompileType::kVec3:
       case CompileType::kRect:
@@ -216,7 +218,8 @@ class Analyzer {
         user->AsFillRoundRect() || user->AsFillCircle() || user->AsFillPolygon() || user->AsFillBezier() ||
         user->AsDrawLine() || user->AsDrawRect() || user->AsDrawRoundRect() || user->AsDrawCircle() ||
         user->AsDrawEllipse() || user->AsDrawPolygon() || user->AsDrawText() || user->AsDrawStrokeBezier() ||
-        user->AsDrawQuadBezier() || user->AsPushClip() || user->AsLayoutRect() || user->AsRectIntersects())
+        user->AsDrawQuadBezier() || user->AsPushClip() || user->AsLayoutRect() || user->AsRectIntersects() ||
+        user->AsCastColor() || user->AsNewColor() || user->AsMathCall())
       return nullptr;
     if (const auto d = user->AsDrawInput()) {
       // the message is kept with the box for the frame; the rest is read now

@@ -176,7 +176,7 @@ auto Heap::Verify(std::ostream* out) -> bool {
     ForEachObject(space, [&](HeapObject* obj) {
       const auto address = obj->address();
       const auto kind = obj->kind();
-      if (kind == ObjKind::kInvalid || kind > ObjKind::kBox)
+      if (kind == ObjKind::kInvalid || kind > ObjKind::kColor)
         return fail(space, address, "has an invalid kind");
       if (obj->size() < kMinBlockSize || !IsAligned(obj->size(), kObjectAlignment))
         return fail(space, address, "has a malformed size");

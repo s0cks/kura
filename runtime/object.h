@@ -233,102 +233,6 @@ DEFINE_UNIT_OBJECT(Pct);
 DEFINE_UNIT_OBJECT(Fr);
 #undef DEFINE_UNIT_OBJECT
 
-class Color : public TemplateObject<kColorType> {
- private:
-  uint8_t red_;
-  uint8_t blue_;
-  uint8_t green_;
-  uint8_t alpha_;
-
- public:
-  explicit Color(const uint8_t red, const uint8_t blue, const uint8_t green, const uint8_t alpha) :
-    red_(red),
-    blue_(blue),
-    green_(green),
-    alpha_(alpha) {}
-  ~Color() override = default;
-
-  auto GetRed() const -> uint8_t {
-    return red_;
-  }
-
-  void SetRed(const uint8_t rhs) {
-    red_ = rhs;
-  }
-
-  auto GetBlue() const -> uint8_t {
-    return blue_;
-  }
-
-  void SetBlue(const uint8_t rhs) {
-    blue_ = rhs;
-  }
-
-  auto GetGreen() const -> uint8_t {
-    return green_;
-  }
-
-  void SetGreen(const uint8_t rhs) {
-    green_ = rhs;
-  }
-
-  auto GetAlpha() const -> uint8_t {
-    return alpha_;
-  }
-
-  void SetAlpha(const uint8_t rhs) {
-    alpha_ = rhs;
-  }
-
-  constexpr auto ToRGBA() const -> uint32_t {
-    return (static_cast<uint32_t>(red_) << 24) | (static_cast<uint32_t>(green_) << 16) |
-           (static_cast<uint32_t>(blue_) << 8) | static_cast<uint32_t>(alpha_);
-  }
-
-  constexpr auto ToARGB() const -> uint32_t {
-    return (static_cast<uint32_t>(alpha_) << 24) | (static_cast<uint32_t>(red_) << 16) |
-           (static_cast<uint32_t>(green_) << 8) | static_cast<uint32_t>(blue_);
-  }
-
-  DECLARE_TYPE(Color);
-
- private:
-#define FOR_EACH_BUILTIN_COLOR(V) \
-  V(Red)                          \
-  V(Blue)                         \
-  V(Green)                        \
-  V(White)                        \
-  V(Black)                        \
-  V(Purple)                       \
-  V(DarkPurple)                   \
-  V(BrightPurple)                 \
-  V(Gray)                         \
-  V(LightGray)                    \
-  V(DarkGray)                     \
-  V(SlateGray)
-
-#define DECLARE_BUILTIN_COLOR(Name) static Color* k##Name;
-
-  FOR_EACH_BUILTIN_COLOR(DECLARE_BUILTIN_COLOR)
-#undef DECLARE_BUILTIN_COLOR
-
- public:
-  static auto Parse(const std::string rhs) -> Color*;
-
-  static inline auto New(const uint8_t red, const uint8_t green, const uint8_t blue, const uint8_t alpha = 255)
-      -> Color* {
-    return new Color(red, blue, green, alpha);
-  }
-
-#define DEFINE_COLOR_GETTER(Name)       \
-  static inline auto Name() -> Color* { \
-    return k##Name;                     \
-  }
-
-  FOR_EACH_BUILTIN_COLOR(DEFINE_COLOR_GETTER)
-#undef DEFINE_COLOR_GETTER
-};
-
 // The geometry (see geometry.h), as constants in the IR. The compiler keeps them unboxed, as vectors of floats, so
 // there is no value of them at runtime that is tagged: they can't be put in a Seq, a Record, a Message, or anything
 // else that holds a value of any type.
@@ -364,6 +268,44 @@ inline auto Vec3::New(const float x, const float y, const float z) -> Vec3* {
 inline auto Rect::New(const float x, const float y, const float width, const float height) -> Rect* {
   return New(geom::Rect{x, y, width, height});
 }
+
+//
+//  private:
+// #define FOR_EACH_BUILTIN_COLOR(V) \
+//   V(Red)                          \
+//   V(Blue)                         \
+//   V(Green)                        \
+//   V(White)                        \
+//   V(Black)                        \
+//   V(Purple)                       \
+//   V(DarkPurple)                   \
+//   V(BrightPurple)                 \
+//   V(Gray)                         \
+//   V(LightGray)                    \
+//   V(DarkGray)                     \
+//   V(SlateGray)
+//
+// #define DECLARE_BUILTIN_COLOR(Name) static Color* k##Name;
+//
+//   FOR_EACH_BUILTIN_COLOR(DECLARE_BUILTIN_COLOR)
+// #undef DECLARE_BUILTIN_COLOR
+//
+//  public:
+//   static auto Parse(const std::string rhs) -> Color*;
+//
+//   static inline auto New(const uint8_t red, const uint8_t green, const uint8_t blue, const uint8_t alpha = 255)
+//       -> Color* {
+//     return new Color(red, blue, green, alpha);
+//   }
+//
+// #define DEFINE_COLOR_GETTER(Name)       \
+//   static inline auto Name() -> Color* { \
+//     return k##Name;                     \
+//   }
+//
+//   FOR_EACH_BUILTIN_COLOR(DEFINE_COLOR_GETTER)
+// #undef DEFINE_COLOR_GETTER
+// };
 }  // namespace kura
 
 #endif  // KURA_OBJECT_H

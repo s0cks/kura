@@ -14,6 +14,7 @@
 
 #include "binary_op.h"
 #include "common.h"
+#include "heap/color_storage.h"
 #include "heap/heap.h"
 #include "heap/objects.h"
 #include "object.h"
@@ -26,6 +27,7 @@ namespace {
 // the model space (see Phase in runtime_abi.h).
 using heap::BoxObj;
 using heap::ClosureObj;
+using heap::ColorObj;
 using heap::HeapObject;
 using heap::NodeObj;
 using heap::ObjKind;
@@ -270,8 +272,12 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
     case kTagFr:
       return AsDouble(a.bits) == AsDouble(b.bits);
     case kTagString:
-    case kTagColor:
       return Str(a.bits)->view() == Str(b.bits)->view();
+    case kTagColor: {
+      const auto* x = reinterpret_cast<const ColorObj*>(a.bits);
+      const auto* y = reinterpret_cast<const ColorObj*>(b.bits);
+      return x->model == y->model && x->c0 == y->c0 && x->c1 == y->c1 && x->c2 == y->c2 && x->a == y->a;
+    }
     case kTagSeq:
       return SeqEqual(reinterpret_cast<SeqObj*>(a.bits), reinterpret_cast<SeqObj*>(b.bits));
     case kTagRecord:
@@ -333,8 +339,30 @@ auto Format(const KuraValue& value) -> std::string {
       return Number(AsDouble(value.bits)) + "fr";
     case kTagString:
       return Quote(std::string(Str(value.bits)->view()));
-    case kTagColor:
-      return std::string(Str(value.bits)->view());
+    case kTagColor: {
+      const auto* color = reinterpret_cast<const ColorObj*>(value.bits);
+      if (!color)
+        return "<null color>";
+
+      const char* prefix = "rgba";
+      switch (color->model) {
+        case ColorModel::kRgbaColor:
+          prefix = "rgba";
+          break;
+        case ColorModel::kHslaColor:
+          prefix = "hsla";
+          break;
+        case ColorModel::kHsbaColor:
+          prefix = "hsva";
+          break;
+        case ColorModel::kSrgbaColor:
+          prefix = "srgba";
+          break;
+      }
+
+      return std::string(prefix) + "(" + Number(color->c0) + ", " + Number(color->c1) + ", " + Number(color->c2) +
+             ", " + Number(color->a) + ")";
+    }
     case kTagSeq: {
       const auto seq = reinterpret_cast<SeqObj*>(value.bits);
       std::stringstream ss{};
@@ -511,6 +539,12 @@ class FrameMover {
         copy->props = reinterpret_cast<RecordObj*>(MoveObject(node->props));
         copy->children = reinterpret_cast<SeqObj*>(MoveObject(node->children));
         return reinterpret_cast<uword>(copy);
+      }
+      case ObjKind::kColor: {
+        const auto c = from->As<ColorObj>();
+        const float comps[4] = {c->c0, c->c1, c->c2, c->a};
+        to = reinterpret_cast<uword>(heap::NewColor(heap_, space, c->model, comps));
+        break;
       }
       default:
         // not an object a program makes: left where it is
@@ -1152,6 +1186,31 @@ KuraValue kura_rt_binop(const uint64_t op_code, const uint64_t a_tag, const uint
     default:
       return Arith(op, a, b);
   }
+}
+
+void* kura_rt_color_new(const float* components, const uint64_t model) {
+  return kura::heap::NewColor(TheHeap(), AllocationSpace(), static_cast<kura::ColorModel>(model), components);
+}
+
+void kura_rt_color_unbox(const void* color_obj, const uint64_t target_model, float* out) {
+  const auto* c = static_cast<const ColorObj*>(color_obj);
+  const auto src_model = c->model;
+  const auto dst_model = static_cast<kura::ColorModel>(target_model);
+
+  if (src_model == dst_model) {
+    out[0] = c->c0;
+    out[1] = c->c1;
+    out[2] = c->c2;
+    out[3] = c->a;
+    return;
+  }
+
+  // Convert if unboxed into a different color model type than what was boxed
+  const kura::ColorStorage converted = FoldColorConvert({c->c0, c->c1, c->c2, c->a}, src_model, dst_model);
+  out[0] = converted.c0;
+  out[1] = converted.c1;
+  out[2] = converted.c2;
+  out[3] = converted.a;
 }
 
 KuraValue kura_rt_unop(const uint64_t op_code, const uint64_t tag, const uint64_t bits) {

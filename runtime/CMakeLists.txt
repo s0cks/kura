@@ -9,6 +9,7 @@ add_library(kurart SHARED
   c_import.cc
   local_scope.cc
   module.cc
+  color.cc
   object.cc
   property.cc
   record.cc

@@ -31,7 +31,9 @@
 #include "backend/gir.h"
 #include "backend/ir.h"
 #include "backend/runtime_abi.h"
+#include "backend/swizzle.h"
 #include "c_type.h"
+#include "color.h"
 #include "common.h"
 #include "function.h"
 #include "heap/objects.h"
@@ -52,14 +54,17 @@ auto EntryPointName(const std::string& function) -> std::string {
 
 namespace {
 // kVec is the geometry (Vec2, Vec3, Rect): a vector of 32-bit floats, in a register or on the stack, never tagged.
-enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged, kVec };
+enum class Rep { kInt, kFloat, kBool, kNone, kPtr, kTagged, kVec, kColor };
 
 auto RepOf(CompileType* type) -> Rep {
   switch (type->GetKind()) {
     case CompileType::kInt:
-    case CompileType::kColor:
     case CompileType::kHandle:
       return Rep::kInt;
+#define DEFINE_CASE(Name) case CompileType::k##Name:
+      FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
+      return Rep::kColor;
     case CompileType::kFloat:
     case CompileType::kPx:
     case CompileType::kPct:
@@ -100,8 +105,11 @@ auto LanesOf(CompileType* type) -> unsigned {
 auto TagOf(CompileType* type) -> uint64_t {
   switch (type->GetKind()) {
     case CompileType::kInt:
-    case CompileType::kColor:
       return rt::kTagInt;
+#define DEFINE_CASE(Name) case CompileType::k##Name:
+      FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
+      return rt::kTagColor;
     case CompileType::kFloat:
       return rt::kTagFloat;
     case CompileType::kBool:
@@ -185,10 +193,19 @@ class Generator {
         return ptr_ty_;
       case Rep::kTagged:
         return value_ty_;
+      case Rep::kColor:
+        return llvm::FixedVectorType::get(f32_, 4);
       case Rep::kVec:
         return llvm::FixedVectorType::get(f32_, LanesOf(type));
     }
     return i8_;
+  }
+
+  auto ColorPtr(Value* color) -> llvm::Value* {
+    llvm::Value* rgba = As(color, CompileType::RgbaColor());
+    const auto slot = EntryAlloca(rgba->getType());
+    b_.CreateStore(rgba, slot);
+    return slot;  // const KuraColor* ({ float r, g, b, a })
   }
 
   // ── tagged values ────────────────────────────────────────────────────────
@@ -268,6 +285,31 @@ class Generator {
       const auto slot = EntryAlloca(vec_ty);
       CallRt("kura_rt_vec_from", void_ty_, {tag, bits, b_.getInt64(LanesOf(to)), slot});
       return b_.CreateLoad(vec_ty, slot);
+    }
+
+    if (rf == Rep::kColor && rt == Rep::kColor) {
+      if (from->GetKind() == to->GetKind())
+        return value;
+
+      return EmitColorConvert(value, *GetColorModel(*from), *GetColorModel(*to));
+    }
+
+    if (rf == Rep::kColor && rt == Rep::kTagged) {
+      // Zero-allocation option: convert to Rgba if needed, pack [r,g,b,a] + model into 64-bit payload!
+      // Or heap-box via kura_rt_color_new(slot, model) -> rt::kTagColor
+      const auto slot = EntryAlloca(value->getType());
+      b_.CreateStore(value, slot);
+      const auto obj =
+          CallRt("kura_rt_color_new", ptr_ty_, {slot, b_.getInt64(static_cast<uint64_t>(*GetColorModel(*from)))});
+      return Pack(b_.getInt64(rt::kTagColor), b_.CreatePtrToInt(obj, i64_));
+    }
+
+    if (rf == Rep::kTagged && rt == Rep::kColor) {
+      CallRt("kura_rt_expect_tag", void_ty_, {TagOfValue(value), b_.getInt64(rt::kTagColor)});
+      const auto ptr = b_.CreateIntToPtr(BitsOfValue(value), ptr_ty_);
+      const auto slot = EntryAlloca(Lower(to));
+      CallRt("kura_rt_color_unbox", void_ty_, {ptr, b_.getInt64(static_cast<uint64_t>(*GetColorModel(*to))), slot});
+      return b_.CreateLoad(Lower(to), slot);
     }
 
     if (rf == Rep::kVec && rt == Rep::kTagged) {
@@ -505,6 +547,339 @@ class Generator {
     }
   }
 
+  auto EmitSrgbToLinearVec(llvm::Value* srgba) -> llvm::Value* {
+    auto* v4f32 = llvm::FixedVectorType::get(f32_, 4);
+    llvm::Value* alpha = b_.CreateExtractElement(srgba, uint64_t{3});
+
+    // Piecewise: c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+    llvm::Value* low = b_.CreateFMul(srgba, llvm::ConstantFP::get(v4f32, 1.0f / 12.92f));
+    llvm::Value* base = b_.CreateFMul(b_.CreateFAdd(srgba, llvm::ConstantFP::get(v4f32, 0.055f)),
+                                      llvm::ConstantFP::get(v4f32, 1.0f / 1.055f));
+    llvm::Value* safe_base = b_.CreateMaxNum(base, llvm::ConstantFP::get(v4f32, 0.0f));
+    llvm::Value* high =
+        b_.CreateIntrinsic(llvm::Intrinsic::pow, {v4f32}, {safe_base, llvm::ConstantFP::get(v4f32, 2.4f)});
+
+    llvm::Value* is_low = b_.CreateFCmpOLE(srgba, llvm::ConstantFP::get(v4f32, 0.04045f));
+    llvm::Value* linear = b_.CreateSelect(is_low, low, high);
+    return b_.CreateInsertElement(linear, alpha, uint64_t{3});
+  }
+
+  auto EmitLinearToSrgbVec(llvm::Value* linear) -> llvm::Value* {
+    auto* v4f32 = llvm::FixedVectorType::get(f32_, 4);
+    llvm::Value* alpha = b_.CreateExtractElement(linear, uint64_t{3});
+
+    // Piecewise: c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1.0 / 2.4) - 0.055
+    llvm::Value* low = b_.CreateFMul(linear, llvm::ConstantFP::get(v4f32, 12.92f));
+    llvm::Value* safe_lin = b_.CreateMaxNum(linear, llvm::ConstantFP::get(v4f32, 0.0f));
+    llvm::Value* powered =
+        b_.CreateIntrinsic(llvm::Intrinsic::pow, {v4f32}, {safe_lin, llvm::ConstantFP::get(v4f32, 1.0f / 2.4f)});
+    llvm::Value* high = b_.CreateFSub(b_.CreateFMul(powered, llvm::ConstantFP::get(v4f32, 1.055f)),
+                                      llvm::ConstantFP::get(v4f32, 0.055f));
+
+    llvm::Value* is_low = b_.CreateFCmpOLE(linear, llvm::ConstantFP::get(v4f32, 0.0031308f));
+    llvm::Value* srgb = b_.CreateSelect(is_low, low, high);
+    return b_.CreateInsertElement(srgb, alpha, uint64_t{3});
+  }
+
+  auto EmitColorConvert(llvm::Value* vec, ColorModel from, ColorModel to) -> llvm::Value* {
+    if (from == to)
+      return vec;
+
+    if (from == ColorModel::kSrgbaColor) {
+      llvm::Value* rgba = EmitLinearToSrgbVec(vec);
+      return EmitColorConvert(rgba, ColorModel::kRgbaColor, to);
+    }
+    if (to == ColorModel::kSrgbaColor) {
+      llvm::Value* rgba = EmitColorConvert(vec, from, ColorModel::kRgbaColor);
+      return EmitSrgbToLinearVec(rgba);
+    }
+
+    auto* v4f32 = llvm::FixedVectorType::get(f32_, 4);
+    llvm::Value* alpha = b_.CreateExtractElement(vec, uint64_t{3}, "color.a");
+
+    // Direct Hsla <-> Hsba without touching RGB
+    if (from == ColorModel::kHslaColor && to == ColorModel::kHsbaColor) {
+      llvm::Value* h = b_.CreateExtractElement(vec, uint64_t{0});
+      llvm::Value* s = b_.CreateExtractElement(vec, uint64_t{1});
+      llvm::Value* l = b_.CreateExtractElement(vec, uint64_t{2});
+
+      llvm::Value* one = llvm::ConstantFP::get(f32_, 1.0f);
+      llvm::Value* zero = llvm::ConstantFP::get(f32_, 0.0f);
+      llvm::Value* two = llvm::ConstantFP::get(f32_, 2.0f);
+
+      llvm::Value* bv = b_.CreateFAdd(l, b_.CreateFMul(s, b_.CreateMinNum(l, b_.CreateFSub(one, l))));
+      llvm::Value* is_zero = b_.CreateFCmpOEQ(bv, zero);
+      llvm::Value* sv_nz = b_.CreateFMul(two, b_.CreateFSub(one, b_.CreateFDiv(l, bv)));
+      llvm::Value* sv = b_.CreateSelect(is_zero, zero, sv_nz);
+
+      llvm::Value* out = llvm::PoisonValue::get(v4f32);
+      out = b_.CreateInsertElement(out, h, uint64_t{0});
+      out = b_.CreateInsertElement(out, sv, uint64_t{1});
+      out = b_.CreateInsertElement(out, bv, uint64_t{2});
+      return b_.CreateInsertElement(out, alpha, uint64_t{3});
+    }
+
+    if (from == ColorModel::kHsbaColor && to == ColorModel::kHslaColor) {
+      llvm::Value* h = b_.CreateExtractElement(vec, uint64_t{0});
+      llvm::Value* s = b_.CreateExtractElement(vec, uint64_t{1});
+      llvm::Value* v = b_.CreateExtractElement(vec, uint64_t{2});
+
+      llvm::Value* one = llvm::ConstantFP::get(f32_, 1.0f);
+      llvm::Value* zero = llvm::ConstantFP::get(f32_, 0.0f);
+      llvm::Value* half = llvm::ConstantFP::get(f32_, 0.5f);
+
+      llvm::Value* l = b_.CreateFMul(v, b_.CreateFSub(one, b_.CreateFMul(s, half)));
+      llvm::Value* denom = b_.CreateMinNum(l, b_.CreateFSub(one, l));
+      llvm::Value* is_zero = b_.CreateFCmpOEQ(denom, zero);
+      llvm::Value* sl_nz = b_.CreateFDiv(b_.CreateFSub(v, l), denom);
+      llvm::Value* sl = b_.CreateSelect(is_zero, zero, sl_nz);
+
+      llvm::Value* out = llvm::PoisonValue::get(v4f32);
+      out = b_.CreateInsertElement(out, h, uint64_t{0});
+      out = b_.CreateInsertElement(out, sl, uint64_t{1});
+      out = b_.CreateInsertElement(out, l, uint64_t{2});
+      return b_.CreateInsertElement(out, alpha, uint64_t{3});
+    }
+
+    // Hsla -> Rgba (branchless SIMD across <4 x float>)
+    if (from == ColorModel::kHslaColor && to == ColorModel::kRgbaColor) {
+      llvm::Value* h = b_.CreateExtractElement(vec, uint64_t{0});
+      llvm::Value* s = b_.CreateExtractElement(vec, uint64_t{1});
+      llvm::Value* l = b_.CreateExtractElement(vec, uint64_t{2});
+
+      llvm::Value* one = llvm::ConstantFP::get(f32_, 1.0f);
+      llvm::Value* chroma = b_.CreateFMul(s, b_.CreateMinNum(l, b_.CreateFSub(one, l)));
+      llvm::Value* h30 = b_.CreateFMul(h, llvm::ConstantFP::get(f32_, 1.0f / 30.0f));
+
+      llvm::Value* vh30 = b_.CreateVectorSplat(4, h30);
+      llvm::Value* vl = b_.CreateVectorSplat(4, l);
+      llvm::Value* vchroma = b_.CreateVectorSplat(4, chroma);
+      llvm::Value* vn = llvm::ConstantDataVector::get(ctx_, std::vector<float>{0.0f, 8.0f, 4.0f, 0.0f});
+
+      llvm::Value* k_raw = b_.CreateFAdd(vn, vh30);
+      llvm::Value* vinv12 = llvm::ConstantFP::get(v4f32, 1.0f / 12.0f);
+      llvm::Value* v12 = llvm::ConstantFP::get(v4f32, 12.0f);
+      llvm::Value* q = b_.CreateIntrinsic(llvm::Intrinsic::floor, {v4f32}, {b_.CreateFMul(k_raw, vinv12)});
+      llvm::Value* k = b_.CreateFSub(k_raw, b_.CreateFMul(q, v12));
+
+      llvm::Value* m = b_.CreateMinNum(b_.CreateFSub(k, llvm::ConstantFP::get(v4f32, 3.0f)),
+                                       b_.CreateFSub(llvm::ConstantFP::get(v4f32, 9.0f), k));
+      m = b_.CreateMaxNum(b_.CreateMinNum(m, llvm::ConstantFP::get(v4f32, 1.0f)), llvm::ConstantFP::get(v4f32, -1.0f));
+
+      llvm::Value* rgb = b_.CreateFSub(vl, b_.CreateFMul(vchroma, m));
+      return b_.CreateInsertElement(rgb, alpha, uint64_t{3});
+    }
+
+    // Hsba -> Rgba (branchless SIMD across <4 x float>)
+    if (from == ColorModel::kHsbaColor && to == ColorModel::kRgbaColor) {
+      llvm::Value* h = b_.CreateExtractElement(vec, uint64_t{0});
+      llvm::Value* s = b_.CreateExtractElement(vec, uint64_t{1});
+      llvm::Value* v = b_.CreateExtractElement(vec, uint64_t{2});
+
+      llvm::Value* chroma = b_.CreateFMul(v, s);
+      llvm::Value* h60 = b_.CreateFMul(h, llvm::ConstantFP::get(f32_, 1.0f / 60.0f));
+
+      llvm::Value* vh60 = b_.CreateVectorSplat(4, h60);
+      llvm::Value* vv = b_.CreateVectorSplat(4, v);
+      llvm::Value* vchroma = b_.CreateVectorSplat(4, chroma);
+      llvm::Value* vn = llvm::ConstantDataVector::get(ctx_, std::vector<float>{5.0f, 3.0f, 1.0f, 0.0f});
+
+      llvm::Value* k_raw = b_.CreateFAdd(vn, vh60);
+      llvm::Value* vinv6 = llvm::ConstantFP::get(v4f32, 1.0f / 6.0f);
+      llvm::Value* v6 = llvm::ConstantFP::get(v4f32, 6.0f);
+      llvm::Value* q = b_.CreateIntrinsic(llvm::Intrinsic::floor, {v4f32}, {b_.CreateFMul(k_raw, vinv6)});
+      llvm::Value* k = b_.CreateFSub(k_raw, b_.CreateFMul(q, v6));
+
+      llvm::Value* m = b_.CreateMinNum(k, b_.CreateFSub(llvm::ConstantFP::get(v4f32, 4.0f), k));
+      m = b_.CreateMaxNum(b_.CreateMinNum(m, llvm::ConstantFP::get(v4f32, 1.0f)), llvm::ConstantFP::get(v4f32, 0.0f));
+
+      llvm::Value* rgb = b_.CreateFSub(vv, b_.CreateFMul(vchroma, m));
+      return b_.CreateInsertElement(rgb, alpha, uint64_t{3});
+    }
+
+    // Rgba -> Hsla / Hsba
+    // (Route Rgba -> Hsba first, then Hsba -> Hsla if target is Hsla)
+    llvm::Value* r = b_.CreateExtractElement(vec, uint64_t{0});
+    llvm::Value* g = b_.CreateExtractElement(vec, uint64_t{1});
+    llvm::Value* b = b_.CreateExtractElement(vec, uint64_t{2});
+
+    llvm::Value* zero = llvm::ConstantFP::get(f32_, 0.0f);
+    llvm::Value* max_c = b_.CreateMaxNum(r, b_.CreateMaxNum(g, b));
+    llvm::Value* min_c = b_.CreateMinNum(r, b_.CreateMinNum(g, b));
+    llvm::Value* delta = b_.CreateFSub(max_c, min_c);
+
+    llvm::Value* no_delta = b_.CreateFCmpOEQ(delta, zero);
+    llvm::Value* safe_delta = b_.CreateSelect(no_delta, llvm::ConstantFP::get(f32_, 1.0f), delta);
+
+    llvm::Value* hr = b_.CreateFDiv(b_.CreateFSub(g, b), safe_delta);
+    llvm::Value* hg = b_.CreateFAdd(b_.CreateFDiv(b_.CreateFSub(b, r), safe_delta), llvm::ConstantFP::get(f32_, 2.0f));
+    llvm::Value* hb = b_.CreateFAdd(b_.CreateFDiv(b_.CreateFSub(r, g), safe_delta), llvm::ConstantFP::get(f32_, 4.0f));
+
+    llvm::Value* is_r = b_.CreateFCmpOEQ(max_c, r);
+    llvm::Value* is_g = b_.CreateFCmpOEQ(max_c, g);
+    llvm::Value* h_raw = b_.CreateSelect(is_r, hr, b_.CreateSelect(is_g, hg, hb));
+    llvm::Value* h_deg = b_.CreateFMul(h_raw, llvm::ConstantFP::get(f32_, 60.0f));
+    llvm::Value* h_wrap = b_.CreateSelect(b_.CreateFCmpOLT(h_deg, zero),
+                                          b_.CreateFAdd(h_deg, llvm::ConstantFP::get(f32_, 360.0f)), h_deg);
+    llvm::Value* h = b_.CreateSelect(no_delta, zero, h_wrap);
+
+    llvm::Value* s_hsba = b_.CreateSelect(b_.CreateFCmpOEQ(max_c, zero), zero, b_.CreateFDiv(delta, max_c));
+    llvm::Value* hsba = llvm::PoisonValue::get(v4f32);
+    hsba = b_.CreateInsertElement(hsba, h, uint64_t{0});
+    hsba = b_.CreateInsertElement(hsba, s_hsba, uint64_t{1});
+    hsba = b_.CreateInsertElement(hsba, max_c, uint64_t{2});
+    hsba = b_.CreateInsertElement(hsba, alpha, uint64_t{3});
+
+    if (to == ColorModel::kHsbaColor)
+      return hsba;
+    return EmitColorConvert(hsba, ColorModel::kHsbaColor, ColorModel::kHslaColor);
+  }
+
+  auto ToF32(Value* val) -> llvm::Value* {
+    llvm::Value* v = Val(val);
+    CompileType* ty = Type(val);
+    if (ty->IsInt())
+      return b_.CreateSIToFP(v, f32_);
+    if (RepOf(ty) == Rep::kTagged)
+      v = As(val, CompileType::Float());
+    return b_.CreateFPTrunc(v, f32_);
+  }
+
+  auto ColorChannelToF32(Value* val, const ColorModel model, const uint64_t lane) -> llvm::Value* {
+    llvm::Value* v = Val(val);
+    CompileType* ty = Type(val);
+
+    if (ty->IsInt()) {
+      llvm::Value* f = b_.CreateSIToFP(v, f32_);
+      if (model == ColorModel::kRgbaColor && lane < 3)
+        return b_.CreateFMul(f, llvm::ConstantFP::get(f32_, 1.0f / 255.0f));
+      return f;
+    }
+
+    if (ty->IsPct()) {
+      llvm::Value* f = b_.CreateFPTrunc(v, f32_);
+      return b_.CreateFMul(f, llvm::ConstantFP::get(f32_, 1.0f / 100.0f));
+    }
+
+    if (RepOf(ty) == Rep::kTagged)
+      v = As(val, CompileType::Float());
+
+    return b_.CreateFPTrunc(v, f32_);
+  }
+
+  LOWER_FN(NewColor) {
+    const auto model = instr->GetModel();
+    auto* vec_ty = llvm::FixedVectorType::get(f32_, 4);
+    llvm::Value* vec = llvm::PoisonValue::get(vec_ty);
+    vec = b_.CreateInsertElement(vec, ColorChannelToF32(instr->GetC0(), model, 0), uint64_t{0});
+    vec = b_.CreateInsertElement(vec, ColorChannelToF32(instr->GetC1(), model, 1), uint64_t{1});
+    vec = b_.CreateInsertElement(vec, ColorChannelToF32(instr->GetC2(), model, 2), uint64_t{2});
+    vec = b_.CreateInsertElement(vec, ColorChannelToF32(instr->GetAlpha(), model, 3), uint64_t{3});
+    Define(instr, vec, CompileType::Color(model));
+  }
+
+  LOWER_FN(MathCall) {
+    const auto op = instr->GetOp();
+    CompileType* ty = instr->GetCompileType();
+
+    auto as_f32_scalar = [&](Value* v) -> llvm::Value* {
+      llvm::Value* val = As(v, CompileType::Float());
+      return b_.CreateFPTrunc(val, f32_);
+    };
+
+    if (op == MathOp::kDot) {
+      llvm::Value* a = Val(instr->GetInputAt(0));
+      llvm::Value* b = Val(instr->GetInputAt(1));
+      llvm::Value* prod = b_.CreateFMul(a, b);
+      llvm::Value* sum_f32 = b_.CreateFAddReduce(llvm::ConstantFP::get(f32_, 0.0f), prod);
+      return Define(instr, b_.CreateFPExt(sum_f32, f64_), CompileType::Float());
+    }
+
+    if (op == MathOp::kLength || op == MathOp::kNormalize) {
+      llvm::Value* v = Val(instr->GetInputAt(0));
+      llvm::Value* sq = b_.CreateFMul(v, v);
+      llvm::Value* len_sq = b_.CreateFAddReduce(llvm::ConstantFP::get(f32_, 0.0f), sq);
+      llvm::Value* len = b_.CreateIntrinsic(llvm::Intrinsic::sqrt, {f32_}, {len_sq});
+      if (op == MathOp::kLength)
+        return Define(instr, b_.CreateFPExt(len, f64_), CompileType::Float());
+
+      auto* vec_ty = llvm::cast<llvm::FixedVectorType>(v->getType());
+      llvm::Value* safe_len = b_.CreateMaxNum(len, llvm::ConstantFP::get(f32_, 1e-8f));
+      llvm::Value* vlen = b_.CreateVectorSplat(vec_ty->getNumElements(), safe_len);
+      return Define(instr, b_.CreateFDiv(v, vlen), ty);
+    }
+
+    if (op == MathOp::kClamp) {
+      llvm::Value* x = Val(instr->GetInputAt(0));
+      llvm::Value* lo = Val(instr->GetInputAt(1));
+      llvm::Value* hi = Val(instr->GetInputAt(2));
+      if (ty->IsInt()) {
+        llvm::Value* c = b_.CreateIntrinsic(llvm::Intrinsic::smax, {i64_}, {x, lo});
+        return Define(instr, b_.CreateIntrinsic(llvm::Intrinsic::smin, {i64_}, {c, hi}), ty);
+      }
+      llvm::Value* c = b_.CreateMaxNum(x, lo);
+      return Define(instr, b_.CreateMinNum(c, hi), ty);
+    }
+
+    // MathOp::kLerp(a, b, t)
+    llvm::Value* a = Val(instr->GetInputAt(0));
+    llvm::Value* b = Val(instr->GetInputAt(1));
+    Value* t_val = instr->GetInputAt(2);
+
+    // Shortest-path cylindrical hue interpolation for HslaColor and HsbaColor
+    if (ty->IsHslaColor() || ty->IsHsbaColor()) {
+      llvm::Value* t = as_f32_scalar(t_val);
+      llvm::Value* ha = b_.CreateExtractElement(a, uint64_t{0});
+      llvm::Value* hb = b_.CreateExtractElement(b, uint64_t{0});
+
+      // dh = ((hb - ha + 540) mod 360) - 180
+      llvm::Value* dh_raw = b_.CreateFAdd(b_.CreateFSub(hb, ha), llvm::ConstantFP::get(f32_, 540.0f));
+      llvm::Value* q = b_.CreateIntrinsic(llvm::Intrinsic::floor, {f32_},
+                                          {b_.CreateFMul(dh_raw, llvm::ConstantFP::get(f32_, 1.0f / 360.0f))});
+      llvm::Value* dh = b_.CreateFSub(b_.CreateFSub(dh_raw, b_.CreateFMul(q, llvm::ConstantFP::get(f32_, 360.0f))),
+                                      llvm::ConstantFP::get(f32_, 180.0f));
+      llvm::Value* h_unwrapped = b_.CreateIntrinsic(llvm::Intrinsic::fmuladd, {f32_}, {dh, t, ha});
+      llvm::Value* h_pos = b_.CreateFAdd(h_unwrapped, llvm::ConstantFP::get(f32_, 360.0f));
+      llvm::Value* q2 = b_.CreateIntrinsic(llvm::Intrinsic::floor, {f32_},
+                                           {b_.CreateFMul(h_pos, llvm::ConstantFP::get(f32_, 1.0f / 360.0f))});
+      llvm::Value* h_final = b_.CreateFSub(h_pos, b_.CreateFMul(q2, llvm::ConstantFP::get(f32_, 360.0f)));
+
+      // Interpolate all 4 lanes via FMA, then replace lane 0 with wrapped hue
+      auto* v4f32 = llvm::FixedVectorType::get(f32_, 4);
+      llvm::Value* vt = b_.CreateVectorSplat(4, t);
+      llvm::Value* lerped = b_.CreateIntrinsic(llvm::Intrinsic::fmuladd, {v4f32}, {b_.CreateFSub(b, a), vt, a});
+      return Define(instr, b_.CreateInsertElement(lerped, h_final, uint64_t{0}), ty);
+    }
+
+    // Vector lerp (<2/3/4 x float>)
+    if (auto* vec_ty = llvm::dyn_cast<llvm::FixedVectorType>(a->getType())) {
+      llvm::Value* vt = b_.CreateVectorSplat(vec_ty->getNumElements(), as_f32_scalar(t_val));
+      llvm::Value* lerped = b_.CreateIntrinsic(llvm::Intrinsic::fmuladd, {vec_ty}, {b_.CreateFSub(b, a), vt, a});
+      return Define(instr, lerped, ty);
+    }
+
+    // Scalar / Unit lerp (f64)
+    llvm::Value* t_f64 = As(t_val, CompileType::Float());
+    llvm::Value* lerped = b_.CreateIntrinsic(llvm::Intrinsic::fmuladd, {f64_}, {b_.CreateFSub(b, a), t_f64, a});
+    return Define(instr, lerped, ty);
+  }
+
+  LOWER_FN(CastColor) {
+    Value* src = instr->GetValue();
+    CompileType* src_ty = Type(src);
+    CompileType* dst_ty = CompileType::Color(instr->GetTarget());
+    if (src_ty == dst_ty)
+      return Define(instr, Val(src), dst_ty);
+
+    const auto src_model = GetColorModel(*src_ty);
+    if (!src_model) {
+      // Dynamic `Any` color cast
+      llvm::Value* vec = As(src, dst_ty);
+      return Define(instr, vec, dst_ty);
+    }
+    Define(instr, EmitColorConvert(Val(src), *src_model, instr->GetTarget()), dst_ty);
+  }
+
   LOWER_FN(BinaryOp) {
     const auto left = instr->GetLeft();
     const auto right = instr->GetRight();
@@ -533,6 +908,68 @@ class Generator {
       return Define(instr, CallRt("kura_rt_seq_concat", ptr_ty_, {a, b}), result);
     if (op == BinaryOp::kAdd && ta->IsRecord() && tb->IsRecord())
       return Define(instr, CallRt("kura_rt_record_merge", ptr_ty_, {a, b}), result);
+
+    auto scalar_to_f32 = [&](Value* v) -> llvm::Value* {
+      llvm::Value* f64_val = As(v, CompileType::Float());
+      return b_.CreateFPTrunc(f64_val, f32_);
+    };
+
+    // 1. Vec2 / Vec3 component-wise +, -, *, /
+    if ((ta->IsVec2() && tb->IsVec2()) || (ta->IsVec3() && tb->IsVec3())) {
+      llvm::Value* lv = Val(left);
+      llvm::Value* rv = Val(right);
+      llvm::Value* out = nullptr;
+      switch (op) {
+        case BinaryOp::kAdd:
+          out = b_.CreateFAdd(lv, rv);
+          break;
+        case BinaryOp::kSubtract:
+          out = b_.CreateFSub(lv, rv);
+          break;
+        case BinaryOp::kMultiply:
+          out = b_.CreateFMul(lv, rv);
+          break;
+        case BinaryOp::kDivide:
+          out = b_.CreateFDiv(lv, rv);
+          break;
+        default:
+          break;
+      }
+      if (out)
+        return Define(instr, out, result);
+    }
+
+    if ((ta->IsVec2() || ta->IsVec3()) && tb->IsNumeric() && (op == BinaryOp::kMultiply || op == BinaryOp::kDivide)) {
+      llvm::Value* lv = Val(left);
+      auto* vec_ty = llvm::cast<llvm::FixedVectorType>(lv->getType());
+      llvm::Value* vs = b_.CreateVectorSplat(vec_ty->getNumElements(), scalar_to_f32(right));
+      llvm::Value* out = op == BinaryOp::kMultiply ? b_.CreateFMul(lv, vs) : b_.CreateFDiv(lv, vs);
+      return Define(instr, out, result);
+    }
+    if (ta->IsNumeric() && (tb->IsVec2() || tb->IsVec3()) && op == BinaryOp::kMultiply) {
+      llvm::Value* rv = Val(right);
+      auto* vec_ty = llvm::cast<llvm::FixedVectorType>(rv->getType());
+      llvm::Value* vs = b_.CreateVectorSplat(vec_ty->getNumElements(), scalar_to_f32(left));
+      return Define(instr, b_.CreateFMul(vs, rv), result);
+    }
+
+    if (ta->IsRect() && tb->IsVec2() && (op == BinaryOp::kAdd || op == BinaryOp::kSubtract)) {
+      llvm::Value* rect_v = Val(left);
+      llvm::Value* vec2_v = Val(right);
+      llvm::Value* zero2 = llvm::ConstantAggregateZero::get(llvm::FixedVectorType::get(f32_, 2));
+      llvm::Value* delta4 = b_.CreateShuffleVector(vec2_v, zero2, {0, 1, 2, 3});
+      llvm::Value* out = op == BinaryOp::kAdd ? b_.CreateFAdd(rect_v, delta4) : b_.CreateFSub(rect_v, delta4);
+      return Define(instr, out, result);
+    }
+
+    if ((ta->IsColor() && tb->IsNumeric() && op == BinaryOp::kMultiply) ||
+        (ta->IsNumeric() && tb->IsColor() && op == BinaryOp::kMultiply)) {
+      llvm::Value* col_v = ta->IsColor() ? Val(left) : Val(right);
+      llvm::Value* scale = ta->IsColor() ? scalar_to_f32(right) : scalar_to_f32(left);
+      llvm::Value* alpha = b_.CreateExtractElement(col_v, uint64_t{3});
+      llvm::Value* new_a = b_.CreateFMul(alpha, scale);
+      return Define(instr, b_.CreateInsertElement(col_v, new_a, uint64_t{3}), result);
+    }
 
     // Int op Int
     if (ta->IsInt() && tb->IsInt()) {
@@ -1054,7 +1491,7 @@ class Generator {
     llvm::Value* end_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.end");
     b_.CreateStore(to, end_ptr);
 
-    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, Val(instr->GetColor())});
+    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, ColorPtr(instr->GetColor())});
   }
 
   // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
@@ -1070,12 +1507,12 @@ class Generator {
   }
 
   LOWER_FN(FillRect) {
-    CallRt("kura_rt_fill_rect", void_ty_, {Spill(instr->GetRect()), Val(instr->GetColor())});
+    CallRt("kura_rt_fill_rect", void_ty_, {Spill(instr->GetRect()), ColorPtr(instr->GetColor())});
   }
 
   LOWER_FN(PaintBox) {
     CallRt("kura_rt_paint_box", void_ty_,
-           {Spill(instr->GetRect()), Val(instr->GetFill()), Val(instr->GetBorderColor()),
+           {Spill(instr->GetRect()), ColorPtr(instr->GetFill()), ColorPtr(instr->GetBorderColor()),
             CoordinateBits(instr->GetBorderWidth()), CoordinateBits(instr->GetRadius()),
             CoordinateBits(instr->GetOpacity())});
   }
@@ -1093,7 +1530,7 @@ class Generator {
     const auto plan = draw->GetPlan().get();
     CallRt("kura_rt_draw_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
-            Val(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign())});
+            ColorPtr(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign())});
   }
 
   void EmitDrawInput(DrawInputInstr* draw) {
@@ -1102,7 +1539,7 @@ class Generator {
     const auto plan = draw->GetPlan().get();
     CallRt("kura_rt_draw_input", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(draw->GetNode()),
-            Val(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign()),
+            ColorPtr(draw->GetColor()), CoordinateBits(draw->GetOpacity()), b_.getInt64(draw->GetAlign()),
             As(draw->GetPlaceholder(), CompileType::Any()), As(draw->GetMessage(), CompileType::Any()),
             As(draw->GetReadonly(), CompileType::Any())});
   }
@@ -1172,8 +1609,20 @@ class Generator {
     switch (value->GetType()) {
       case kIntType:
         return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
-      case kColorType:
-        return Define(instr, b_.getInt64(static_cast<Color*>(value)->ToRGBA()), CompileType::Int());
+
+#define DEFINE_COLOR_CONST(Name)                                                                                    \
+  case k##Name##Type: {                                                                                             \
+    const auto* c = static_cast<Name*>(value);                                                                      \
+    const auto& s = c->GetStorage();                                                                                \
+    return Define(                                                                                                  \
+        instr,                                                                                                      \
+        llvm::ConstantDataVector::get(ctx_, std::vector<float>{static_cast<float>(s.c0), static_cast<float>(s.c1),  \
+                                                               static_cast<float>(s.c2), static_cast<float>(s.a)}), \
+        CompileType::Name());                                                                                       \
+  }
+
+        FOR_EACH_COLOR_MODEL(DEFINE_COLOR_CONST)
+#undef DEFINE_COLOR_CONST
       case kVec2Type: {
         const auto& v = static_cast<Vec2*>(value)->GetValue();
         return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y}), CompileType::Vec2());
@@ -1246,6 +1695,9 @@ class Generator {
     CHECK(Release);
     CHECK(SeqAppend);
     CHECK(UpdateRecord);
+    CHECK(NewColor);
+    CHECK(CastColor);
+    CHECK(MathCall);
 
 #undef CHECK
 
@@ -1461,6 +1913,20 @@ class Generator {
       phi->addIncoming(loaded, hit_bb);
       phi->addIncoming(none_val, miss_bb);
       return Define(def, phi, CompileType::Any());
+    }
+
+    if (const auto lane = VectorPropertyLane(type, name)) {
+      llvm::Value* elem_f32 = b_.CreateExtractElement(value, static_cast<uint64_t>(*lane), name);
+      llvm::Value* elem_f64 = b_.CreateFPExt(elem_f32, f64_);
+      return Define(def, elem_f64, CompileType::Float());
+    }
+
+    if (const auto swizzle = ParseSwizzle(type, name)) {
+      llvm::Value* shuffled = b_.CreateShuffleVector(value, value, swizzle->indices, name);
+      CompileType* out_ty = swizzle->indices.size() == 2 ? CompileType::Vec2()
+                          : swizzle->indices.size() == 3 ? CompileType::Vec3()
+                                                         : (swizzle->is_color ? type : CompileType::Rect());
+      return Define(def, shuffled, out_ty);
     }
 
     // Fallback for tagged / Node properties

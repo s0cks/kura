@@ -20,6 +20,7 @@
 #include "backend/gir.h"
 #include "backend/runtime_abi.h"
 #include "backend/type_analysis.h"
+#include "color.h"
 #include "frontend/expr.h"
 #include "local_scope.h"
 #include "module.h"
@@ -174,7 +175,8 @@ TEST(DomLowering, NoNodeObjectsAreBuilt) {
 }
 
 TEST(DomLowering, ConstantPropertiesEmitNothing) {
-  Program program(Element(NodeExpr::kBlock, {Prop("gap", Lit(Px::New(2))), Prop("fill", Lit(Color::Red()))}));
+  Program program(Element(NodeExpr::kBlock,
+                          {Prop("gap", Lit(Px::New(2))), Prop("fill", Lit(RgbaColor::New({1.0f, 0.0f, 0.0f, 1.0f})))}));
   ASSERT_TRUE(program.Compile());
   for (const auto instr : program.Instructions())
     EXPECT_FALSE(instr->IsConstant());
@@ -205,19 +207,22 @@ TEST(DomLowering, TextWithoutAFontFamilyUsesTheDefaultFont) {
 
 TEST(DomLowering, FontFamilyHasToBeAConstantString) {
   Program dynamic{};
-  dynamic.view->SetBody(SeqExpr::New(Element(
-      NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("font-family", LoadLocalExpr::New(dynamic.model))})));
+  dynamic.view->SetBody(
+      SeqExpr::New(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))),
+                                             Prop("font-family", LoadLocalExpr::New(dynamic.model))})));
   EXPECT_FALSE(dynamic.Compile());
   EXPECT_TRUE(dynamic.HasError("'font-family' has to be a constant string"));
 
-  Program wrong(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("font-family", Lit(Px::New(2)))}));
+  Program wrong(
+      Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("font-family", Lit(Px::New(2)))}));
   EXPECT_FALSE(wrong.Compile());
 }
 
 TEST(DomLowering, TextIsDrawnOpaqueBlackUnlessItHasAColor) {
   Program plain(Text("hi"));
   ASSERT_TRUE(plain.Compile());
-  Program red(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))), Prop("color", Lit(Color::Red()))}));
+  Program red(Element(NodeExpr::kText, {Prop("value", Lit(String::New("hi"))),
+                                        Prop("color", Lit(RgbaColor::New({1.0f, 0.0f, 0.0f, 1.0f})))}));
   ASSERT_TRUE(red.Compile());
   const auto color_of = [](const Program& program) -> Object* {
     for (const auto instr : program.Instructions()) {
@@ -234,7 +239,7 @@ TEST(DomLowering, TextIsDrawnOpaqueBlackUnlessItHasAColor) {
   EXPECT_EQ(static_cast<Int*>(black)->GetValue(), 0x000000FF);
   const auto chosen = color_of(red);
   ASSERT_NE(chosen, nullptr);
-  EXPECT_EQ(chosen->GetType(), kColorType);
+  EXPECT_EQ(chosen->GetType(), kRgbaColorType);
 }
 
 TEST(DomLowering, FoldsLetsIntoTheText) {
@@ -348,10 +353,11 @@ TEST(DomLowering, ANodeWithoutAnEventRegistersNothing) {
 }
 
 TEST(DomLowering, EveryClickableNodeRegistersItsOwnMessage) {
-  Program program(Element(NodeExpr::kBlock, {}, {
-    Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Up"))}),
-    Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Down"))}),
-  }));
+  Program program(Element(NodeExpr::kBlock, {},
+                          {
+                              Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Up"))}),
+                              Element(NodeExpr::kButton, {Prop("on-click", VariantExpr::New("Down"))}),
+                          }));
   DeclareMessages(&program, {"Up", "Down"});
   ASSERT_TRUE(program.Compile()) << (program.errors.empty() ? "" : program.errors[0]);
   std::vector<kura::layout::NodeId> nodes{};

@@ -9,11 +9,13 @@
 
 #include "backend/compile_type.h"
 #include "backend/ir.h"
+#include "backend/swizzle.h"
 #include "c_type.h"
 #include "frontend/builtins.h"
 #include "frontend/expr.h"
 #include "frontend/type_expr.h"
 #include "function.h"
+#include "heap/color_model.h"
 #include "local_scope.h"
 #include "module.h"
 #include "object.h"
@@ -119,8 +121,14 @@ class Analyzer {
         return simple(CompileType::Number());
       if (name == "String")
         return simple(CompileType::String());
-      if (name == "Color")
-        return simple(CompileType::Color());
+
+      if (name == "Color" || name == "Rgba")
+        return simple(CompileType::RgbaColor());
+      if (name == "Hsla")
+        return simple(CompileType::HslaColor());
+      if (name == "Hsba" || name == "Hsva")
+        return simple(CompileType::HsbaColor());
+
       if (name == "Vec2")
         return simple(CompileType::Vec2());
       if (name == "Vec3")
@@ -575,6 +583,28 @@ class Analyzer {
   }
 
   auto Arithmetic(BinaryOp op, CompileType* a, CompileType* b, Instruction* at) -> CompileType* {
+    // Vec2/Vec3 component-wise +, -, *, /
+    if ((a->IsVec2() && b->IsVec2()) || (a->IsVec3() && b->IsVec3())) {
+      if (op == BinaryOp::kAdd || op == BinaryOp::kSubtract || op == BinaryOp::kMultiply || op == BinaryOp::kDivide)
+        return a;
+    }
+
+    // Vec2/Vec3 scalar scaling: `v * s`, `s * v`, `v / s`
+    if ((a->IsVec2() || a->IsVec3()) && b->IsNumeric() && (op == BinaryOp::kMultiply || op == BinaryOp::kDivide))
+      return a;
+    if (a->IsNumeric() && (b->IsVec2() || b->IsVec3()) && op == BinaryOp::kMultiply)
+      return b;
+
+    // Rect translation by Vec2: `rect + offset`, `rect - offset`
+    if (a->IsRect() && b->IsVec2() && (op == BinaryOp::kAdd || op == BinaryOp::kSubtract))
+      return a;
+
+    // Color alpha scaling: `color * opacity` or `opacity * color`
+    if (a->IsColor() && (b->IsNumeric() || b->IsPct()) && op == BinaryOp::kMultiply)
+      return a;
+    if ((a->IsNumeric() || a->IsPct()) && b->IsColor() && op == BinaryOp::kMultiply)
+      return b;
+
     if (a->IsNumeric() && b->IsNumeric()) {
       if (a == b)
         return a;
@@ -742,8 +772,11 @@ class Analyzer {
         return CompileType::Number();
       case kStringType:
         return CompileType::String();
-      case kColorType:
-        return CompileType::Color();
+#define DEFINE_CASE(Name) \
+  case k##Name##Type:     \
+    return CompileType::Name();
+        FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
       case kVec2Type:
         return CompileType::Vec2();
       case kVec3Type:
@@ -780,6 +813,27 @@ class Analyzer {
         Report(at, "`" + type->ToString() + "` may be None; use `?.` to access `" + name + "`");
 
       type = type->WithoutNone();
+    }
+
+    const auto wrap_nullable = [&](CompileType* t) -> CompileType* {
+      return (safe && nullable) ? CompileType::Union({t, CompileType::None()}) : t;
+    };
+
+    // Check vector/color single-lane accessors (.r, .h, .x, .width, etc.) and swizzles (.xy, .rgb, .bgra) BEFORE
+    // IsRecord()
+    if (type->IsColor() || type->IsVec2() || type->IsVec3() || type->IsRect()) {
+      if (VectorPropertyLane(type, name))
+        return wrap_nullable(CompileType::Float());
+
+      if (const auto swizzle = ParseSwizzle(type, name)) {
+        CompileType* out_ty = swizzle->indices.size() == 2 ? CompileType::Vec2()
+                            : swizzle->indices.size() == 3 ? CompileType::Vec3()
+                                                           : (swizzle->is_color ? type : CompileType::Rect());
+        return wrap_nullable(out_ty);
+      }
+
+      Report(at, type->ToString() + " has no property `" + name + "`");
+      return CompileType::Never();
     }
 
     if (!type->IsRecord()) {
@@ -1035,6 +1089,58 @@ class Analyzer {
 
     if (const auto f = instr->AsLoadFunction())
       return Set(def, FunctionType(f->GetFunction()));
+
+    if (const auto nc = instr->AsNewColor()) {
+      for (uint64_t i = 0; i < 4; i++) {
+        const auto comp = TypeOf(nc->GetInputAt(i));
+        const bool allow_pct = !(i == 0 && nc->GetModel() != ColorModel::kRgbaColor);
+        if (!(comp->IsNumeric() || (allow_pct && comp->IsPct()) || comp->IsAny() || comp->IsNever()))
+          Report(instr, "color component must be a Number" + std::string(allow_pct ? " or Pct" : "") + ", not " +
+                            comp->ToString());
+      }
+      return Set(def, CompileType::Color(nc->GetModel()));
+    }
+
+    if (const auto cc = instr->AsCastColor()) {
+      const auto src = TypeOf(cc->GetValue());
+      if (!(src->IsColor() || src->IsAny() || src->IsNever()))
+        Report(instr, "can't convert " + src->ToString() + " to color");
+
+      return Set(def, CompileType::Color(cc->GetTarget()));
+    }
+
+    if (const auto mc = instr->AsMathCall()) {
+      const auto op = mc->GetOp();
+      auto* a = TypeOf(mc->GetInputAt(0));
+
+      if (op == MathOp::kLength || op == MathOp::kNormalize) {
+        if (!(a->IsVec2() || a->IsVec3() || a->IsAny() || a->IsNever()))
+          Report(instr, "expected Vec2 or Vec3, got " + a->ToString());
+        return Set(def, op == MathOp::kLength ? CompileType::Float() : a);
+      }
+
+      auto* b = TypeOf(mc->GetInputAt(1));
+      if (op == MathOp::kDot) {
+        if (!((a->IsVec2() && b->IsVec2()) || (a->IsVec3() && b->IsVec3()) || a->IsAny() || b->IsAny()))
+          Report(instr, "dot() requires matching Vec2 or Vec3 operands");
+        return Set(def, CompileType::Float());
+      }
+
+      auto* c = TypeOf(mc->GetInputAt(2));
+      const bool is_lerp_type =
+          a->IsNumeric() || a->IsUnit() || a->IsVec2() || a->IsVec3() || a->IsRect() || a->IsColor();
+      if (!is_lerp_type && !a->IsAny() && !a->IsNever())
+        Report(instr, "unsupported type for math op: " + a->ToString());
+
+      if (op == MathOp::kLerp) {
+        if (!(c->IsNumeric() || c->IsPct() || c->IsAny() || c->IsNever()))
+          Report(instr, "lerp() factor `t` must be numeric or Pct, got " + c->ToString());
+        return Set(def, CompileType::Join(a, b));
+      }
+
+      // kClamp(x, min, max)
+      return Set(def, CompileType::Join(a, CompileType::Join(b, c)));
+    }
 
     if (const auto l = instr->AsLoadLocal()) {
       const auto it = globals_.find(l->GetLocal());

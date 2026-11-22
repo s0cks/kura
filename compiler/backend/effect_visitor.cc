@@ -144,6 +144,15 @@ auto EffectVisitor::VisitBinary(expr::BinaryExpr* expr) -> VisitResult {
   return true;
 }
 
+auto EffectVisitor::VisitMathCall(expr::MathCallExpr* expr) -> VisitResult {
+  ValueList args{};
+  if (!EvalList(expr->GetArgs(), &args))
+    return false;
+
+  ReturnDefinition(MathCallInstr::New(expr->GetOp(), std::move(args)));
+  return true;
+}
+
 auto EffectVisitor::VisitSeq(expr::SeqExpr* expr) -> VisitResult {
   const auto& children = expr->GetChildren();
   if (children.empty()) {
@@ -208,6 +217,36 @@ auto EffectVisitor::VisitIf(expr::IfExpr* expr) -> VisitResult {
     ReturnValue(Bind(phi));
   }
 
+  return true;
+}
+
+auto EffectVisitor::VisitNewColor(expr::NewColorExpr* expr) -> VisitResult {
+  const auto c0 = Eval(expr->GetC0());
+  if (!c0)
+    return false;
+
+  const auto c1 = Eval(expr->GetC1());
+  if (!c1)
+    return false;
+
+  const auto c2 = Eval(expr->GetC2());
+  if (!c2)
+    return false;
+
+  const auto a = Eval(expr->GetAlpha());
+  if (!a)
+    return false;
+
+  ReturnDefinition(NewColorInstr::New(expr->GetModel(), c0, c1, c2, a));
+  return true;
+}
+
+auto EffectVisitor::VisitCastColor(expr::CastColorExpr* expr) -> VisitResult {
+  const auto val = Eval(expr->GetValue());
+  if (!val)
+    return false;
+
+  ReturnDefinition(CastColorInstr::New(expr->GetTarget(), val));
   return true;
 }
 

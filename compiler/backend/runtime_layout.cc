@@ -526,7 +526,7 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
   Touch(&context);
 }
 
-void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const uint64_t color,
+void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const KuraColor* color,
                        const uint64_t opacity_bits, const uint64_t align) {
   auto& context = ContextFor(table, count);
   if (node >= count)
@@ -551,8 +551,8 @@ void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t n
   double opacity = 1.0;
   std::memcpy(&opacity, &opacity_bits, sizeof(opacity));
   opacity = std::clamp(opacity, 0.0, 1.0);
-  const auto alpha = static_cast<uint64_t>(std::lround(static_cast<double>(color & 0xFF) * opacity));
-  const auto faded = (color & ~uint64_t{0xFF}) | alpha;
+  KuraColor faded = *color;
+  faded.a *= static_cast<float>(opacity);
 
   const auto& family = context.families[node];
   auto y = box.y + top;
@@ -562,13 +562,13 @@ void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t n
       const auto slack = std::max(0.0f, room - 0.01f - line.width);
       const auto shift = align == 1 ? slack / 2 : align == 2 ? slack : 0.0f;
       kura_rt_render_text(box.x + left + shift, y, line.text.data(), line.text.size(), context.sizes[node],
-                          family.empty() ? nullptr : family.data(), family.size(), faded);
+                          family.empty() ? nullptr : family.data(), family.size(), &faded);
     }
     y += line.height;
   }
 }
 
-void kura_rt_draw_input(const void* table, const uint64_t count, const uint64_t node, const uint64_t color,
+void kura_rt_draw_input(const void* table, const uint64_t count, const uint64_t node, const KuraColor* color,
                         const uint64_t opacity_bits, const uint64_t align, const uint64_t placeholder_tag,
                         const uint64_t placeholder_bits, const uint64_t message_tag, const uint64_t message_bits,
                         const uint64_t readonly_tag, const uint64_t readonly_bits) {
@@ -586,7 +586,9 @@ void kura_rt_draw_input(const void* table, const uint64_t count, const uint64_t 
   double opacity = 1.0;
   std::memcpy(&opacity, &opacity_bits, sizeof(opacity));
   opacity = std::clamp(opacity, 0.0, 1.0);
-  const auto alpha = static_cast<uint64_t>(std::lround(static_cast<double>(color & 0xFF) * opacity));
+
+  KuraColor faded = color ? *color : KuraColor{0.0f, 0.0f, 0.0f, 1.0f};
+  faded.a *= static_cast<float>(opacity);
 
   kura::rt::input::Field field{};
   // the context stands for the input among the others, and not the table: what a hole makes from one table has many
@@ -598,7 +600,7 @@ void kura_rt_draw_input(const void* table, const uint64_t count, const uint64_t 
   field.text = context.texts[node];
   field.size = context.sizes[node];
   field.family = context.families[node];
-  field.color = (color & ~uint64_t{0xFF}) | alpha;
+  field.color = faded;
   field.align = static_cast<int>(align);
   if (placeholder_tag == kura::rt::kTagString && placeholder_bits != 0)
     field.placeholder = std::string(kura::rt::StringView(placeholder_bits));

@@ -48,6 +48,20 @@ auto NewString(Heap& heap, const Space space, const std::string_view data) -> St
   return str;
 }
 
+static_assert(sizeof(ColorObj) == 32);
+
+auto NewColor(Heap& heap, const Space space, const ColorModel model, const float* components) -> ColorObj* {
+  const auto color = New<ColorObj>(heap, space, ObjKind::kColor, ColorObj::PayloadSize());
+  if (!color)
+    return nullptr;
+  color->model = model;
+  color->c0 = components[0];
+  color->c1 = components[1];
+  color->c2 = components[2];
+  color->a = components[3];
+  return color;
+}
+
 auto NewSeq(Heap& heap, const Space space, const uint64_t capacity) -> SeqObj* {
   const auto seq = New<SeqObj>(heap, space, ObjKind::kSeq, SeqObj::PayloadSize(capacity));
   if (!seq)

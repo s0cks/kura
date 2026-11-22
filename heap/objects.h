@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "heap/color_model.h"
 #include "heap/header.h"
 #include "heap/value.h"
 #include "platform.h"
@@ -236,6 +237,21 @@ void VisitPointerSlots(HeapObject* obj, F&& visit) {
       return;
   }
 }
+
+struct ColorObj : HeapObject {
+  ColorModel model;
+  float c0;
+  float c1;
+  float c2;
+  float a;
+
+  static constexpr auto PayloadSize() -> uword {
+    return sizeof(ColorObj) - sizeof(HeapObject);  // 24 bytes -> total 32 bytes
+  }
+};
+static_assert(sizeof(ColorObj) == 32);
+
+auto NewColor(Heap& heap, Space space, ColorModel model, const float* components) -> ColorObj*;
 
 // Allocation helpers. Each allocates in `space`, fills in the object's fixed fields and returns it (null only if a
 // custom out-of-memory handler returned: see Heap::SetOutOfMemoryHandler). Element slots start zeroed, which reads as

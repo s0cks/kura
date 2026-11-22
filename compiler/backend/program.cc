@@ -110,7 +110,9 @@ auto Matches(CompileType* type, const uint64_t tag) -> bool {
         ok |= tag == rt::kTagFr;
         break;
 
-      case CompileType::kColor:
+#define DEFINE_COLOR_MATCH(Name) case CompileType::k##Name:
+        FOR_EACH_COLOR_MODEL(DEFINE_COLOR_MATCH)
+#undef DEFINE_COLOR_MATCH
         ok |= tag == rt::kTagColor;
         break;
 
@@ -191,10 +193,11 @@ auto CheckArguments(Module* module, ModuleGraph* graphs, const std::string& name
   return true;
 }
 
-auto Program::Load(const std::string& path, const Options& options, std::string* error)
-    -> std::unique_ptr<Program> {
+auto Program::Load(const std::string& path, const Options& options, std::string* error) -> std::unique_ptr<Program> {
   static std::once_flag types_once;
-  std::call_once(types_once, [] { Type::Init(); });
+  std::call_once(types_once, [] {
+    Type::Init();
+  });
 
   LocalScope* scope = LocalScope::New();
   Module* module = nullptr;

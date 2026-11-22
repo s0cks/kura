@@ -3,6 +3,7 @@
 #include "backend/gir.h"
 #include "backend/node_visitor.h"
 #include "backend/runtime_abi.h"
+#include "color.h"
 #include "object.h"
 
 namespace kura {
@@ -433,20 +434,23 @@ auto DomLowering::EmitBox(dom::Node* node, const bool always, Value* rect) -> bo
       return true;
     if (!rect && !(rect = BoxOf(node)))
       return false;
-    EmitRenderCall(FillRectInstr::New(rect, fill ? fill : constant(Int::New(0))));
+
+    EmitRenderCall(FillRectInstr::New(rect, fill ? fill : constant(RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f}))));
     return true;
   }
 
+  // Line 368:
   if (border_width && !border_color)
-    border_color = constant(Int::New(0x000000FF));
+    border_color = constant(RgbaColor::New({0.0f, 0.0f, 0.0f, 1.0f}));
   if (border_color && !border_width)
     border_width = constant(Float::New(1.0));
   if (!rect && !(rect = BoxOf(node)))
     return false;
-  EmitRenderCall(
-      PaintBoxInstr::New(rect, fill ? fill : constant(Int::New(0)), border_color ? border_color : constant(Int::New(0)),
-                         border_width ? border_width : constant(Float::New(0.0)),
-                         radius ? radius : constant(Float::New(0.0)), opacity ? opacity : constant(Float::New(1.0))));
+  EmitRenderCall(PaintBoxInstr::New(rect, fill ? fill : constant(RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f})),
+                                    border_color ? border_color : constant(RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f})),
+                                    border_width ? border_width : constant(Float::New(0.0)),
+                                    radius ? radius : constant(Float::New(0.0)),
+                                    opacity ? opacity : constant(Float::New(1.0))));
   return true;
 }
 
@@ -472,7 +476,7 @@ auto DomLowering::DrawLine(dom::Node& node) -> bool {
 
   Value* color = ResolvePropertyByName(&node, "fill", resolved_[&node]);
   if (!color)
-    color = host_->Bind(ConstantInstr::New(Int::New(0)));
+    color = host_->Bind(ConstantInstr::New(RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f})));
 
   EmitRenderCall(DrawLineInstr::New(rect, color));
   return true;
@@ -516,7 +520,7 @@ auto DomLowering::DrawText(const Op& op) -> bool {
   // Text is opaque black unless it says otherwise (0xRRGGBBAA).
   Value* color = ResolvePropertyByName(op.node, "color", resolved_[op.node]);
   if (!color)
-    color = host_->Bind(ConstantInstr::New(Int::New(0x000000FF)));
+    color = host_->Bind(ConstantInstr::New(RgbaColor::New({0.0f, 0.0f, 0.0f, 1.0f})));
 
   Value* opacity = ResolvePropertyByName(op.node, "opacity", resolved_[op.node]);
   if (!opacity)
@@ -576,13 +580,16 @@ auto DomLowering::DrawInputText(const Op& op) -> bool {
 
   Value* color = ResolvePropertyByName(op.node, "color", resolved);
   if (!color)
-    color = constant(Int::New(0x000000FF));
+    color = constant(RgbaColor::New({0.0f, 0.0f, 0.0f, 1.0f}));
+
   Value* opacity = ResolvePropertyByName(op.node, "opacity", resolved);
   if (!opacity)
     opacity = constant(Float::New(1.0));
+
   Value* placeholder = ResolvePropertyByName(op.node, "placeholder", resolved);
   if (!placeholder)
     placeholder = constant(String::New(""));
+
   Value* readonly = ResolvePropertyByName(op.node, "readonly", resolved);
   if (!readonly)
     readonly = constant(Bool::False());
@@ -593,6 +600,7 @@ auto DomLowering::DrawInputText(const Op& op) -> bool {
     if (const auto it = resolved.find(property->def); it != resolved.end())
       message = it->second;
   }
+
   if (!message)
     message = constant(None::Get());
 

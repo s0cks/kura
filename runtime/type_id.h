@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "heap/color_model.h"
+
 namespace kura {
 #define FOR_EACH_TYPE(V) \
   V(Bool)                \
@@ -17,10 +19,10 @@ namespace kura {
   V(Px)                  \
   V(Pct)                 \
   V(Fr)                  \
-  V(Color)               \
   V(Vec2)                \
   V(Vec3)                \
-  V(Rect)
+  V(Rect)                \
+  FOR_EACH_COLOR_MODEL(V)
 
 using TypeId = uint64_t;
 
@@ -42,6 +44,19 @@ static inline constexpr auto IsBuiltinType(const TypeId id) -> bool {
 
 static inline constexpr auto IsRuntimeType(const TypeId id) -> bool {
   return id > kFirstTypeIdAfterBuiltins;
+}
+
+static inline constexpr auto IsColorType(const TypeId id) -> bool {
+  switch (id) {
+#define DEFINE_CASE(Name) \
+  case k##Name##Type:     \
+    return true;
+
+    FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
+    default:
+      return false;
+  }
 }
 }  // namespace kura
 

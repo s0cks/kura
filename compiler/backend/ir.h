@@ -7,6 +7,7 @@
 #include "binary_op.h"
 #include "dom/kind.h"
 #include "frontend/expr.h"
+#include "frontend/math_op.h"
 #include "object.h"
 #include "property.h"
 #include "unary_op.h"
@@ -38,6 +39,7 @@ namespace kura {
   V(Parameter)                  \
   V(Call)                       \
   V(PipeCall)                   \
+  V(MathCall)                   \
   V(Return)                     \
   V(Goto)                       \
   V(Branch)                     \
@@ -84,7 +86,9 @@ namespace kura {
   V(RectPastClip)               \
   V(UpdateRecord)               \
   V(Retain)                     \
-  V(Release)
+  V(Release)                    \
+  V(NewColor)                   \
+  V(CastColor)
 
 class Instruction;
 class EntryInstr;
@@ -974,6 +978,48 @@ class StorePropertyInstr : public TemplateInstruction<2> {
   }
 };
 
+class MathCallInstr : public Definition {
+ private:
+  MathOp op_;
+
+ public:
+  explicit MathCallInstr(MathOp op) :
+    op_(op) {}
+  MathCallInstr(MathOp op, const ValueList args) :
+    op_(op),
+    args_(std::move(args)) {}
+  ~MathCallInstr() override = default;
+
+  auto GetOp() const -> MathOp {
+    return op_;
+  }
+
+  HAS_VALUE_LIST(Arg, args_);
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return args_.size();
+  }
+
+  auto GetInputAt(const uint64_t idx) const -> Value* override {
+    return GetArgAt(idx);
+  }
+
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    SetArgAt(idx, rhs);
+  }
+
+  DECLARE_INSTRUCTION_TYPE(MathCall);
+
+ public:
+  static inline auto New(MathOp op) -> MathCallInstr* {
+    return new MathCallInstr(op);
+  }
+
+  static inline auto New(MathOp op, const ValueList args) -> MathCallInstr* {
+    return new MathCallInstr(op, std::move(args));
+  }
+};
+
 class CallInstr : public Definition {
  private:
   Value* target_;
@@ -1647,6 +1693,59 @@ class ReleaseInstr : public TemplateInstruction<1> {
  public:
   static inline auto New(Value* val) -> ReleaseInstr* {
     return new ReleaseInstr(val);
+  }
+};
+
+class NewColorInstr : public TemplateDefinition<4> {
+ private:
+  ColorModel model_;
+
+ public:
+  NewColorInstr(const ColorModel model, Value* c0, Value* c1, Value* c2, Value* a) :
+    model_(model) {
+    SetC0(c0);
+    SetC1(c1);
+    SetC2(c2);
+    SetAlpha(a);
+  }
+  ~NewColorInstr() override = default;
+
+  auto GetModel() const -> ColorModel {
+    return model_;
+  }
+
+  HAS_NAMED_INPUT(C0, 0);
+  HAS_NAMED_INPUT(C1, 1);
+  HAS_NAMED_INPUT(C2, 2);
+  HAS_NAMED_INPUT(Alpha, 3);
+  DECLARE_INSTRUCTION_TYPE(NewColor);
+
+ public:
+  static inline auto New(const ColorModel model, Value* c0, Value* c1, Value* c2, Value* a) -> NewColorInstr* {
+    return new NewColorInstr(model, c0, c1, c2, a);
+  }
+};
+
+class CastColorInstr : public TemplateDefinition<1> {
+ private:
+  ColorModel target_;
+
+ public:
+  CastColorInstr(const ColorModel target, Value* value) :
+    target_(target) {
+    SetValue(value);
+  }
+
+  auto GetTarget() const -> ColorModel {
+    return target_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(CastColor);
+
+ public:
+  static inline auto New(const ColorModel target, Value* value) -> CastColorInstr* {
+    return new CastColorInstr(target, value);
   }
 };
 

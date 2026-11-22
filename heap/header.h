@@ -82,6 +82,8 @@ enum class ObjKind : uint8_t {
   FOR_EACH_SYNTAX_NODE(DEFINE_KIND)
 #undef DEFINE_KIND
 
+      kColor,
+
   // A free block inside the tenured space. Never reachable from a Value.
   kFree = 0xFE,
 };

@@ -2,6 +2,7 @@
 
 #include <sstream>
 
+#include "color.h"
 #include "object.h"
 #include "property.h"
 #include "record.h"

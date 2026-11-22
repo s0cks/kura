@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "backend/compile_type.h"
+#include "color.h"
 #include "dom/kind.h"
 #include "dom/property.h"
 #include "object.h"
@@ -83,7 +84,7 @@ TEST(DomCheckConstant, Types) {
   EXPECT_TRUE(CheckConstant(*width, None::Get()));
 
   const auto fill = FindProperty(Kind::kBlock, "fill");
-  EXPECT_FALSE(CheckConstant(*fill, Color::New(0, 0, 0, 0)));
+  EXPECT_FALSE(CheckConstant(*fill, RgbaColor::New({1.0f, 0.0f, 0.0f, 1.0f})));
   EXPECT_TRUE(CheckConstant(*fill, Int::New(0)));
 }
 

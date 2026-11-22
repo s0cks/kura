@@ -203,7 +203,9 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_register_event)       \
   V(kura_rt_seq_append)           \
   V(kura_rt_destroy)              \
-  V(kura_rt_record_clone)
+  V(kura_rt_record_clone) \
+  V(kura_rt_color_new) \
+  V(kura_rt_color_unbox)
 // clang-format on
 
 extern "C" {
@@ -216,6 +218,9 @@ void kura_rt_register_variant(uint64_t hash, const char* name);
 void* kura_rt_string_new(const char* data, uint64_t length);
 void* kura_rt_string_concat(void* a, void* b);
 int64_t kura_rt_string_cmp(void* a, void* b);
+
+void* kura_rt_color_new(const float* components, uint64_t model);
+void kura_rt_color_unbox(const void* color_obj, uint64_t target_model, float* out);
 
 void* kura_rt_seq_new(uint64_t capacity);
 KuraValue kura_rt_seq_get(void* seq, int64_t index);
@@ -242,12 +247,12 @@ void* kura_rt_record_clone(void* src_ptr);
 void kura_rt_check_renderer();
 void kura_rt_begin_frame(uint32_t width, uint32_t height);
 void kura_rt_end_frame();
-void kura_rt_fill_rect(const KuraRect* rect, uint64_t color);
-// A box: the rect filled with `fill`, with a border of `border_width` inside its edge and corners
+void kura_rt_fill_rect(const KuraRect* rect, const KuraColor* color);
+// A box: the rect ed with `fill`, with a border of `border_width` inside its edge and corners
 // rounded by `radius`, both in pixels, all with `opacity` (0 to 1) multiplied into their alpha. Colors are 0xRRGGBBAA.
-// It is made of the renderer's `fill_rect`s, a row of the rounded part at a time, so it has hard edges.
-void kura_rt_paint_box(const KuraRect* rect, uint64_t fill, uint64_t border_color, uint64_t border_width_bits,
-                       uint64_t radius_bits, uint64_t opacity_bits);
+// It is made of the renderer's `_rect`s, a row of the rounded part at a time, so it has hard edges.
+void kura_rt_paint_box(const KuraRect* rect, const KuraColor*, const KuraColor* border_color,
+                       uint64_t border_width_bits, uint64_t radius_bits, uint64_t opacity_bits);
 // What is drawn until `pop_clip` stays inside the rect.
 void kura_rt_push_clip(const KuraRect* rect);
 void kura_rt_pop_clip();
@@ -264,20 +269,20 @@ const KuraRenderer* kura_rt_get_renderer();
 void kura_rt_draw_rect();
 // Draws the text node `node` of the layout `table` (see below): its content, in the font and size it was given
 // with `kura_rt_layout_set_text`, wrapped to its box and placed in it. `color` is a packed RGBA8.
-void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, uint64_t color, uint64_t opacity_bits,
+void kura_rt_draw_text(const void* table, uint64_t count, uint64_t node, const KuraColor* color, uint64_t opacity_bits,
                        uint64_t align);
 // Draws the input node `node` of the layout `table`: its text in the font and size it was given with
 // `kura_rt_layout_set_text`, or the placeholder (a String, or anything else for none) when that is empty, inside its
 // padding and clipped to it; and when the input has the keyboard, its selection and its caret. `message` is what
 // `on-input` is, an open variant or None, and `readonly` a Bool: see runtime_input.h.
-void kura_rt_draw_input(const void* table, uint64_t count, uint64_t node, uint64_t color, uint64_t opacity_bits,
+void kura_rt_draw_input(const void* table, uint64_t count, uint64_t node, const KuraColor* color, uint64_t opacity_bits,
                         uint64_t align, uint64_t placeholder_tag, uint64_t placeholder_bits, uint64_t message_tag,
                         uint64_t message_bits, uint64_t readonly_tag, uint64_t readonly_bits);
 // The renderer call under `kura_rt_draw_text`: draws one run of text with the top-left of its box at (x, y).
 // `family` is the `font-family`, NULL (or a zero length) for the default font. Not called by compiled code.
 void kura_rt_render_text(double x, double y, const char* utf8, uint64_t length, float size, const char* family,
-                         uint64_t family_length, uint64_t color);
-void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, uint64_t color);
+                         uint64_t family_length, const KuraColor* color);
+void kura_rt_draw_line(const KuraVec2* start, const KuraVec2* end, const KuraColor* color);
 // ── viewport and layout ────────────────────────────────────────────────────
 // The size of the surface a view lays out in and draws into. The host sets it (a window's size, say)
 // and a view reads it at the start of every frame, so changing it reflows the next frame. It is
@@ -399,8 +404,8 @@ typedef struct KuraTooltipStyle {
   float radius;
   float gap;     // between the node and the tooltip
   float margin;  // the least between the tooltip and the edge of the viewport
-  uint64_t background;
-  uint64_t color;
+  KuraColor background;
+  KuraColor color;
 } KuraTooltipStyle;
 
 // Host => UI. The pointer is at (x, y), in the coordinates of the frames, or has left the window. What is under

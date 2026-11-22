@@ -8,7 +8,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "color.h"
 #include "function.h"
+#include "math_op.h"
 #include "module.h"
 #include "object.h"
 
@@ -100,6 +102,16 @@ auto ExprBuilder::ToSeq(Expr* expr) -> SeqExpr* {
 
 auto ExprBuilder::BuildSeq(const Node* node) -> SeqExpr* {
   return ToSeq(Build(node));
+}
+
+static auto MatchColorConstructor(const std::string& name) -> std::optional<ColorModel> {
+  if (name == "rgb" || name == "rgba")
+    return ColorModel::kRgbaColor;
+  if (name == "hsl" || name == "hsla")
+    return ColorModel::kHslaColor;
+  if (name == "hsb" || name == "hsba")
+    return ColorModel::kHsbaColor;
+  return std::nullopt;
 }
 
 auto ExprBuilder::LoadName(const Node* where, const std::string& name) -> Expr* {
@@ -978,6 +990,105 @@ auto ExprBuilder::BuildCompose(const syntax::Binary* binary) -> Expr* {
   return LambdaExpr::New(LambdaExpr::ParamList{param}, ToSeq(value));
 }
 
+auto ParseHexChannel(char hi, char lo) -> std::optional<float> {
+  const auto hex_val = [](char c) -> std::optional<uint8_t> {
+    if (c >= '0' && c <= '9')
+      return static_cast<uint8_t>(c - '0');
+    if (c >= 'a' && c <= 'f')
+      return static_cast<uint8_t>(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F')
+      return static_cast<uint8_t>(c - 'A' + 10);
+    return std::nullopt;
+  };
+  const auto h = hex_val(hi);
+  const auto l = hex_val(lo);
+  if (!h || !l)
+    return std::nullopt;
+  return static_cast<float>((*h << 4) | *l) / 255.0f;
+}
+
+auto ParseRgbaLiteral(std::string_view text) -> RgbaColor* {
+  if (text.empty())
+    return nullptr;
+
+  if (text.front() == '#') {
+    const auto hex = text.substr(1);
+    if (hex.size() == 3 || hex.size() == 4) {
+      const auto r = ParseHexChannel(hex[0], hex[0]);
+      const auto g = ParseHexChannel(hex[1], hex[1]);
+      const auto b = ParseHexChannel(hex[2], hex[2]);
+      const auto a = hex.size() == 4 ? ParseHexChannel(hex[3], hex[3]) : std::optional<float>{1.0f};
+      if (!r || !g || !b || !a)
+        return nullptr;
+      return RgbaColor::New({*r, *g, *b, *a});
+    }
+    if (hex.size() == 6 || hex.size() == 8) {
+      const auto r = ParseHexChannel(hex[0], hex[1]);
+      const auto g = ParseHexChannel(hex[2], hex[3]);
+      const auto b = ParseHexChannel(hex[4], hex[5]);
+      const auto a = hex.size() == 8 ? ParseHexChannel(hex[6], hex[7]) : std::optional<float>{1.0f};
+      if (!r || !g || !b || !a)
+        return nullptr;
+      return RgbaColor::New({*r, *g, *b, *a});
+    }
+    return nullptr;
+  }
+
+  // Named colors (matching IsKeyword in expr_builder.cc)
+  if (text == "transparent")
+    return RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f});
+  if (text == "black")
+    return RgbaColor::New({0.0f, 0.0f, 0.0f, 1.0f});
+  if (text == "white")
+    return RgbaColor::New({1.0f, 1.0f, 1.0f, 1.0f});
+  if (text == "red")
+    return RgbaColor::New({1.0f, 0.0f, 0.0f, 1.0f});
+  if (text == "green")
+    return RgbaColor::New({0.0f, 1.0f, 0.0f, 1.0f});
+  if (text == "blue")
+    return RgbaColor::New({0.0f, 0.0f, 1.0f, 1.0f});
+  if (text == "yellow")
+    return RgbaColor::New({1.0f, 1.0f, 0.0f, 1.0f});
+  if (text == "cyan")
+    return RgbaColor::New({0.0f, 1.0f, 1.0f, 1.0f});
+  if (text == "magenta")
+    return RgbaColor::New({1.0f, 0.0f, 1.0f, 1.0f});
+  if (text == "gray")
+    return RgbaColor::New({0.5f, 0.5f, 0.5f, 1.0f});
+  if (text == "orange")
+    return RgbaColor::New({1.0f, 0.64705884f, 0.0f, 1.0f});
+  if (text == "purple")
+    return RgbaColor::New({0.5019608f, 0.0f, 0.5019608f, 1.0f});
+  return nullptr;
+}
+
+auto ParseHexColor(std::string_view text) -> RgbaColor* {
+  if (!text.empty() && text.front() == '#')
+    text.remove_prefix(1);
+
+  if (text.size() == 3 || text.size() == 4) {
+    const auto r = ParseHexChannel(text[0], text[0]);
+    const auto g = ParseHexChannel(text[1], text[1]);
+    const auto b = ParseHexChannel(text[2], text[2]);
+    const auto a = text.size() == 4 ? ParseHexChannel(text[3], text[3]) : std::optional<float>{1.0f};
+    if (!r || !g || !b || !a)
+      return nullptr;
+    return RgbaColor::New({*r, *g, *b, *a});
+  }
+
+  if (text.size() == 6 || text.size() == 8) {
+    const auto r = ParseHexChannel(text[0], text[1]);
+    const auto g = ParseHexChannel(text[2], text[3]);
+    const auto b = ParseHexChannel(text[4], text[5]);
+    const auto a = text.size() == 8 ? ParseHexChannel(text[6], text[7]) : std::optional<float>{1.0f};
+    if (!r || !g || !b || !a)
+      return nullptr;
+    return RgbaColor::New({*r, *g, *b, *a});
+  }
+
+  return nullptr;
+}
+
 auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
   // `add(_, 10)` outside a pipe stage: a function waiting for the `_`
   if (ctx != partial_ && pipe_locals_.empty() && HasPlaceholderArg(ctx))
@@ -995,6 +1106,87 @@ auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
       Error(ctx, "variant '" + name + "' takes exactly one payload");
     return VariantExpr::New(name, args.front());
   }
+
+  if (const auto* var = ctx->callee->As<syntax::VarRef>()) {
+    const auto& name = var->name.text;
+
+    if (name == "hex") {
+      const auto args = BuildArgs(ctx->args);
+      if (args.size() != 1)
+        Error(ctx, "'hex' takes exactly 1 string argument, got " + std::to_string(args.size()));
+
+      const auto* lit = args[0]->AsLiteral();
+      const auto* str = lit ? dynamic_cast<String*>(lit->GetValue()) : nullptr;
+      if (!str)
+        Error(ctx, "'hex' expects a string literal like hex(\"#RRGGBB\") or hex(\"#RRGGBBAA\")");
+
+      auto* rgba = ParseHexColor(str->GetValue());
+      if (!rgba)
+        Error(ctx, "invalid hex color '" + str->GetValue() + "'");
+
+      return Literal(rgba);
+    }
+
+    struct ColorCallSpec {
+      ColorModel model;
+      bool has_alpha;
+    };
+    const auto spec = [&]() -> std::optional<ColorCallSpec> {
+      if (name == "rgb")
+        return ColorCallSpec{ColorModel::kRgbaColor, false};
+      if (name == "rgba")
+        return ColorCallSpec{ColorModel::kRgbaColor, true};
+      if (name == "hsl")
+        return ColorCallSpec{ColorModel::kHslaColor, false};
+      if (name == "hsla")
+        return ColorCallSpec{ColorModel::kHslaColor, true};
+      if (name == "hsb")
+        return ColorCallSpec{ColorModel::kHsbaColor, false};
+      if (name == "hsba")
+        return ColorCallSpec{ColorModel::kHsbaColor, true};
+      return std::nullopt;
+    }();
+
+    if (spec) {
+      const auto args = BuildArgs(ctx->args);
+      if (args.size() == 1 && !spec->has_alpha)
+        return CastColorExpr::New(spec->model, args[0]);
+
+      const size_t expected = spec->has_alpha ? 4 : 3;
+      if (args.size() != expected) {
+        Error(ctx,
+              "'" + name + "' takes " + std::to_string(expected) + " argument(s), got " + std::to_string(args.size()));
+      }
+
+      Expr* alpha = spec->has_alpha ? args[3] : Literal(Float::New(1.0));
+      return NewColorExpr::New(spec->model, args[0], args[1], args[2], alpha);
+    }
+
+    const auto math_spec = [&]() -> std::optional<std::pair<MathOp, size_t>> {
+      if (name == "lerp")
+        return std::make_pair(MathOp::kLerp, 3);
+      if (name == "clamp")
+        return std::make_pair(MathOp::kClamp, 3);
+      if (name == "dot")
+        return std::make_pair(MathOp::kDot, 2);
+      if (name == "length")
+        return std::make_pair(MathOp::kLength, 1);
+      if (name == "normalize")
+        return std::make_pair(MathOp::kNormalize, 1);
+      return std::nullopt;
+    }();
+
+    if (math_spec) {
+      const auto args = BuildArgs(ctx->args);
+      if (args.size() != math_spec->second) {
+        Error(ctx, "'" + name + "' takes " + std::to_string(math_spec->second) + " argument(s), got " +
+                       std::to_string(args.size()));
+      }
+
+      return MathCallExpr::New(math_spec->first, args);
+    }
+  }
+
   const auto target = Build(ctx->callee);
   return BuildCall(target, BuildArgs(ctx->args));
 }
@@ -1027,7 +1219,12 @@ auto ExprBuilder::BuildUnit(const syntax::UnitLit* ctx, const bool negate) const
       break;
   }
 
-  return Color::Parse(text);
+  if (negate)
+    Error(ctx, "cannot negate color literal '" + text + "'");
+  auto* color = ParseRgbaLiteral(text);
+  if (!color)
+    Error(ctx, "invalid color literal '" + text + "'");
+  return color;
 }
 
 auto ExprBuilder::BuildLambda(const syntax::Lambda* lambda) -> Expr* {
@@ -1233,9 +1430,21 @@ auto ExprBuilder::Fold(Expr* expr) const -> std::optional<Constant> {
     } else if (const auto* str = dynamic_cast<String*>(value)) {
       result.kind = Constant::kString;
       result.text = str->GetValue();
+    } else if (const auto* pct = dynamic_cast<Pct*>(value)) {
+      result.kind = Constant::kPct;
+      result.real = pct->GetValue();
+#define DEFINE_COLOR_LIT(Name)                           \
+  }                                                      \
+  else if (const auto* c = dynamic_cast<Name*>(value)) { \
+    result.kind = Constant::kColor;                      \
+    result.color_model = ColorModel::k##Name;            \
+    result.color = c->GetStorage();
+      FOR_EACH_COLOR_MODEL(DEFINE_COLOR_LIT)
+#undef DEFINE_COLOR_LIT
     } else {
       return std::nullopt;
     }
+
     return result;
   }
   if (expr->IsLoadLocal()) {
@@ -1244,6 +1453,150 @@ auto ExprBuilder::Fold(Expr* expr) const -> std::optional<Constant> {
       return std::nullopt;
     return found->second;
   }
+
+  if (const auto* prop = expr->AsGetProperty()) {
+    const auto& name = prop->GetProperty()->GetPropertyName()->GetValue();
+    // Fold literal Vec2 / Vec3 / Rect
+    if (const auto* lit = prop->GetInstance()->AsLiteral()) {
+      if (const auto* v2 = dynamic_cast<Vec2*>(lit->GetValue())) {
+        if (name == "x") {
+          result.kind = Constant::kFloat;
+          result.real = v2->GetValue().x;
+          return result;
+        }
+        if (name == "y") {
+          result.kind = Constant::kFloat;
+          result.real = v2->GetValue().y;
+          return result;
+        }
+      } else if (const auto* v3 = dynamic_cast<Vec3*>(lit->GetValue())) {
+        if (name == "x") {
+          result.kind = Constant::kFloat;
+          result.real = v3->GetValue().x;
+          return result;
+        }
+        if (name == "y") {
+          result.kind = Constant::kFloat;
+          result.real = v3->GetValue().y;
+          return result;
+        }
+        if (name == "z") {
+          result.kind = Constant::kFloat;
+          result.real = v3->GetValue().z;
+          return result;
+        }
+      } else if (const auto* r = dynamic_cast<Rect*>(lit->GetValue())) {
+        if (name == "x") {
+          result.kind = Constant::kFloat;
+          result.real = r->GetValue().x;
+          return result;
+        }
+        if (name == "y") {
+          result.kind = Constant::kFloat;
+          result.real = r->GetValue().y;
+          return result;
+        }
+        if (name == "w" || name == "width") {
+          result.kind = Constant::kFloat;
+          result.real = r->GetValue().width;
+          return result;
+        }
+        if (name == "h" || name == "height") {
+          result.kind = Constant::kFloat;
+          result.real = r->GetValue().height;
+          return result;
+        }
+      }
+    }
+
+    if (const auto obj = Fold(prop->GetInstance()); obj && obj->kind == Constant::kColor) {
+      result.kind = Constant::kFloat;
+      if (name == "a" || name == "alpha") {
+        result.real = obj->color.a;
+        return result;
+      }
+      if (obj->color_model == ColorModel::kRgbaColor || obj->color_model == ColorModel::kSrgbaColor) {
+        if (name == "r" || name == "red") {
+          result.real = obj->color.c0;
+          return result;
+        }
+        if (name == "g" || name == "green") {
+          result.real = obj->color.c1;
+          return result;
+        }
+        if (name == "b" || name == "blue") {
+          result.real = obj->color.c2;
+          return result;
+        }
+      } else if (obj->color_model == ColorModel::kHslaColor) {
+        if (name == "h" || name == "hue") {
+          result.real = obj->color.c0;
+          return result;
+        }
+        if (name == "s" || name == "saturation") {
+          result.real = obj->color.c1;
+          return result;
+        }
+        if (name == "l" || name == "lightness") {
+          result.real = obj->color.c2;
+          return result;
+        }
+      } else if (obj->color_model == ColorModel::kHsbaColor) {
+        if (name == "h" || name == "hue") {
+          result.real = obj->color.c0;
+          return result;
+        }
+        if (name == "s" || name == "saturation") {
+          result.real = obj->color.c1;
+          return result;
+        }
+        if (name == "v" || name == "value" || name == "b" || name == "brightness") {
+          result.real = obj->color.c2;
+          return result;
+        }
+      }
+    }
+  }
+
+  if (const auto* nc = expr->AsNewColor()) {
+    const auto normalize = [&](Expr* comp, const int lane) -> std::optional<float> {
+      const auto val = Fold(comp);
+      if (!val)
+        return std::nullopt;
+      if (val->kind == Constant::kPct && !(lane == 0 && nc->GetModel() != ColorModel::kRgbaColor))
+        return static_cast<float>(val->real / 100.0);
+      if (val->kind == Constant::kInt) {
+        if (nc->GetModel() == ColorModel::kRgbaColor && lane < 3)
+          return static_cast<float>(static_cast<double>(val->integer) / 255.0);
+        return static_cast<float>(val->integer);
+      }
+      if (val->kind == Constant::kFloat)
+        return static_cast<float>(val->real);
+      return std::nullopt;
+    };
+
+    const auto c0 = normalize(nc->GetC0(), 0);
+    const auto c1 = normalize(nc->GetC1(), 1);
+    const auto c2 = normalize(nc->GetC2(), 2);
+    const auto a = normalize(nc->GetAlpha(), 3);
+    if (!c0 || !c1 || !c2 || !a)
+      return std::nullopt;
+    result.kind = Constant::kColor;
+    result.color_model = nc->GetModel();
+    result.color = ColorStorage{*c0, *c1, *c2, *a};
+    return result;
+  }
+
+  if (const auto* cc = expr->AsCastColor()) {
+    const auto src = Fold(cc->GetValue());
+    if (!src || src->kind != Constant::kColor)
+      return std::nullopt;
+    result.kind = Constant::kColor;
+    result.color_model = cc->GetTarget();
+    result.color = FoldColorConvert(src->color, src->color_model, cc->GetTarget());
+    return result;
+  }
+
   const auto numeric = [](const Constant& c) {
     return c.kind == Constant::kInt || c.kind == Constant::kFloat;
   };
@@ -1256,6 +1609,7 @@ auto ExprBuilder::Fold(Expr* expr) const -> std::optional<Constant> {
     if (!operand)
       return std::nullopt;
     if (unary->IsBang() && operand->kind == Constant::kBool) {
+      result.kind = Constant::kBool;
       result.boolean = !operand->boolean;
       return result;
     }
@@ -1285,6 +1639,19 @@ auto ExprBuilder::Fold(Expr* expr) const -> std::optional<Constant> {
         result.boolean = lhs->boolean == rhs->boolean;
       else if (binary->IsNeq())
         result.boolean = lhs->boolean != rhs->boolean;
+      else
+        return std::nullopt;
+      return result;
+    }
+    if (lhs->kind == Constant::kColor && rhs->kind == Constant::kColor) {
+      const bool same = lhs->color_model == rhs->color_model && lhs->color.c0 == rhs->color.c0 &&
+                        lhs->color.c1 == rhs->color.c1 && lhs->color.c2 == rhs->color.c2 &&
+                        lhs->color.a == rhs->color.a;
+      result.kind = Constant::kBool;
+      if (binary->IsEq())
+        result.boolean = same;
+      else if (binary->IsNeq())
+        result.boolean = !same;
       else
         return std::nullopt;
       return result;

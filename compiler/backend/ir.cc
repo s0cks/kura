@@ -1,10 +1,14 @@
 #include "ir.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <sstream>
 
 #include "backend/flow_graph.h"
+#include "color.h"
 #include "function.h"
 #include "gir.h"
+#include "heap/color_model.h"
 #include "local_scope.h"
 
 namespace kura {
@@ -57,15 +61,18 @@ auto ConstantInstr::GetCanonicalKey() const -> std::string {
     }
     case kStringType:
       return "str:" + std::string(dynamic_cast<String*>(value_)->GetData());
-    case kColorType: {
-      const auto c = dynamic_cast<Color*>(value_);
-      uint32_t rgba[4];
-      const float vals[4] = {static_cast<float>(c->GetRed()), static_cast<float>(c->GetGreen()),
-                             static_cast<float>(c->GetBlue()), static_cast<float>(c->GetAlpha())};
-      memcpy(rgba, vals, sizeof(rgba));
-      return "color:" + std::to_string(rgba[0]) + ":" + std::to_string(rgba[1]) + ":" + std::to_string(rgba[2]) + ":" +
-             std::to_string(rgba[3]);
-    }
+
+#define DEFINE_CASE(Name)                                                                                   \
+  case k##Name##Type: {                                                                                     \
+    const auto c = static_cast<Name*>(value_);                                                              \
+    const auto& storage = c->GetStorage();                                                                  \
+    return std::string{#Name} + ":" + std::to_string(storage.c0) + ":" + std::to_string(storage.c1) + ":" + \
+           std::to_string(storage.c2) + ":" + std::to_string(storage.a);                                    \
+  }
+
+      FOR_EACH_COLOR_MODEL(DEFINE_CASE)
+#undef DEFINE_CASE
+
     case kPxType: {
       const float v = dynamic_cast<Px*>(value_)->GetValue();
       uint32_t bits = 0;
@@ -153,6 +160,17 @@ auto UnaryOpInstr::ToString() const -> std::string {
 auto CallInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "Call(" << Name(GetTarget());
+  for (const auto& arg : GetArgs())
+    ss << ", " << Name(arg);
+
+  ss << ")";
+  return ss.str();
+}
+
+auto MathCallInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "MathCall(";
+  ss << "op=" << GetOp() << ", ";
   for (const auto& arg : GetArgs())
     ss << ", " << Name(arg);
 
@@ -366,6 +384,27 @@ auto SeqAppendInstr::ToString() const -> std::string {
   ss << "SeqAppendInstr(";
   ss << "seq=" << Name(GetSeq()) << ", ";
   ss << "item=" << Name(GetItem());
+  ss << ")";
+  return ss.str();
+}
+
+auto NewColorInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "NewColor(";
+  ss << "model=" << GetModel() << ", ";
+  ss << "value=" << Name(GetC0()) << ", ";
+  ss << "value=" << Name(GetC1()) << ", ";
+  ss << "value=" << Name(GetC2()) << ", ";
+  ss << "value=" << Name(GetAlpha()) << ", ";
+  ss << ")";
+  return ss.str();
+}
+
+auto CastColorInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "CastColor(";
+  ss << "target=" << GetTarget() << ", ";
+  ss << "value=" << Name(GetValue());
   ss << ")";
   return ss.str();
 }

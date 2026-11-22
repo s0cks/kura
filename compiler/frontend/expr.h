@@ -10,6 +10,8 @@
 #include "common.h"
 #include "dom/kind.h"
 #include "frontend/type_expr.h"
+#include "heap/color_model.h"
+#include "math_op.h"
 #include "object.h"
 #include "property.h"
 #include "unary_op.h"
@@ -48,7 +50,10 @@ namespace kura::expr {
   V(Lambda)              \
   V(Fold)                \
   V(Variant)             \
-  V(Call)
+  V(Call)                \
+  V(MathCall)            \
+  V(CastColor)           \
+  V(NewColor)
 
 class Expr;
 // clang-format off
@@ -437,7 +442,7 @@ class GetPropertyExpr : public TemplateExpr<1> {
     return property_;
   }
 
-  inline auto GetInstance() -> Expr* {
+  inline auto GetInstance() const -> Expr* {
     return GetChildAt(kInstancePos);
   }
 
@@ -631,6 +636,68 @@ class IfExpr : public TemplateExpr<3> {
  public:
   static inline auto New(Expr* condition, Expr* then_expr, Expr* else_expr = nullptr) -> Expr* {
     return new IfExpr(condition, then_expr, else_expr);
+  }
+};
+
+class CastColorExpr : public TemplateExpr<1> {
+ private:
+  ColorModel target_;
+
+ public:
+  CastColorExpr(const ColorModel target, Expr* value) :
+    target_(target) {
+    SetValue(value);
+  }
+  ~CastColorExpr() override = default;
+
+  auto GetTarget() const -> ColorModel {
+    return target_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_EXPR_TYPE(CastColor);
+
+ public:
+  static inline auto New(const ColorModel target, Expr* value) -> CastColorExpr* {
+    return new CastColorExpr(target, value);
+  }
+};
+
+class NewColorExpr : public TemplateExpr<4> {
+ private:
+  ColorModel model_;
+
+ public:
+  NewColorExpr(const ColorModel model, Expr* c0, Expr* c1, Expr* c2, Expr* alpha) :
+    model_(model) {
+    SetC0(c0);
+    SetC1(c1);
+    SetC2(c2);
+    SetAlpha(alpha);
+  }
+  ~NewColorExpr() override = default;
+
+  auto GetModel() const -> ColorModel {
+    return model_;
+  }
+
+#define DEFINE_MODEL_CHECK(Name)              \
+  inline auto Is##Name() const -> bool {      \
+    return GetModel() == ColorModel::k##Name; \
+  }
+
+  FOR_EACH_COLOR_MODEL(DEFINE_MODEL_CHECK);
+#undef DEFINE_MODEL_CHECK
+
+  HAS_NAMED_INPUT(C0, 0);
+  HAS_NAMED_INPUT(C1, 1);
+  HAS_NAMED_INPUT(C2, 2);
+  HAS_NAMED_INPUT(Alpha, 3);
+  DECLARE_EXPR_TYPE(NewColor);
+
+ public:
+  static inline auto New(const ColorModel model, Expr* c0, Expr* c1, Expr* c2, Expr* alpha = nullptr) -> NewColorExpr* {
+    return new NewColorExpr(model, c0, c1, c2, alpha);
   }
 };
 
@@ -1319,6 +1386,60 @@ class CallExpr : public TemplateExpr<1> {
  public:
   static inline auto New(Expr* target, const ExprList args = {}) -> Expr* {
     return new CallExpr(target, std::move(args));
+  }
+};
+
+class MathCallExpr : public TemplateExpr<1> {
+ private:
+  MathOp op_;
+  ExprList args_{};
+
+  inline void SetArgAt(const uint64_t idx, Expr* value) {
+    args_.at(idx) = value;
+  }
+
+ public:
+  explicit MathCallExpr(MathOp op, const ExprList args) :
+    op_(op),
+    args_(std::move(args)) {}
+  ~MathCallExpr() override = default;
+
+  auto GetOp() const -> MathOp {
+    return op_;
+  }
+
+  auto GetArgs() const -> const ExprList& {
+    return args_;
+  }
+
+  auto GetNumberOfArgs() const -> uint64_t {
+    return args_.size();
+  }
+
+  auto GetArgAt(const uint64_t idx) const -> Expr* {
+    return args_.at(idx);
+  }
+
+  auto HasArgAt(const uint64_t idx) const -> bool {
+    return GetArgAt(idx) != nullptr;
+  }
+
+  auto GetNumberOfChildren() const -> uint64_t override {
+    return GetNumberOfArgs();
+  }
+
+  auto GetChildAt(const uint64_t idx) const -> Expr* override {
+    return GetArgAt(idx);
+  }
+
+  auto VisitChildren(ExprVisitor* vis) -> VisitResult override;
+
+  HAS_NAMED_INPUT(Target, 0);
+  DECLARE_EXPR_TYPE(MathCall);
+
+ public:
+  static inline auto New(MathOp op, const ExprList args = {}) -> Expr* {
+    return new MathCallExpr(op, std::move(args));
   }
 };
 

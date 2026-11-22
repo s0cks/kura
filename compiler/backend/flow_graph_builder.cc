@@ -220,6 +220,23 @@ class FreeLocals : public expr::ExprVisitor {
     return expr ? expr->Accept(this) : VisitResult(VisitResult::kContinue);
   }
 
+  auto VisitNewColor(expr::NewColorExpr* expr) -> VisitResult override {
+    return Walk(expr->GetC0()) && Walk(expr->GetC1()) && Walk(expr->GetC2()) && Walk(expr->GetAlpha());
+  }
+
+  auto VisitCastColor(expr::CastColorExpr* expr) -> VisitResult override {
+    return Walk(expr->GetValue());
+  }
+
+  auto VisitMathCall(expr::MathCallExpr* expr) -> VisitResult override {
+    for (const auto child : expr->GetArgs()) {
+      if (!Walk(child))
+        return false;
+    }
+
+    return true;
+  }
+
   auto VisitLiteral(expr::LiteralExpr*) -> VisitResult override {
     return true;
   }

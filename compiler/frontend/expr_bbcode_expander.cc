@@ -14,6 +14,11 @@ VISIT_FN(Literal) {
   return Stop();
 }
 
+VISIT_FN(MathCall) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
 VISIT_FN(Unary) {
   // TODO(@s0cks): implement
   return Stop();
@@ -55,6 +60,16 @@ VISIT_FN(Pipeline) {
 }
 
 VISIT_FN(List) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
+VISIT_FN(NewColor) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
+VISIT_FN(CastColor) {
   // TODO(@s0cks): implement
   return Stop();
 }

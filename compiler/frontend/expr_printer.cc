@@ -89,6 +89,18 @@ auto ExprPrinter::VisitCase(CaseExpr* expr) -> VisitResult {
   return true;
 }
 
+auto ExprPrinter::VisitNewColor(NewColorExpr* expr) -> VisitResult {
+  return false;
+}
+
+auto ExprPrinter::VisitCastColor(CastColorExpr* expr) -> VisitResult {
+  return false;
+}
+
+auto ExprPrinter::VisitMathCall(MathCallExpr* expr) -> VisitResult {
+  return false;
+}
+
 auto ExprPrinter::VisitMatch(MatchExpr* expr) -> VisitResult {
   stream() << "(match ";
   PrintChild(expr->GetSubject());

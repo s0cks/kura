@@ -23,9 +23,9 @@ auto F(const double value) -> uint64_t {
 }
 
 // A rectangle, filled: the runtime takes it as the renderer ABI's struct.
-void FillRect(const double x, const double y, const double w, const double h, const uint32_t color) {
+void FillRect(const double x, const double y, const double w, const double h, const KuraColor& color) {
   const KuraRect rect{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)};
-  kura_rt_fill_rect(&rect, color);
+  kura_rt_fill_rect(&rect, &color);
 }
 
 class RuntimeRendererTest : public ::testing::Test {
@@ -51,7 +51,7 @@ TEST_F(RuntimeRendererTest, DrawCallsReachTheRenderer) {
   EXPECT_EQ(renderer_->GetWidth(), 640u);
   EXPECT_EQ(renderer_->GetHeight(), 480u);
 
-  FillRect(10, 20.5, 30, 40, 0xFF0000FFu);
+  FillRect(10, 20.5, 30, 40, KuraColor{1.0f, 0.0f, 0.0f, 1.0f});
   kura_rt_check_renderer();
   ASSERT_EQ(renderer_->GetCommands().size(), 1u);
   const auto& command = renderer_->GetCommands()[0];
@@ -67,14 +67,14 @@ TEST_F(RuntimeRendererTest, DrawCallsReachTheRenderer) {
   EXPECT_EQ(renderer_->GetFrameCount(), 1u);
 }
 
-TEST_F(RuntimeRendererTest, ColorIsPackedRgba8) {
+TEST_F(RuntimeRendererTest, ColorIsForwardedToRenderer) {
   kura_rt_begin_frame(16, 16);
-  FillRect(0, 0, 1, 1, 0x336699CCu);
+  FillRect(0, 0, 1, 1, KuraColor{0.2f, 0.4f, 0.6f, 0.8f});
   const auto color = renderer_->GetCommands().at(0).color;
-  EXPECT_FLOAT_EQ(color.r, 0x33 / 255.0f);
-  EXPECT_FLOAT_EQ(color.g, 0x66 / 255.0f);
-  EXPECT_FLOAT_EQ(color.b, 0x99 / 255.0f);
-  EXPECT_FLOAT_EQ(color.a, 0xCC / 255.0f);
+  EXPECT_FLOAT_EQ(color.r, 0.2f);
+  EXPECT_FLOAT_EQ(color.g, 0.4f);
+  EXPECT_FLOAT_EQ(color.b, 0.6f);
+  EXPECT_FLOAT_EQ(color.a, 0.8f);
   kura_rt_end_frame();
 }
 
@@ -82,10 +82,12 @@ TEST_F(RuntimeRendererTest, TextCarriesItsFamilyAndColorToTheRenderer) {
   kura_rt_begin_frame(200, 100);
   const std::string family = "Inter, sans-serif";
   const std::string text = "hello";
-  kura_rt_render_text(12.5, 30, text.data(), text.size(), 18.0f, family.data(), family.size(), 0xFF8000FFu);
+  const KuraColor orange{1.0f, 0.5f, 0.0f, 1.0f};
+  const KuraColor black{0.0f, 0.0f, 0.0f, 1.0f};
+  kura_rt_render_text(12.5, 30, text.data(), text.size(), 18.0f, family.data(), family.size(), &orange);
   kura_rt_check_renderer();
   // no family is the default font
-  kura_rt_render_text(0, 0, "x", 1, 10.0f, nullptr, 0, 0x000000FFu);
+  kura_rt_render_text(0, 0, "x", 1, 10.0f, nullptr, 0, &black);
   kura_rt_check_renderer();
   kura_rt_end_frame();
 
@@ -97,8 +99,10 @@ TEST_F(RuntimeRendererTest, TextCarriesItsFamilyAndColorToTheRenderer) {
   EXPECT_EQ(first.font_size, 18.0f);
   EXPECT_EQ(first.text, "hello");
   EXPECT_EQ(first.family, "Inter, sans-serif");
-  EXPECT_EQ(first.color.r, 1.0f);
-  EXPECT_NEAR(first.color.g, 128.0f / 255.0f, 1e-6f);
+  EXPECT_FLOAT_EQ(first.color.r, 1.0f);
+  EXPECT_FLOAT_EQ(first.color.g, 0.5f);
+  EXPECT_FLOAT_EQ(first.color.b, 0.0f);
+  EXPECT_FLOAT_EQ(first.color.a, 1.0f);
   EXPECT_EQ(renderer_->GetCommands()[1].family, "");
 }
 
@@ -116,7 +120,7 @@ TEST_F(RuntimeRendererTest, MeasuringTakesTheFamily) {
 
 TEST_F(RuntimeRendererTest, CheckRendererPassesWhenTheLastCallWorked) {
   kura_rt_begin_frame(16, 16);
-  FillRect(0, 0, 1, 1, 0);
+  FillRect(0, 0, 1, 1, KuraColor{});
   kura_rt_check_renderer();
   kura_rt_end_frame();
   kura_rt_check_renderer();
@@ -165,7 +169,7 @@ using RuntimeRendererDeathTest = RuntimeRendererTest;
 
 TEST_F(RuntimeRendererDeathTest, CheckRendererPanicsWhenTheLastCallFailed) {
   // outside of a frame
-  FillRect(0, 0, 1, 1, 0);
+  FillRect(0, 0, 1, 1, KuraColor{});
   EXPECT_EXIT(kura_rt_check_renderer(), ::testing::ExitedWithCode(101), "rejected kura_rt_fill_rect");
 }
 
