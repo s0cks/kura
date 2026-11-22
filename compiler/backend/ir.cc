@@ -334,4 +334,40 @@ auto TracyEndZoneInstr::ToString() const -> std::string {
   ss << ")";
   return ss.str();
 }
+
+auto RetainInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "RetainInstr(";
+  ss << "value=" << Name(GetValue());
+  ss << ")";
+  return ss.str();
+}
+
+auto ReleaseInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "ReleaseInstr(";
+  ss << "value=" << Name(GetValue());
+  ss << ")";
+  return ss.str();
+}
+
+auto UpdateRecordInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "UpdateRecordInstr(";
+  ss << "base=" << Name(GetBase()) << ", ";
+  ss << "entries=" << entries_.size() << ", ";
+  ss << "move_base=" << move_base_;
+  ss << ")";
+  return ss.str();
+}
+
+auto SeqAppendInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "SeqAppendInstr(";
+  ss << "seq=" << Name(GetSeq()) << ", ";
+  ss << "item=" << Name(GetItem());
+  ss << ")";
+  return ss.str();
+}
+
 }  // namespace kura

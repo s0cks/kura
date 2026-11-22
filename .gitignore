@@ -12,3 +12,4 @@ test.md
 node_modules/
 .astro/
 /misc/
+counter-ir.txt

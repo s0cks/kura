@@ -200,7 +200,10 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_layout_slot_instance) \
   V(kura_rt_layout_slot_end)      \
   V(kura_rt_layout_rect)          \
-  V(kura_rt_register_event)
+  V(kura_rt_register_event)       \
+  V(kura_rt_seq_append)           \
+  V(kura_rt_destroy)              \
+  V(kura_rt_record_clone)
 // clang-format on
 
 extern "C" {
@@ -225,6 +228,8 @@ void* kura_rt_seq_concat(void* a, void* b);
 
 int64_t kura_rt_len(void* object);
 void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bits);
+void kura_rt_destroy(void* ptr);
+void* kura_rt_record_clone(void* src_ptr);
 
 // ── rendering ──────────────────────────────────────────────────────────────
 // The draw calls compiled code makes. They forward to the renderer the host gave this thread (see
@@ -246,6 +251,7 @@ void kura_rt_paint_box(const KuraRect* rect, uint64_t fill, uint64_t border_colo
 // What is drawn until `pop_clip` stays inside the rect.
 void kura_rt_push_clip(const KuraRect* rect);
 void kura_rt_pop_clip();
+void* kura_rt_seq_append(void* seq, uint64_t item_tag, uint64_t item_bits);
 
 // Called by the host, not by compiled code. Sets the renderer this thread draws with; the host
 // creates it, owns it and destroys it, and the runtime keeps only a copy of the handle. The

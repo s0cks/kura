@@ -2,7 +2,6 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -21,6 +20,7 @@
 #include "backend/c_compile.h"
 #include "backend/c_header.h"
 #include "backend/compile_type.h"
+#include "backend/escape_analysis.h"
 #include "backend/flow_graph.h"
 #include "backend/flow_graph_builder.h"
 #include "backend/flow_graph_compiler.h"
@@ -90,6 +90,17 @@ class ModulePrinter {
         std::cerr << "error: " << error << std::endl;
 
       return false;
+    }
+
+    for (FlowGraph* fg : graph->GetGraphs()) {
+      fg->OptimizeCOWUpdates();
+    }
+
+    EscapeAnalysis::Run(graph);
+    for (FlowGraph* fg : graph->GetGraphs()) {
+      if (fg != graph->GetInit()) {
+        fg->InsertARC();
+      }
     }
 
     IRPrinter::Print(stream(), graph, indent());
@@ -340,7 +351,9 @@ auto main(int argc, char** argv) -> int {
     for (const auto& command : headless.GetCommands()) {
       if (command.kind == renderer::Command::Kind::kText) {
         // one line per run of text: a text that wraps is drawn in several
-        const auto byte = [](const float channel) { return static_cast<int>(std::lround(channel * 255.0f)); };
+        const auto byte = [](const float channel) {
+          return static_cast<int>(std::lround(channel * 255.0f));
+        };
         char color[16];
         std::snprintf(color, sizeof(color), "#%02x%02x%02x%02x", byte(command.color.r), byte(command.color.g),
                       byte(command.color.b), byte(command.color.a));

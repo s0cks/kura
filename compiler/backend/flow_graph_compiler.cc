@@ -17,8 +17,16 @@ auto FlowGraphCompiler::Compile(Module* m, ModuleGraph* graphs, std::vector<std:
   if (!graphs || !TypeAnalysis::Run(m, graphs, &errors) || !PurityAnalysis::Run(m, graphs, &errors))
     return false;
 
-  // what stays in its function goes on the stack: the rest is the heap's, by phase
+  for (FlowGraph* graph : graphs->GetGraphs())
+    graph->OptimizeCOWUpdates();
+
   EscapeAnalysis::Run(graphs);
+
+  for (FlowGraph* graph : graphs->GetGraphs()) {
+    if (graph == graphs->GetInit())
+      continue;
+    graph->InsertARC();
+  }
 
   context_ = std::make_unique<llvm::LLVMContext>();
   std::string error;
@@ -30,6 +38,7 @@ auto FlowGraphCompiler::Compile(Module* m, ModuleGraph* graphs, std::vector<std:
 
   if (optimize_)
     OptimizeLLVM(*module_);
+
   return true;
 }
 }  // namespace kura

@@ -427,6 +427,84 @@ class Generator {
             b_.getInt64(instr->GetKind()), As(instr->GetMessage(), CompileType::Any())});
   }
 
+  auto EmitRecordFieldLookup(llvm::Value* record_ptr, uint64_t field_hash) -> llvm::Value* {
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+    auto* preheader_bb = b_.GetInsertBlock();
+    auto* loop_bb = llvm::BasicBlock::Create(ctx_, "rec.find.loop", fn);
+    auto* check_bb = llvm::BasicBlock::Create(ctx_, "rec.find.check", fn);
+    auto* found_bb = llvm::BasicBlock::Create(ctx_, "rec.find.found", fn);
+    auto* miss_bb = llvm::BasicBlock::Create(ctx_, "rec.find.miss", fn);
+    auto* merge_bb = llvm::BasicBlock::Create(ctx_, "rec.find.done", fn);
+
+    // Load `uint32_t count` at byte offset 8 of RecordObj
+    llvm::Value* count_ptr = b_.CreateConstInBoundsGEP1_64(i8_, record_ptr, 8);
+    llvm::Value* count32 = b_.CreateLoad(llvm::Type::getInt32Ty(ctx_), count_ptr, "rec.count");
+    llvm::Value* count = b_.CreateZExt(count32, i64_);
+    b_.CreateBr(loop_bb);
+
+    // Loop header: idx = phi [0, preheader], [next_idx, check_bb]
+    b_.SetInsertPoint(loop_bb);
+    llvm::PHINode* idx = b_.CreatePHI(i64_, 2, "rec.idx");
+    idx->addIncoming(b_.getInt64(0), preheader_bb);
+    llvm::Value* in_bounds = b_.CreateICmpULT(idx, count, "rec.in_bounds");
+    b_.CreateCondBr(in_bounds, check_bb, miss_bb);
+
+    // Check hash at byte offset: 16 + idx * 32
+    b_.SetInsertPoint(check_bb);
+    llvm::Value* field_offset = b_.CreateAdd(b_.getInt64(16), b_.CreateMul(idx, b_.getInt64(32)));
+    llvm::Value* field_ptr = b_.CreateInBoundsGEP(i8_, record_ptr, field_offset, "rec.field");
+    llvm::Value* hash = b_.CreateLoad(i64_, field_ptr, "rec.hash");
+    llvm::Value* matched = b_.CreateICmpEQ(hash, b_.getInt64(field_hash), "rec.match");
+    llvm::Value* next_idx = b_.CreateAdd(idx, b_.getInt64(1), "rec.next_idx");
+    idx->addIncoming(next_idx, check_bb);
+    b_.CreateCondBr(matched, found_bb, loop_bb);
+
+    // Found: `&field.value` is at `field_ptr + 16`
+    b_.SetInsertPoint(found_bb);
+    llvm::Value* val_ptr = b_.CreateConstInBoundsGEP1_64(i8_, field_ptr, 16, "rec.val_ptr");
+    b_.CreateBr(merge_bb);
+
+    // Miss: return null
+    b_.SetInsertPoint(miss_bb);
+    b_.CreateBr(merge_bb);
+
+    // Merge
+    b_.SetInsertPoint(merge_bb);
+    llvm::PHINode* result = b_.CreatePHI(ptr_ty_, 2, "rec.field.val");
+    result->addIncoming(val_ptr, found_bb);
+    result->addIncoming(llvm::ConstantPointerNull::get(ptr_ty_), miss_bb);
+    return result;
+  }
+
+  void EmitRecordUpdates(llvm::Value* target_record, const std::vector<UpdateRecordInstr::Entry>& entries) {
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+
+    for (const auto& entry : entries) {
+      const std::string name(entry.property->GetPropertyName()->GetData());
+      const uint64_t hash = rt::HashName(name);
+      llvm::Value* packed_val = As(entry.value, CompileType::Any());
+
+      llvm::Value* field_ptr = EmitRecordFieldLookup(target_record, hash);
+      auto* store_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.store", fn);
+      auto* fallback_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.set", fn);
+      auto* next_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.next", fn);
+
+      b_.CreateCondBr(b_.CreateIsNotNull(field_ptr), store_bb, fallback_bb);
+
+      // Existing field found -> direct 16-byte store (0 runtime calls!)
+      b_.SetInsertPoint(store_bb);
+      b_.CreateStore(packed_val, field_ptr);
+      b_.CreateBr(next_bb);
+
+      // New field (e.g. extending an open record) -> append via kura_rt_record_set
+      b_.SetInsertPoint(fallback_bb);
+      CallRt("kura_rt_record_set", void_ty_, {target_record, b_.getInt64(hash), NameConstant(name), packed_val});
+      b_.CreateBr(next_bb);
+
+      b_.SetInsertPoint(next_bb);
+    }
+  }
+
   LOWER_FN(BinaryOp) {
     const auto left = instr->GetLeft();
     const auto right = instr->GetRight();
@@ -671,6 +749,173 @@ class Generator {
 
   LOWER_FN(CheckRendererStatus) {
     CallRt("kura_rt_check_renderer", void_ty_, {});
+  }
+
+  inline void EmitRetainPtr(llvm::Value* ptr) {
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+    auto* non_null_bb = llvm::BasicBlock::Create(ctx_, "arc.retain.nn", fn);
+    auto* inc_bb = llvm::BasicBlock::Create(ctx_, "arc.retain.inc", fn);
+    auto* done_bb = llvm::BasicBlock::Create(ctx_, "arc.retain.done", fn);
+
+    llvm::Value* is_non_null = b_.CreateIsNotNull(ptr, "arc.nn");
+    b_.CreateCondBr(is_non_null, non_null_bb, done_bb);
+
+    b_.SetInsertPoint(non_null_bb);
+    llvm::Value* header = b_.CreateLoad(i64_, ptr, "arc.hdr");
+    llvm::Value* rc = b_.CreateAnd(b_.CreateLShr(header, b_.getInt64(18)), b_.getInt64(0x3FFF), "arc.rc");
+    llvm::Value* is_mutable = b_.CreateICmpULT(rc, b_.getInt64(0x3FFF), "arc.mut");
+    b_.CreateCondBr(is_mutable, inc_bb, done_bb);
+
+    b_.SetInsertPoint(inc_bb);
+    llvm::Value* next_header = b_.CreateAdd(header, b_.getInt64(1ULL << 18), "arc.hdr.inc");
+    b_.CreateStore(next_header, ptr);
+    b_.CreateBr(done_bb);
+
+    b_.SetInsertPoint(done_bb);
+  }
+
+  template <typename Fn>
+  inline void WithTaggedHeapPtr(llvm::Value* tagged_val, Fn&& emit_on_ptr) {
+    llvm::Value* tag = TagOfValue(tagged_val);
+    llvm::Value* bits = BitsOfValue(tagged_val);
+
+    // Variant bit (bit 63) is set:
+    llvm::Value* is_variant = b_.CreateICmpSLT(tag, b_.getInt64(0), "tag.is_variant");
+
+    // Or tag is in {5, 6, 10, 11, 12, 13}:
+    // Fast bitmask test for tags 0..15: (1 << 5) | (1 << 6) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) = 0x3C60
+    llvm::Value* in_range = b_.CreateICmpULT(tag, b_.getInt64(16), "tag.u16");
+    llvm::Value* safe_shift = b_.CreateSelect(in_range, tag, b_.getInt64(0));
+    llvm::Value* bit = b_.CreateShl(b_.getInt64(1), safe_shift);
+    llvm::Value* is_obj_tag =
+        b_.CreateAnd(in_range, b_.CreateICmpNE(b_.CreateAnd(bit, b_.getInt64(0x3C60)), b_.getInt64(0)), "tag.is_obj");
+
+    llvm::Value* may_hold_ptr = b_.CreateOr(is_variant, is_obj_tag, "tag.has_ptr");
+
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+    auto* ptr_bb = llvm::BasicBlock::Create(ctx_, "arc.tagged.ptr", fn);
+    auto* done_bb = llvm::BasicBlock::Create(ctx_, "arc.tagged.done", fn);
+
+    b_.CreateCondBr(may_hold_ptr, ptr_bb, done_bb);
+
+    b_.SetInsertPoint(ptr_bb);
+    llvm::Value* ptr = b_.CreateIntToPtr(bits, ptr_ty_, "arc.obj_ptr");
+    emit_on_ptr(ptr);
+    b_.CreateBr(done_bb);
+
+    b_.SetInsertPoint(done_bb);
+  }
+
+  inline void EmitReleasePtr(llvm::Value* ptr) {
+    llvm::Function* fn = b_.GetInsertBlock()->getParent();
+    auto* non_null_bb = llvm::BasicBlock::Create(ctx_, "arc.rel.nn", fn);
+    auto* dec_bb = llvm::BasicBlock::Create(ctx_, "arc.rel.dec", fn);
+    auto* destroy_bb = llvm::BasicBlock::Create(ctx_, "arc.rel.destroy", fn);
+    auto* done_bb = llvm::BasicBlock::Create(ctx_, "arc.rel.done", fn);
+
+    llvm::Value* is_non_null = b_.CreateIsNotNull(ptr, "arc.nn");
+    b_.CreateCondBr(is_non_null, non_null_bb, done_bb);
+
+    b_.SetInsertPoint(non_null_bb);
+    llvm::Value* header = b_.CreateLoad(i64_, ptr, "arc.hdr");
+    llvm::Value* rc = b_.CreateAnd(b_.CreateLShr(header, b_.getInt64(18)), b_.getInt64(0x3FFF), "arc.rc");
+    // Ignore immortal/sticky (0x3FFF) or already-zero headers
+    llvm::Value* is_active =
+        b_.CreateAnd(b_.CreateICmpNE(rc, b_.getInt64(0)), b_.CreateICmpULT(rc, b_.getInt64(0x3FFF)), "arc.active");
+    b_.CreateCondBr(is_active, dec_bb, done_bb);
+
+    b_.SetInsertPoint(dec_bb);
+    llvm::Value* next_header = b_.CreateSub(header, b_.getInt64(1ULL << 18), "arc.hdr.dec");
+    b_.CreateStore(next_header, ptr);
+    llvm::Value* hit_zero = b_.CreateICmpEQ(rc, b_.getInt64(1), "arc.zero");
+    b_.CreateCondBr(hit_zero, destroy_bb, done_bb);
+
+    // Cold path: rc was 1 -> now 0. Call cold destructor to release children & reclaim block.
+    b_.SetInsertPoint(destroy_bb);
+    CallRt("kura_rt_destroy", void_ty_, {ptr});
+    b_.CreateBr(done_bb);
+
+    b_.SetInsertPoint(done_bb);
+  }
+
+  LOWER_FN(Retain) {
+    const auto type = Type(instr->GetValue());
+    llvm::Value* val = Val(instr->GetValue());
+
+    if (RepOf(type) == Rep::kTagged) {
+      WithTaggedHeapPtr(val, [&](llvm::Value* ptr) {
+        EmitRetainPtr(ptr);
+      });
+    } else if (RepOf(type) == Rep::kPtr) {
+      EmitRetainPtr(val);
+    }
+  }
+
+  LOWER_FN(Release) {
+    const auto type = Type(instr->GetValue());
+    llvm::Value* val = Val(instr->GetValue());
+
+    if (RepOf(type) == Rep::kTagged) {
+      WithTaggedHeapPtr(val, [&](llvm::Value* ptr) {
+        EmitReleasePtr(ptr);
+      });
+    } else if (RepOf(type) == Rep::kPtr) {
+      EmitReleasePtr(val);
+    }
+  }
+
+  LOWER_FN(SeqAppend) {
+    const auto seq = ObjectPtr(Val(instr->GetSeq()), Type(instr->GetSeq()));
+    const auto item = As(instr->GetItem(), CompileType::Any());
+    return Define(instr, CallRt("kura_rt_seq_append", ptr_ty_, {seq, item}), instr->GetCompileType());
+  }
+
+  LOWER_FN(UpdateRecord) {
+    llvm::Value* base = ObjectPtr(Val(instr->GetBase()), Type(instr->GetBase()));
+    CompileType* rec_type = instr->GetCompileType();
+
+    // Fast path available when `InsertARC` proved `base` is at its last use (`move_base == true`)
+    if (instr->IsMoveBase()) {
+      llvm::Function* fn = b_.GetInsertBlock()->getParent();
+      auto* fast_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.inplace", fn);
+      auto* slow_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.cow", fn);
+      auto* merge_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.done", fn);
+
+      // Load 8-byte ObjectHeader at offset 0 of `base`
+      llvm::Value* header = b_.CreateLoad(i64_, base, "rec.header");
+      // Extract 14-bit refcount at bits 31..18: (header >> 18) & 0x3FFF
+      llvm::Value* shifted = b_.CreateLShr(header, b_.getInt64(18));
+      llvm::Value* rc = b_.CreateAnd(shifted, b_.getInt64(0x3FFF), "rec.rc");
+      llvm::Value* is_unique = b_.CreateICmpEQ(rc, b_.getInt64(1), "rec.unique");
+
+      b_.CreateCondBr(is_unique, fast_bb, slow_bb);
+
+      // ── Fast Path: refcount == 1 -> mutate `base` in place! ──
+      b_.SetInsertPoint(fast_bb);
+      EmitRecordUpdates(base, instr->GetEntries());
+      b_.CreateBr(merge_bb);
+      llvm::BasicBlock* fast_end = b_.GetInsertBlock();
+
+      // ── Slow Path: refcount > 1 -> clone, write updates, release old `base` ──
+      b_.SetInsertPoint(slow_bb);
+      llvm::Value* cloned = CallRt("kura_rt_record_clone", ptr_ty_, {base});
+      EmitRecordUpdates(cloned, instr->GetEntries());
+      EmitReleasePtr(base);
+      b_.CreateBr(merge_bb);
+      llvm::BasicBlock* slow_end = b_.GetInsertBlock();
+
+      // ── Merge ──
+      b_.SetInsertPoint(merge_bb);
+      llvm::PHINode* phi = b_.CreatePHI(ptr_ty_, 2, "rec.updated");
+      phi->addIncoming(base, fast_end);
+      phi->addIncoming(cloned, slow_end);
+      return Define(instr, phi, rec_type);
+    }
+
+    // Non-moving update (`base` is still live elsewhere): always clone
+    llvm::Value* cloned = CallRt("kura_rt_record_clone", ptr_ty_, {base});
+    EmitRecordUpdates(cloned, instr->GetEntries());
+    Define(instr, cloned, rec_type);
   }
 
   LOWER_FN(BeginFrame) {
@@ -997,6 +1242,10 @@ class Generator {
     CHECK(TracyEndZone);
     CHECK(RectIntersects);
     CHECK(RectPastClip);
+    CHECK(Retain);
+    CHECK(Release);
+    CHECK(SeqAppend);
+    CHECK(UpdateRecord);
 
 #undef CHECK
 
@@ -1181,12 +1430,45 @@ class Generator {
   void EmitLoadProperty(Definition* def, Value* instance, Property* property, const bool safe) {
     const auto type = Type(instance);
     const auto value = Val(instance);
-    const auto hash = b_.getInt64(rt::HashName(std::string(property->GetPropertyName()->GetData())));
+    const auto name = std::string(property->GetPropertyName()->GetData());
+    const uint64_t hash = rt::HashName(name);
+
+    if (!safe && RepOf(type) == Rep::kPtr && type->IsRecord()) {
+      llvm::Function* fn = b_.GetInsertBlock()->getParent();
+      llvm::Value* field_ptr = EmitRecordFieldLookup(value, hash);
+
+      auto* hit_bb = llvm::BasicBlock::Create(ctx_, "rec.get.hit", fn);
+      auto* miss_bb = llvm::BasicBlock::Create(ctx_, "rec.get.miss", fn);
+      auto* done_bb = llvm::BasicBlock::Create(ctx_, "rec.get.done", fn);
+
+      b_.CreateCondBr(b_.CreateIsNotNull(field_ptr), hit_bb, miss_bb);
+
+      // Hit: load `{ i64, i64 }` directly
+      b_.SetInsertPoint(hit_bb);
+      llvm::Value* loaded = b_.CreateLoad(value_ty_, field_ptr, name + ".val");
+      if (const auto load_instr = def->AsLoadProperty(); load_instr && load_instr->IsMove()) {
+        b_.CreateStore(Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0)), field_ptr);
+      }
+      b_.CreateBr(done_bb);
+
+      // Miss: return None
+      b_.SetInsertPoint(miss_bb);
+      llvm::Value* none_val = Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0));
+      b_.CreateBr(done_bb);
+
+      b_.SetInsertPoint(done_bb);
+      llvm::PHINode* phi = b_.CreatePHI(value_ty_, 2, name);
+      phi->addIncoming(loaded, hit_bb);
+      phi->addIncoming(none_val, miss_bb);
+      return Define(def, phi, CompileType::Any());
+    }
+
+    // Fallback for tagged / Node properties
     if (RepOf(type) == Rep::kTagged) {
-      return Define(def, CallRt(safe ? "kura_rt_get_safe" : "kura_rt_get_dyn", value_ty_, {value, hash}),
+      return Define(def, CallRt(safe ? "kura_rt_get_safe" : "kura_rt_get_dyn", value_ty_, {value, b_.getInt64(hash)}),
                     CompileType::Any());
     }
-    Define(def, CallRt("kura_rt_record_get", value_ty_, {value, hash}), CompileType::Any());
+    Define(def, CallRt("kura_rt_record_get", value_ty_, {value, b_.getInt64(hash)}), CompileType::Any());
   }
 
   // ── blocks and functions ─────────────────────────────────────────────────

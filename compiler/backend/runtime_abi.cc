@@ -1,12 +1,12 @@
 #include "backend/runtime_abi.h"
 
+#include <algorithm>
 #include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <algorithm>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -293,7 +293,8 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
     if (a.bits == 0 || b.bits == 0)
       return a.bits == b.bits;
 
-    return Equal(FromHeap(reinterpret_cast<BoxObj*>(a.bits)->value), FromHeap(reinterpret_cast<BoxObj*>(b.bits)->value));
+    return Equal(FromHeap(reinterpret_cast<BoxObj*>(a.bits)->value),
+                 FromHeap(reinterpret_cast<BoxObj*>(b.bits)->value));
   }
 
   return false;
@@ -536,6 +537,33 @@ auto MakeVariant(const std::string_view name, const KuraValue* payload) -> KuraV
   VariantNames()[tag] = std::string(name);
   return {tag, payload == nullptr ? 0ULL : reinterpret_cast<uint64_t>(NewBoxObj(*payload))};
 }
+
+namespace {
+// C++ runtime helpers mirroring your inline LLVM ARC logic
+inline void RetainObj(void* ptr) {
+  if (!ptr)
+    return;
+  static_cast<HeapObject*>(ptr)->retain();
+}
+
+void ReleaseObj(void* ptr) {
+  if (!ptr)
+    return;
+  auto* obj = static_cast<HeapObject*>(ptr);
+  if (!obj->release())
+    return;
+
+  // Refcount hit 0: recursively release child pointers and reclaim the block
+  heap::VisitPointerSlots(obj, [](uint64_t* slot) {
+    if (*slot != 0) {
+      ReleaseObj(reinterpret_cast<void*>(*slot));
+      *slot = 0;
+    }
+  });
+
+  // TODO(@s0cks): TheHeap().Reclaim(obj);
+}
+}  // namespace
 }  // namespace kura::rt
 
 using namespace kura::rt;
@@ -556,6 +584,59 @@ const char* kura_rt_string_cstr(void* string) {
   return string ? static_cast<StringObj*>(string)->data() : nullptr;
 }
 
+void kura_rt_destroy(void* ptr) {}
+
+void* kura_rt_seq_append(void* seq_ptr, const uint64_t item_tag, const uint64_t item_bits) {
+  auto* seq = static_cast<SeqObj*>(seq_ptr);
+  const kura::heap::Value item{item_tag, item_bits};
+
+  if (!seq) {
+    auto* fresh = NewSeqObj(4);
+    fresh->Push(item);
+    return fresh;
+  }
+
+  if (seq->header.is_unique() && seq->length < seq->capacity) {
+    seq->Push(item);
+    return seq;
+  }
+
+  if (seq->header.is_unique()) {
+    const uint64_t new_cap = std::max<uint64_t>(4, seq->capacity * 2);
+    auto* grown = NewSeqObj(new_cap);
+
+    // Copy existing items bitwise (ownership moves from `seq` to `grown`, so no Retain needed!)
+    if (seq->length > 0) {
+      std::memcpy(grown->items(), seq->items(), seq->length * sizeof(kura::heap::Value));
+      grown->length = seq->length;
+      // Zero out old `seq->length` so reclaiming `seq` doesn't release the moved children
+      seq->length = 0;
+    }
+
+    grown->Push(item);
+    // Reclaim the old `seq` block immediately (its refcount was 1 and children were moved out)
+    // TODO(@s0cks): TheHeap().Reclaim(&seq->header);
+    return grown;
+  }
+
+  // Case 3: Shared (`ref_count > 1` or sticky/static) -> COW copy + Retain existing elements
+  const uint64_t new_cap = std::max<uint64_t>(4, std::max<uint64_t>(seq->capacity, (seq->length + 1) * 2));
+  auto* copy = NewSeqObj(new_cap);
+
+  for (uint64_t i = 0; i < seq->length; i++) {
+    const auto elem = seq->items()[i];
+    if (kura::heap::TagMayHoldHeapPointer(elem.tag) && elem.bits != 0) {
+      kura::rt::RetainObj(reinterpret_cast<void*>(elem.bits));
+    }
+    copy->Push(elem);
+  }
+  copy->Push(item);
+
+  // Drop the caller's consumed reference to the old shared `seq`
+  kura::rt::ReleaseObj(seq);
+  return copy;
+}
+
 void* kura_rt_string_from_cstr_opt(const char* data) {
   return data ? NewStr(data) : nullptr;
 }
@@ -564,6 +645,21 @@ void* kura_rt_string_from_cstr(const char* data, const char* what) {
   if (!data)
     Panic(std::string(what) + " returned NULL, but its result is not declared `| None`");
   return NewStr(data);
+}
+
+void* kura_rt_record_clone(void* src_ptr) {
+  const auto* src = static_cast<const RecordObj*>(src_ptr);
+  const uint32_t cap = std::max<uint32_t>(src->capacity, src->count);
+  auto* dst = NewRecordObj(cap);
+
+  for (uint32_t idx = 0; idx < src->count; idx++) {
+    const auto& field = src->fields()[idx];
+    if (kura::heap::TagMayHoldHeapPointer(field.value.tag) && field.value.bits != 0) {
+      RetainObj(reinterpret_cast<void*>(field.value.bits));
+    }
+    dst->Set(field.hash, field.name, field.value);
+  }
+  return dst;
 }
 
 void kura_rt_ffi_overflow(const int64_t value, const char* what) {

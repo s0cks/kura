@@ -120,16 +120,6 @@ constexpr auto SpaceName(const Space space) -> const char* {
   return "unknown";
 }
 
-// The 8 bytes in front of every heap object.
-//
-//    63                32 31        18 17  14   13    12     11    10..8   7..0
-//   +--------------------+------------+-----+-----+-----+------+--------+------+
-//   |    size (bytes)    |  reserved  | age | rem | fwd | mark | space  | kind |
-//   +--------------------+------------+-----+-----+-----+------+--------+------+
-//
-// `size` is the whole object, header included, rounded up to the object alignment: walking a space is just adding
-// each header's size to its address. `fwd` is for the collector: a forwarded object's first payload word holds its
-// new address. `rem` marks a tenured object that may hold pointers into the model space (see Heap::remembered).
 class ObjectHeader {
  private:
   uint64_t raw_{0};
@@ -140,6 +130,8 @@ class ObjectHeader {
   static constexpr uint64_t kForwardedBit = 1ULL << 12;
   static constexpr uint64_t kRememberedBit = 1ULL << 13;
   static constexpr uint64_t kAgeShift = 14;
+  static constexpr uint64_t kRefCountShift = 18;
+  static constexpr uint64_t kRefCountMask = 0x3FFFULL;
   static constexpr uint64_t kSizeShift = 32;
 
   constexpr void Set(const uint64_t bit, const bool value) {
@@ -149,13 +141,16 @@ class ObjectHeader {
  public:
   static constexpr uword kMaxSize = 0xFFFFFFFFULL;
   static constexpr uint8_t kMaxAge = 15;
+  static constexpr uint32_t kMaxRefCount = 0x3FFF;  // 16383 = sticky/immortal
 
   constexpr ObjectHeader() = default;
 
   static constexpr auto Make(const ObjKind kind, const Space space, const uword size) -> ObjectHeader {
+    const uint64_t initial_rc = (space == Space::kModel || space == Space::kTenured) ? 1ULL : kRefCountMask;
+
     ObjectHeader header{};
     header.raw_ = (static_cast<uint64_t>(kind) << kKindShift) | (static_cast<uint64_t>(space) << kSpaceShift) |
-                  (static_cast<uint64_t>(size) << kSizeShift);
+                  (initial_rc << kRefCountShift) | (static_cast<uint64_t>(size) << kSizeShift);
     return header;
   }
 
@@ -207,14 +202,39 @@ class ObjectHeader {
     Set(kRememberedBit, value);
   }
 
-  // How many times the object has survived a flip of the model space; the collector promotes it to the tenured space
-  // once it is old enough.
   constexpr auto age() const -> uint8_t {
     return static_cast<uint8_t>((raw_ >> kAgeShift) & 0xF);
   }
 
   constexpr void set_age(const uint8_t age) {
     raw_ = (raw_ & ~(0xFULL << kAgeShift)) | (static_cast<uint64_t>(age & 0xF) << kAgeShift);
+  }
+
+  constexpr auto ref_count() const -> uint32_t {
+    return static_cast<uint32_t>((raw_ >> kRefCountShift) & kRefCountMask);
+  }
+
+  constexpr auto is_unique() const -> bool {
+    return ref_count() == 1;
+  }
+
+  constexpr auto is_immortal() const -> bool {
+    return ref_count() == kMaxRefCount;
+  }
+
+  constexpr void retain() {
+    const uint32_t rc = ref_count();
+    if (rc < kMaxRefCount) {
+      raw_ += (1ULL << kRefCountShift);
+    }
+  }
+
+  constexpr auto release() -> bool {
+    const uint32_t rc = ref_count();
+    if (rc == kMaxRefCount || rc == 0)
+      return false;
+    raw_ -= (1ULL << kRefCountShift);
+    return rc == 1;
   }
 
   constexpr auto operator==(const ObjectHeader& rhs) const -> bool {

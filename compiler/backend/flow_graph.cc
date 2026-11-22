@@ -540,6 +540,404 @@ auto FlowGraph::SimplifyCFG() -> bool {
   return changed;
 }
 
+// Helper to insert `new_instr` immediately before `target`.
+void InsertBefore(Instruction* target, Instruction* new_instr) {
+  Instruction* prev = target->GetPrevious();
+  Instruction::Link(prev, new_instr);
+  Instruction::Link(new_instr, target);
+}
+
+// Helper to insert `new_instr` immediately after `target`.
+void InsertAfter(Instruction* target, Instruction* new_instr) {
+  Instruction* next = target->GetNext();
+  Instruction::Link(target, new_instr);
+  Instruction::Link(new_instr, next);
+}
+
+// Returns true if `type` is a heap-allocated pointer or tagged value that participates in ARC.
+auto TypeNeedsARC(const CompileType* type) -> bool {
+  if (!type)
+    return false;
+
+  switch (type->GetKind()) {
+    case CompileType::kNever:
+    case CompileType::kNone:
+    case CompileType::kBool:
+    case CompileType::kInt:
+    case CompileType::kFloat:
+    case CompileType::kNumber:
+    case CompileType::kColor:
+    case CompileType::kVec2:
+    case CompileType::kVec3:
+    case CompileType::kRect:
+    case CompileType::kPx:
+    case CompileType::kPct:
+    case CompileType::kFr:
+    case CompileType::kHandle:
+      return false;
+    default:
+      return true;  // kString, kSeq, kRecord, kNode, kFunction (closure), kAny, kUnion, kVariant
+  }
+}
+
+// Returns true if operand `idx` of `instr` transfers ownership into `instr`.
+auto InputIsConsumed(Instruction* instr, uint64_t idx) -> bool {
+  if (instr->IsReturn() || instr->IsSeqAppend() || instr->IsUpdateRecord() || instr->IsNewList() ||
+      instr->IsNewRecord() || instr->IsNewVariant() || instr->IsNewClosure() || instr->IsStoreLocal() ||
+      instr->IsCall() || instr->IsRegisterEvent()) {
+    return true;
+  }
+  if (instr->IsStoreProperty())
+    return idx == StorePropertyInstr::kValuePos;  // Consumes value (1), borrows instance (0)
+  if (instr->IsStoreIndex())
+    return idx == StoreIndexInstr::kValuePos;
+  return false;
+}
+
+void FlowGraph::InsertARC() {
+  using DefSet = std::unordered_set<Definition*>;
+
+  // ── 1. Identify Borrowed Definitions ──────────────────────────────────────
+  // `view`'s `state` parameter is borrowed by the host frame loop.
+  if (name_ == "view" && !parameters_.empty()) {
+    parameters_[0]->SetBorrowed(true);
+  }
+
+  DefSet borrowed{};
+  for (ParameterInstr* param : parameters_) {
+    if (param->IsBorrowed()) {
+      borrowed.insert(param);
+    }
+  }
+
+  // Propagate borrowed status through read-only projections (LoadProperty / LoadIndex)
+  // in reverse postorder so reading fields/elements from a borrowed record/seq stays borrowed.
+  for (EntryInstr* block : reverse_postorder_) {
+    if (IsDead(block))
+      continue;
+    for (Instruction* instr = block->GetNext(); instr != nullptr; instr = instr->GetNext()) {
+      if (const auto load = instr->AsLoadProperty()) {
+        if (borrowed.contains(load->GetInstance()->GetDefinition()))
+          borrowed.insert(load);
+      } else if (const auto load = instr->AsLoadPropertySafely()) {
+        if (borrowed.contains(load->GetInstance()->GetDefinition()))
+          borrowed.insert(load);
+      } else if (const auto load = instr->AsLoadIndex()) {
+        if (borrowed.contains(load->GetInstance()->GetDefinition()))
+          borrowed.insert(load);
+      }
+    }
+  }
+
+  const auto is_owned_arc = [&](Definition* def) -> bool {
+    if (!def || def->IsStackAllocated() || def->IsConstant() || def->IsLoadFunction() || def->IsReturn())
+      return false;
+    if (borrowed.contains(def))
+      return false;
+    return TypeNeedsARC(def->GetCompileType());
+  };
+
+  // ── 2. Backward Liveness Analysis (Owned ARC Values Only) ─────────────────
+  std::unordered_map<EntryInstr*, DefSet> live_in{};
+  std::unordered_map<EntryInstr*, DefSet> live_out{};
+
+  bool changed = true;
+  while (changed) {
+    changed = false;
+
+    for (EntryInstr* block : postorder_) {
+      if (IsDead(block))
+        continue;
+
+      DefSet out{};
+      for (uint64_t i = 0; i < block->GetNumberOfSuccessors(); i++) {
+        EntryInstr* succ = block->GetSuccessorAt(i);
+        if (!succ || IsDead(succ))
+          continue;
+
+        out.insert(live_in[succ].begin(), live_in[succ].end());
+
+        if (const auto join = succ->AsJoinEntry()) {
+          for (PhiInstr* phi : join->GetPhis()) {
+            out.erase(phi);
+            for (const auto& in : phi->GetIncoming()) {
+              if (in.predecessor == block && in.value) {
+                if (Definition* def = in.value->GetDefinition(); is_owned_arc(def)) {
+                  out.insert(def);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      DefSet live = out;
+      for (Instruction* instr = GetTerminator(block); instr != nullptr && instr != block;
+           instr = instr->GetPrevious()) {
+        if (instr->IsPhi())
+          continue;
+
+        if (instr->IsDefinition() && !instr->IsReturn()) {
+          live.erase(static_cast<Definition*>(instr));
+        }
+
+        for (uint64_t idx = 0; idx < instr->GetNumberOfInputs(); idx++) {
+          if (Value* input = instr->GetInputAt(idx)) {
+            if (Definition* def = input->GetDefinition(); is_owned_arc(def)) {
+              live.insert(def);
+            }
+          }
+        }
+      }
+
+      if (out != live_out[block] || live != live_in[block]) {
+        live_out[block] = std::move(out);
+        live_in[block] = std::move(live);
+        changed = true;
+      }
+    }
+  }
+
+  // ── 3. Insert Retain / Release & Detect Destructive Property Moves ────────
+  for (EntryInstr* block : reverse_postorder_) {
+    if (IsDead(block))
+      continue;
+
+    DefSet live = live_out[block];
+
+    // Record phi uses on outgoing edges as live at the end of `block`
+    for (uint64_t i = 0; i < block->GetNumberOfSuccessors(); i++) {
+      EntryInstr* succ = block->GetSuccessorAt(i);
+      if (const auto join = succ ? succ->AsJoinEntry() : nullptr) {
+        for (PhiInstr* phi : join->GetPhis()) {
+          for (const auto& in : phi->GetIncoming()) {
+            if (in.predecessor == block && in.value) {
+              if (Definition* def = in.value->GetDefinition(); is_owned_arc(def)) {
+                live.insert(def);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Track properties overwritten by a consuming `UpdateRecord` in this block
+    std::unordered_map<Definition*, std::unordered_set<std::string>> destructive_overwrites{};
+
+    // Walk backward through `block`
+    for (Instruction* instr = GetTerminator(block); instr != nullptr && instr != block;) {
+      Instruction* prev = instr->GetPrevious();
+      if (instr->IsPhi()) {
+        instr = prev;
+        continue;
+      }
+
+      // Drop owned definitions that are dead immediately after creation (excluding ReturnInstr!)
+      if (instr->IsDefinition() && !instr->IsReturn()) {
+        auto* def = static_cast<Definition*>(instr);
+        if (is_owned_arc(def) && !live.contains(def)) {
+          InsertAfter(def, ReleaseInstr::New(Value::New(def)));
+        }
+        live.erase(def);
+      }
+
+      // Check if this is a consuming UpdateRecord (%new = UpdateRecord(%base, prop: %val))
+      if (const auto upd = instr->AsUpdateRecord()) {
+        Definition* base = upd->GetBase()->GetDefinition();
+        if (is_owned_arc(base) && !live.contains(base)) {
+          upd->SetMoveBase(true);
+          for (const auto& entry : upd->GetEntries()) {
+            destructive_overwrites[base].insert(std::string(entry.property->GetPropertyName()->GetData()));
+          }
+        }
+      }
+
+      // Check if this is a LoadProperty whose property is about to be destructively overwritten
+      bool is_destructive_take = false;
+      if (const auto load = instr->AsLoadProperty()) {
+        Definition* base = load->GetInstance()->GetDefinition();
+        const std::string prop_name(load->GetProperty()->GetPropertyName()->GetData());
+        if (auto it = destructive_overwrites.find(base);
+            it != destructive_overwrites.end() && it->second.contains(prop_name)) {
+          load->SetMove(true);
+          it->second.erase(prop_name);
+          is_destructive_take = true;
+        }
+      }
+
+      // Process inputs of `instr`
+      DefSet retained_this_instr{};
+      for (uint64_t idx = 0; idx < instr->GetNumberOfInputs(); idx++) {
+        Value* input = instr->GetInputAt(idx);
+        if (!input)
+          continue;
+        Definition* def = input->GetDefinition();
+        if (!def)
+          continue;
+
+        const bool consumes = InputIsConsumed(instr, idx);
+
+        // Case A: Borrowed value passed to a consuming instruction (e.g., returning a borrowed field)
+        // -> Retain it to create a fresh owned reference!
+        if (borrowed.contains(def) && TypeNeedsARC(def->GetCompileType())) {
+          if (consumes && retained_this_instr.insert(def).second) {
+            InsertBefore(instr, RetainInstr::New(Value::New(def)));
+          }
+          continue;
+        }
+
+        // Case B: Owned ARC value
+        if (!is_owned_arc(def))
+          continue;
+
+        // Destructive TakeProperty borrows `base` without keeping `base` alive or bumping its refcount
+        if (is_destructive_take && idx == LoadPropertyInstr::kInstancePos) {
+          continue;
+        }
+
+        const bool is_last_use = !live.contains(def);
+        if (consumes) {
+          if (is_last_use) {
+            live.insert(def);
+          } else {
+            if (retained_this_instr.insert(def).second) {
+              InsertBefore(instr, RetainInstr::New(Value::New(def)));
+            }
+          }
+        } else {
+          if (is_last_use) {
+            live.insert(def);
+            if (!live_out[block].contains(def)) {
+              InsertAfter(instr, ReleaseInstr::New(Value::New(def)));
+            }
+          }
+        }
+      }
+
+      // At a conditional Branch, drop owned values live on one arm but dead on the other
+      if (const auto branch = instr->AsBranch()) {
+        EntryInstr* then_bb = branch->GetThen();
+        EntryInstr* else_bb = branch->HasElse() ? static_cast<EntryInstr*>(branch->GetElse())
+                                                : static_cast<EntryInstr*>(branch->GetJoin());
+        if (then_bb && else_bb && then_bb != else_bb) {
+          DefSet dropped_then{};
+          DefSet dropped_else{};
+          for (Definition* v : live_out[block]) {
+            const bool in_then = live_in[then_bb].contains(v);
+            const bool in_else = live_in[else_bb].contains(v);
+            if (in_then && !in_else && dropped_else.insert(v).second) {
+              InsertAfter(else_bb, ReleaseInstr::New(Value::New(v)));
+            } else if (in_else && !in_then && dropped_then.insert(v).second) {
+              InsertAfter(then_bb, ReleaseInstr::New(Value::New(v)));
+            }
+          }
+        }
+      }
+      instr = prev;
+    }
+  }
+}
+
+auto FlowGraph::OptimizeCOWUpdates() -> bool {
+  bool changed = false;
+
+  // 1. Count definition uses (so we only fold single-use singleton lists)
+  std::unordered_map<Definition*, uint32_t> use_counts{};
+  for (const auto block : reverse_postorder_) {
+    if (const auto join = block->AsJoinEntry()) {
+      for (const auto phi : join->GetPhis()) {
+        for (const auto& in : phi->GetIncoming()) {
+          if (in.value && in.value->GetDefinition())
+            use_counts[in.value->GetDefinition()]++;
+        }
+      }
+    }
+
+    for (Instruction* instr = block->GetNext(); instr != nullptr; instr = instr->GetNext()) {
+      if (instr->IsPhi())
+        continue;
+      for (uint64_t i = 0; i < instr->GetNumberOfInputs(); i++) {
+        if (const auto input = instr->GetInputAt(i); input && input->GetDefinition())
+          use_counts[input->GetDefinition()]++;
+      }
+    }
+  }
+
+  // 2. Walk blocks in reverse postorder and rewrite COW patterns
+  for (const auto block : reverse_postorder_) {
+    for (Instruction* instr = block->GetNext(); instr != nullptr;) {
+      // Save `next` before replacing/removing `instr`
+      Instruction* next = instr->GetNext();
+
+      // Pattern A: BinaryOp(kAdd, seq, NewList(elem)) -> SeqAppend(seq, elem)
+      if (const auto bin = instr->AsBinaryOp(); bin && bin->GetOp() == BinaryOp::kAdd) {
+        Definition* lhs = bin->GetLeft()->GetDefinition();
+        Definition* rhs = bin->GetRight()->GetDefinition();
+
+        if (lhs && lhs->HasCompileType() && lhs->GetCompileType()->IsSeq()) {
+          if (const auto list = rhs ? rhs->AsNewList() : nullptr;
+              list && list->GetNumberOfInputs() == 1 && use_counts[list] == 1) {
+            auto* elem = list->GetInputAt(0)->GetDefinition();
+            auto* append = SeqAppendInstr::New(Value::New(lhs), Value::New(elem));
+            append->SetCompileType(bin->GetCompileType());
+
+            ReplaceAllUsesWith(bin, append);
+            Replace(bin, append);
+            Remove(list);
+            changed = true;
+          }
+        }
+      }
+
+      // Pattern B: NewRecord(spread=%base) + Spread + StoreProperty... -> UpdateRecord
+      else if (const auto rec = instr->AsNewRecord(); rec && rec->GetNumberOfInputs() == 1) {
+        Definition* base = rec->GetInputAt(0)->GetDefinition();
+        std::vector<UpdateRecordInstr::Entry> entries{};
+        std::vector<Instruction*> to_remove{};
+
+        // Scan forward in the same block for its Spread and StoreProperty initializers
+        Instruction* scan = next;
+        bool valid_fusion = false;
+        while (scan != nullptr) {
+          if (const auto spread = scan->AsSpread();
+              spread && spread->GetInstance()->GetDefinition() == rec && spread->GetValue()->GetDefinition() == base) {
+            to_remove.push_back(scan);
+            scan = scan->GetNext();
+            continue;
+          }
+          if (const auto store = scan->AsStoreProperty(); store && store->GetInstance()->GetDefinition() == rec) {
+            entries.push_back({store->GetProperty(), Value::New(store->GetValue()->GetDefinition())});
+            to_remove.push_back(scan);
+            scan = scan->GetNext();
+            continue;
+          }
+          break;
+        }
+
+        // Only fuse if we found the Spread + at least one StoreProperty and `rec` isn't used inside those values
+        if (!entries.empty() && !to_remove.empty()) {
+          auto* upd = UpdateRecordInstr::New(Value::New(base), std::move(entries));
+          upd->SetCompileType(rec->GetCompileType());
+
+          // Advance `next` past all removed Spread/StoreProperty instructions
+          next = scan;
+
+          ReplaceAllUsesWith(rec, upd);
+          Replace(rec, upd);
+          for (Instruction* dead : to_remove) {
+            Remove(dead);
+          }
+          changed = true;
+        }
+      }
+
+      instr = next;
+    }
+  }
+
+  return changed;
+}
+
 auto FlowGraph::DedupeLayoutSlotBegins() -> bool {
   bool changed = false;
 

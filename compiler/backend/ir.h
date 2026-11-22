@@ -25,6 +25,7 @@ namespace kura {
   V(Spread)                     \
   V(StoreIndex)                 \
   V(LoadIndex)                  \
+  V(SeqAppend)                  \
   V(StoreProperty)              \
   V(LoadProperty)               \
   V(LoadPropertySafely)         \
@@ -80,7 +81,10 @@ namespace kura {
   V(RegisterEvent)              \
   V(TracyBeginZone)             \
   V(TracyEndZone)               \
-  V(RectPastClip)
+  V(RectPastClip)               \
+  V(UpdateRecord)               \
+  V(Retain)                     \
+  V(Release)
 
 class Instruction;
 class EntryInstr;
@@ -220,20 +224,21 @@ class Instruction {
   }
 };
 
-#define HAS_NAMED_INPUT(Name, Pos)                  \
-  static constexpr const auto k##Name##Pos = (Pos); \
-                                                    \
- private:                                           \
-  inline void Set##Name(Value* rhs) {               \
-    return SetInputAt(k##Name##Pos, rhs);           \
-  }                                                 \
-                                                    \
- public:                                            \
-  inline auto Get##Name() const -> Value* {         \
-    return GetInputAt(k##Name##Pos);                \
-  }                                                 \
-  inline auto Has##Name() const -> bool {           \
-    return Get##Name() != nullptr;                  \
+#define HAS_NAMED_INPUT(Name, P)                  \
+ public:                                          \
+  static constexpr const auto k##Name##Pos = (P); \
+                                                  \
+ private:                                         \
+  inline void Set##Name(Value* rhs) {             \
+    return SetInputAt(k##Name##Pos, rhs);         \
+  }                                               \
+                                                  \
+ public:                                          \
+  inline auto Get##Name() const -> Value* {       \
+    return GetInputAt(k##Name##Pos);              \
+  }                                               \
+  inline auto Has##Name() const -> bool {         \
+    return Get##Name() != nullptr;                \
   }
 
 #define DECLARE_INSTRUCTION_TYPE(Name)                           \
@@ -877,6 +882,7 @@ class NewClosureInstr : public Definition {
 class LoadPropertyInstr : public TemplateDefinition<1> {
  private:
   Property* property_;
+  bool move_ = false;
 
   inline void SetProperty(Property* property) {
     property_ = property;
@@ -891,6 +897,14 @@ class LoadPropertyInstr : public TemplateDefinition<1> {
 
   auto GetProperty() const -> Property* {
     return property_;
+  }
+
+  auto IsMove() const -> bool {
+    return move_;
+  }
+
+  void SetMove(const bool rhs) {
+    move_ = rhs;
   }
 
   HAS_NAMED_INPUT(Instance, 0);
@@ -1215,6 +1229,7 @@ class ParameterInstr : public Definition {
   LocalVariable* local_;
   uint64_t index_;
   bool capture_;
+  bool borrowed_ = false;
 
  public:
   ParameterInstr(LocalVariable* local, const uint64_t index, const bool capture = false) :
@@ -1234,6 +1249,14 @@ class ParameterInstr : public Definition {
 
   inline auto IsCapture() const -> bool {
     return capture_;
+  }
+
+  auto IsBorrowed() const -> bool {
+    return borrowed_;
+  }
+
+  void SetBorrowed(const bool rhs) {
+    borrowed_ = rhs;
   }
 
   DECLARE_INSTRUCTION_TYPE(Parameter);
@@ -1522,6 +1545,108 @@ class LabelInstr : public Instruction {
  public:
   static inline auto New(String* label) -> LabelInstr* {
     return new LabelInstr(label);
+  }
+};
+
+class SeqAppendInstr : public TemplateDefinition<2> {
+ public:
+  SeqAppendInstr(Value* seq, Value* item) {
+    SetSeq(seq);
+    SetItem(item);
+  }
+
+  HAS_NAMED_INPUT(Seq, 0);
+  HAS_NAMED_INPUT(Item, 1);
+  DECLARE_INSTRUCTION_TYPE(SeqAppend);
+
+ public:
+  static inline auto New(Value* seq, Value* item) -> SeqAppendInstr* {
+    return new SeqAppendInstr(seq, item);
+  }
+};
+
+class UpdateRecordInstr : public Definition {
+ public:
+  struct Entry {
+    Property* property;
+    Value* value;
+  };
+
+ private:
+  Value* base_;
+  std::vector<Entry> entries_;
+  bool move_base_ = false;
+
+ public:
+  UpdateRecordInstr(Value* base, std::vector<Entry> entries) :
+    base_(base),
+    entries_(std::move(entries)) {}
+  auto GetBase() const -> Value* {
+    return base_;
+  }
+
+  auto GetEntries() const -> const std::vector<Entry>& {
+    return entries_;
+  }
+
+  auto IsMoveBase() const -> bool {
+    return move_base_;
+  }
+
+  void SetMoveBase(bool move = true) {
+    move_base_ = move;
+  }
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return 1 + entries_.size();
+  }
+
+  auto GetInputAt(uint64_t idx) const -> Value* override {
+    return idx == 0 ? base_ : entries_[idx - 1].value;
+  }
+
+  void SetInputAt(uint64_t idx, Value* rhs) override {
+    if (idx == 0)
+      base_ = rhs;
+    else
+      entries_[idx - 1].value = rhs;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(UpdateRecord);
+
+ public:
+  static inline auto New(Value* base, std::vector<Entry> entries) -> UpdateRecordInstr* {
+    return new UpdateRecordInstr(base, std::move(entries));
+  }
+};
+
+class RetainInstr : public TemplateInstruction<1> {
+ public:
+  explicit RetainInstr(Value* val) {
+    SetValue(val);
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(Retain);
+
+ public:
+  static inline auto New(Value* val) -> RetainInstr* {
+    return new RetainInstr(val);
+  }
+};
+
+class ReleaseInstr : public TemplateInstruction<1> {
+ public:
+  explicit ReleaseInstr(Value* val) {
+    SetValue(val);
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(Release);
+
+ public:
+  static inline auto New(Value* val) -> ReleaseInstr* {
+    return new ReleaseInstr(val);
   }
 };
 

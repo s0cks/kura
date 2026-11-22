@@ -177,6 +177,8 @@ class FlowGraph {
   auto EliminateRedundantClips() -> bool;
   auto SimplifyCFG() -> bool;
   auto DedupeLayoutSlotBegins() -> bool;
+  auto OptimizeCOWUpdates() -> bool;
+  void InsertARC();
 
   // The immediate dominator of `block` (null for the entry). Valid after
   // Finalize().

@@ -33,6 +33,26 @@ struct HeapObject {
     return header.size();
   }
 
+  inline auto ref_count() const -> uint32_t {
+    return header.ref_count();
+  }
+
+  inline auto is_unique() const -> bool {
+    return header.is_unique();
+  }
+
+  inline auto is_immortal() const -> bool {
+    return header.is_immortal();
+  }
+
+  inline void retain() {
+    header.retain();
+  }
+
+  inline auto release() -> bool {
+    return header.release();
+  }
+
   inline auto address() const -> uword {
     return reinterpret_cast<uword>(this);
   }
