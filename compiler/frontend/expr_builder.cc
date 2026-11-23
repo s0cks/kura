@@ -20,13 +20,13 @@ using syntax::Node;
 // ╭────────╮
 // │ Errors │
 // ╰────────╯
-void ExprBuilder::Error(const syntax::Span& where, const std::string& message) const {
+void ExprBuilder::Error(const Span& where, const std::string& message) const {
   const auto position = tree_.GetSource().GetPosition(where.begin);
   throw BuildError(position.line + 1, position.column, message, where);
 }
 
 void ExprBuilder::Error(const Node* where, const std::string& message) const {
-  Error(where != nullptr ? where->span : syntax::Span{}, message);
+  Error(where != nullptr ? where->span : Span{}, message);
 }
 
 void ExprBuilder::Unsupported(const Node* where, const std::string& what) const {
@@ -121,14 +121,14 @@ auto ExprBuilder::LoadName(const Node* where, const std::string& name) -> Expr* 
   return LoadLocalExpr::New(local);
 }
 
-auto ExprBuilder::CreateLocal(const syntax::Span& where, const std::string& name) -> LocalVariable* {
+auto ExprBuilder::CreateLocal(const Span& where, const std::string& name) -> LocalVariable* {
   const auto local = GetScope()->CreateLocal(name);
   if (!local)
     Error(where, "'" + name + "' is already defined in this scope");
   return local;
 }
 
-auto ExprBuilder::DeclareLocal(const syntax::Span& where, const std::string& name) -> LocalVariable* {
+auto ExprBuilder::DeclareLocal(const Span& where, const std::string& name) -> LocalVariable* {
   if (GetScope() == module_scope_ && function_names_.contains(name))
     Error(where, "'" + name + "' is already defined as a function");
   const auto existing = GetScope()->GetLocal(name);
@@ -176,7 +176,7 @@ auto ExprBuilder::BuildModule() -> Module* {
   // An `extern fn` with a body is a function that C can call.
   struct Pending {
     const Node* decl;
-    syntax::Span where;
+    Span where;
     std::string name;
     const std::vector<Node*>* directives;
     const std::vector<Node*>* params;
@@ -330,7 +330,7 @@ auto ExprBuilder::BuildModule() -> Module* {
 }
 
 auto ExprBuilder::BuildUseDecl(const syntax::UseDecl* ctx) -> UseDecl* {
-  const syntax::Span where = ctx->has_header ? ctx->header_span : ctx->span;
+  const Span where = ctx->has_header ? ctx->header_span : ctx->span;
   const auto& header = ctx->header;
   std::string alias{};
 
@@ -751,12 +751,12 @@ auto ExprBuilder::BuildBinary(const syntax::Binary* binary) -> Expr* {
 static inline auto ParseNodeExprKind(const std::string& rhs) -> std::optional<NodeExpr::Kind>;
 
 // `x |> add(_, 1)`: the value is computed once into a local, and every `_` in the stage reads it.
-auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage, const syntax::Span& where)
+auto ExprBuilder::BuildPipedStage(const syntax::Node* value_node, const syntax::Node* stage, const Span& where)
     -> Expr* {
   return BuildStageWith(Build(value_node), stage, where);
 }
 
-auto ExprBuilder::BuildStageWith(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr* {
+auto ExprBuilder::BuildStageWith(Expr* value, const syntax::Node* stage, const Span& where) -> Expr* {
   LocalsScope pipe_scope(GetOwner());
   // a name no program can write, so it can't clash with anything
   const auto name = "%pipe" + std::to_string(pipe_count_++);
@@ -992,7 +992,7 @@ auto ExprBuilder::BuildPartial(const syntax::Call* call) -> Expr* {
   return LambdaExpr::New(std::move(params), ToSeq(body));
 }
 
-auto ExprBuilder::ApplyStage(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr* {
+auto ExprBuilder::ApplyStage(Expr* value, const syntax::Node* stage, const Span& where) -> Expr* {
   // `add(_, 1)`: the value goes where the `_` is
   if (HasPlaceholder(stage))
     return BuildStageWith(value, stage, where);
@@ -1231,8 +1231,7 @@ auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
   return BuildCall(target, BuildArgs(ctx->args));
 }
 
-auto ExprBuilder::NumberLiteral(const syntax::Span& where, const std::string& text, const bool negate) const
-    -> Object* {
+auto ExprBuilder::NumberLiteral(const Span& where, const std::string& text, const bool negate) const -> Object* {
   if (text.find('.') != std::string::npos) {
     const auto value = std::stod(text);
     return Float::New(negate ? -value : value);

@@ -12,7 +12,7 @@ RULE_FN(FnMissingReturnType) {
           .severity = syntax::Severity::kStyle,
           .code = kFnShouldHaveReturnTypeCode,
           .message = "Functions should have a return type",
-          .span = syntax::Span(begin, begin + 1),
+          .span = Span(begin, begin + 1),
           .span_label = "Missing type annotation here (e.g., fn my-func(): String)",
       });
     }

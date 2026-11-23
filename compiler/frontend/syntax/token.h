@@ -33,7 +33,13 @@ namespace kura::syntax {
   V(False,  "false")               \
   V(None,   "None")                \
   V(Test, "test")                  \
-  V(Assert, "assert")
+  V(Assert, "assert")              \
+  V(AssertEq, "assert-eq")         \
+  V(AssertNe, "assert-ne")         \
+  V(AssertLt, "assert-lt")         \
+  V(AssertLte, "assert-lte")       \
+  V(AssertGt, "assert-gt")         \
+  V(AssertGte, "assert-gte")
 
 #define FOR_EACH_PUNCTUATION_TOKEN(V) \
   V(BinMinus, "-")                    \

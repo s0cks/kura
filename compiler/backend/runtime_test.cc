@@ -2,8 +2,10 @@
 #include <csetjmp>
 #include <cstdio>
 #include <cstring>
+#include <rang.hpp>
 #include <vector>
 
+#include "frontend/syntax/source.h"
 #include "heap/objects.h"
 #include "runtime_abi.h"
 #include "test_suite.h"
@@ -22,13 +24,251 @@ auto StrView(const kura::heap::StringObj* s) -> std::string_view {
     return {};
   return s->view();
 }
+
+// Expands tabs so the carets line up with what the terminal shows, and maps a
+// byte column on the line to a display column.
+struct Line {
+  std::string text{};
+  std::vector<uint32_t> display_column{};  // by byte column, plus one past the end
+};
+
+static inline auto ExpandLine(std::string_view raw, const uint32_t tab_width) -> Line {
+  Line line{};
+  uint32_t column = 0;
+  for (size_t idx = 0; idx < raw.size(); idx++) {
+    line.display_column.push_back(column);
+    const auto c = static_cast<unsigned char>(raw[idx]);
+    if (c == '\t') {
+      const auto spaces = tab_width - (column % tab_width);
+      line.text.append(spaces, ' ');
+      column += spaces;
+      continue;
+    }
+    line.text.push_back(static_cast<char>(c));
+    // continuation bytes of a UTF-8 sequence take no extra column
+    if ((c & 0xC0) != 0x80)
+      column++;
+  }
+  line.display_column.push_back(column);
+  return line;
+}
+
+auto Digits(uint32_t value) -> size_t {
+  size_t digits = 1;
+  while (value >= 10) {
+    value /= 10;
+    digits++;
+  }
+  return digits;
+}
+
+static const kura::syntax::SourceFile* source_ = nullptr;
+
+class TestResultRenderer {
+ public:
+  struct Opts {
+    int tab_width;
+  };
+
+ private:
+  std::ostream& stream_;
+  Opts opts_{};
+
+  inline auto stream() -> std::ostream& {
+    return stream_;
+  }
+
+  inline auto colorize() const -> bool {
+    return true;  // TODO(@s0cks): implement
+  }
+
+#define DEFINE_PAINT_COLOR(Color)                                                 \
+  inline auto Color(const std::string_view rhs) -> TestResultRenderer& {          \
+    if (colorize()) {                                                             \
+      stream() << rang::fg::Color << rhs << rang::fg::reset;                      \
+    } else {                                                                      \
+      stream() << rhs;                                                            \
+    }                                                                             \
+    return *this;                                                                 \
+  }                                                                               \
+  inline auto bold_##Color(const std::string_view rhs) -> TestResultRenderer& {   \
+    if (colorize()) {                                                             \
+      stream() << rang::style::bold << rang::fg::Color << rhs << rang::fg::reset; \
+    } else {                                                                      \
+      stream() << rhs;                                                            \
+    }                                                                             \
+    return *this;                                                                 \
+  }
+
+  DEFINE_PAINT_COLOR(red);
+  DEFINE_PAINT_COLOR(blue);
+  DEFINE_PAINT_COLOR(green);
+  DEFINE_PAINT_COLOR(yellow);
+  DEFINE_PAINT_COLOR(cyan);
+  DEFINE_PAINT_COLOR(magenta);
+  DEFINE_PAINT_COLOR(gray);
+#undef DEFINE_PAINT_COLOR
+
+  inline auto bold(std::string_view rhs) -> TestResultRenderer& {
+    if (colorize()) {
+      stream() << rang::style::bold << rhs << rang::style::reset;
+    } else {
+      stream() << rhs;
+    }
+    return *this;
+  }
+
+ public:
+  explicit TestResultRenderer(std::ostream& stream, const Opts opts = {}) :
+    stream_(stream),
+    opts_(std::move(opts)) {}
+  ~TestResultRenderer() = default;
+
+  void Render(const TestResult res) {
+    auto last_line = source_->GetPosition(res.span.begin).line + 1;
+    for (const auto& label : res.labels)
+      last_line = std::max(last_line, source_->GetPosition(label.span.begin).line + 1);
+    const auto gutter = std::string(Digits(last_line), ' ');
+
+    const auto begin = source_->GetPosition(res.span.begin);
+
+    switch (res.status) {
+      case TestResult::kFailed:
+        red("Failed");
+        break;
+      default:
+        break;
+    }
+    stream() << ": ";
+    bold(res.message);
+    stream() << "\n";
+
+    magenta("--> ");
+    stream() << source_->GetName() << ":" << begin << "\n";
+
+    stream() << gutter;
+    magenta(" |");
+    stream() << "\n";
+
+    // The primary span and every label, ordered by line.
+    struct Mark {
+      kura::Span span;
+      const std::string* text;
+      bool primary;
+    };
+
+    std::vector<Mark> marks{{res.span, &res.span_label, true}};
+    for (const auto& label : res.labels)
+      marks.push_back({label.span, &label.message, false});
+
+    std::stable_sort(marks.begin(), marks.end(), [](const Mark& a, const Mark& b) {
+      return a.span.begin < b.span.begin;
+    });
+
+    uint32_t previous_line = UINT32_MAX;
+    for (const auto& mark : marks) {
+      const auto start = source_->GetPosition(mark.span.begin);
+      if (previous_line != UINT32_MAX && start.line != previous_line) {
+        stream() << gutter;
+        magenta(" |");
+        stream() << (start.line > previous_line + 1 ? " ..." : "") << '\n';
+      }
+
+      const auto same_line = previous_line == start.line;
+      previous_line = start.line;
+      const auto line_span = source_->GetLineSpan(start.line);
+      const auto line = ExpandLine(source_->GetText(line_span), opts_.tab_width);
+      const auto number = std::to_string(start.line + 1);
+      if (!same_line) {
+        stream() << std::string(gutter.size() - number.size(), ' ');
+        magenta(number + " |");
+        stream() << " " << line.text << "\n";
+      }
+
+      // The carets cover the span on this line; a span that runs on past the
+      // end of the line is drawn up to the end of it.
+      const auto first = std::min<size_t>(start.column, line.display_column.size() - 1);
+      const auto end_offset = std::min(mark.span.end, line_span.end);
+      const auto end_column = std::min<size_t>(end_offset - line_span.begin, line.display_column.size() - 1);
+      const auto from = line.display_column[first];
+      auto to = line.display_column[std::max(first, end_column)];
+      if (to <= from)
+        to = from + 1;
+
+      const auto marker = std::string(to - from, mark.primary ? '^' : '-');
+      stream() << gutter;
+      magenta(" |");
+      stream() << ' ' << std::string(from, ' ');
+      if (mark.primary) {
+        switch (res.status) {
+          case TestResult::kFailed:
+            red(marker);
+            break;
+          case TestResult::kPassed:
+            green(marker);
+            break;
+          case TestResult::kSkipped:
+            bold(marker);
+            break;
+        }
+      } else {
+        magenta(marker);
+      }
+      stream() << " ";
+      if (!mark.text->empty()) {
+        if (mark.primary) {
+          switch (res.status) {
+            case TestResult::kFailed:
+              red(*mark.text);
+              break;
+            case TestResult::kPassed:
+              green(*mark.text);
+              break;
+            case TestResult::kSkipped:
+              bold(*mark.text);
+              break;
+          }
+        } else {
+          magenta(*mark.text);
+        }
+      }
+      stream() << '\n';
+    }
+
+    if (!res.help.empty()) {
+      stream() << gutter;
+      magenta(" = ");
+      bold("help: ");
+      stream() << res.help << "\n";
+    }
+
+    for (const auto& note : res.notes) {
+      stream() << gutter;
+      magenta(" = ");
+      bold("note: ");
+      stream() << note << "\n";
+    }
+  }
+};
+
+static inline void Render(std::ostream& stream, const TestResult& rhs) {
+  TestResultRenderer renderer(stream, TestResultRenderer::Opts{
+                                          .tab_width = 2,
+                                      });
+  renderer.Render(rhs);
+}
+
 }  // namespace
 
 extern "C" {
+void kura_rt_set_source(const kura::syntax::SourceFile* source) {
+  source_ = source;
+}
+
 void kura_rt_test_suite_begin(const uint64_t total, const char* filter, const bool fail_fast) {
   suite_ = kura::rt::TestSuiteState{};
-  suite_.total = total;
   suite_.global_fail_fast = fail_fast;
+  suite_.suite_start = std::chrono::high_resolution_clock::now();
   if (filter && *filter)
     std::printf("running tests matching \"%s\"...\n\n", filter);
   else
@@ -44,65 +284,94 @@ bool kura_rt_test_matches(const char* name, const char* filter) {
 void kura_rt_test_begin(const char* name, uint32_t flags) {
   suite_.name = name ? name : "<unnamed>";
   suite_.flags = flags;
-  suite_.failures.clear();
+  suite_.failed.clear();
+  suite_.start = std::chrono::high_resolution_clock::now();
 }
 
 void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, void* msg) {
   const auto f = static_cast<StringObj*>(file);
   const auto m = static_cast<StringObj*>(msg);
-  suite_.failures.push_back({
-      std::string(StrView(f)),
-      line,
-      col,
-      std::string(StrView(m)),
+
+  kura::Span span{0, 0};
+  if (source_ != nullptr && line > 0) {
+    kura::syntax::Position pos{
+        .line = static_cast<uint32_t>(line - 1),
+        .column = col > 0 ? static_cast<uint32_t>(col - 1) : 0,
+    };
+    const uint32_t begin = source_->GetOffset(pos);
+    const uint32_t end = source_->GetLineSpan(pos.line).end;
+    span = kura::Span{begin, std::max(begin + 1, end)};
+  }
+
+  suite_.failed.push_back(TestResult{
+      .status = TestResult::kFailed,
+      .message = std::string(StrView(m)),
+      .span = span,
+      .span_label = "assertion failed",
   });
 }
 
 void kura_rt_test_end() {
+  suite_.finish = std::chrono::high_resolution_clock::now();
+  const auto duration = std::chrono::duration_cast<std::chrono::microseconds>((suite_.finish - suite_.start));
+
   if (suite_.flags & kura::TestFlag::kSkip) {
     suite_.skipped++;
-    std::printf("test %s ... SKIPPED\n", suite_.name.c_str());
+    std::cout << "  " << suite_.name << " ... skipped (" << duration << ")" << std::endl;
     return;
   }
 
-  const bool had_failures = !suite_.failures.empty() || suite_.panicked;
+  const bool had_failures = !suite_.failed.empty() || suite_.panicked;
   const bool should_fail = (suite_.flags & kura::TestFlag::kShouldFail) == 0;
   const bool passed = (had_failures != should_fail);
 
   if (passed) {
     suite_.passed++;
-    std::printf("test %s ... ok\n", suite_.name.c_str());
+    std::cout << "  " << suite_.name << " ... " << rang::style::bold << rang::fg::green << "ok" << rang::style::reset
+              << " (" << duration << ")" << std::endl;
     return;
   }
 
-  suite_.failed++;
-
-  if (suite_.panicked) {
-    std::printf("test %s ... PANICKED\n", suite_.name.c_str());
-  } else {
-    std::printf("test %s ... FAILED\n", suite_.name.c_str());
-  }
-
+  suite_.num_failed++;
+  std::cout << "  " << suite_.name << " ... " << rang::style::bold << rang::fg::red << "failed" << rang::style::reset
+            << " (" << duration << ")" << std::endl;
   if (should_fail && !had_failures) {
     std::printf("  expected test to fail or panic (@should-fail), but it succeeded\n");
   } else {
-    std::printf("  %" PRIu64 " failures", suite_.failures.size());
-
-    for (const auto& f : suite_.failures) {
-      std::printf("  --> %s:%" PRIu64 ":%" PRIu64 ": %s\n", f.file.c_str(), f.line, f.column, f.message.c_str());
+    std::cout << "\nfailures:\n";
+    for (const auto& f : suite_.failed) {
+      std::cout << "\n";
+      Render(std::cout, f);
     }
 
     if (suite_.panicked) {
-      std::printf("  panicked: %s\n", suite_.panic_message.c_str());
+      std::printf("\n  panicked: %s\n", suite_.panic_message.c_str());
     }
+
+    std::cout << "\n";
   }
 }
 
+// In kura_rt_test_suite_end():
 uint64_t kura_rt_test_suite_end() {
-  std::printf("\ntest result: %s. %" PRIu64 " passed; %" PRIu64 " failed; %" PRIu64 " skipped\n",
-              suite_.failed == 0 ? "ok" : "FAILED", suite_.passed, suite_.failed, suite_.skipped);
-  return suite_.failed;
+  suite_.suite_finish = std::chrono::high_resolution_clock::now();
+  const auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>((suite_.suite_finish - suite_.suite_start));
+  std::cout << "\nresult: ";
+  if (suite_.num_failed == 0) {
+    std::cout << rang::style::bold << rang::fg::green << "ok";
+  } else {
+    std::cout << rang::style::bold << rang::fg::red << "failed";
+  }
+  std::cout << rang::style::reset;
+  std::cout << " (" << duration << ")\n";  // added space before (duration)
+
+  std::cout << suite_.skipped << " skipped; ";
+  std::cout << suite_.passed << " passed; ";
+  std::cout << suite_.num_failed << " failed\n";
+  return suite_.num_failed;
 }
+
 void kura_rt_test_invoke(void (*test_fn)(void)) {
   if (!test_fn)
     return;

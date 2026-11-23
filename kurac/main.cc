@@ -28,6 +28,8 @@
 #include "c_import.h"
 #include "common.h"
 #include "frontend/parser.h"
+#include "frontend/syntax/parser.h"
+#include "frontend/syntax/source.h"
 #include "heap/heap.h"
 #include "kura.h"
 #include "module.h"
@@ -78,6 +80,22 @@ auto FindLibrary(const CliOptions& options, const std::string& name) -> std::str
     }
   }
   return {};
+}
+
+static inline auto Slurp(const std::string& filename) -> std::optional<std::string> {
+  std::ifstream file(filename, std::ios::in | std::ios::binary);
+  if (!file.is_open())
+    return std::nullopt;
+
+  return {std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>())};
+}
+
+static inline auto ParseTree(const std::string filename) -> std::unique_ptr<kura::syntax::SyntaxTree> {
+  const auto contents = Slurp(filename);
+  if (!contents)
+    return nullptr;
+
+  return kura::syntax::ParseText(filename, *contents);
 }
 
 void RegisterCommonArgs(argparse::ArgumentParser& cmd, CliOptions& opts) {
@@ -333,6 +351,9 @@ auto main(int argc, char** argv) -> int {
 
   // ── kurac test ────────────────────────────────────────────────────────────
   if (opts.is_test) {
+    const auto tree = ParseTree(opts.filename);  // TODO(@s0cks): double parse
+    kura_rt_set_source(&tree->GetSource());
+
     uint64_t failed = 0;
     if (!jit->RunTests(opts.filter.empty() ? nullptr : opts.filter.c_str(), opts.fail_fast, &failed, &error)) {
       std::cerr << "error: " << error << '\n';

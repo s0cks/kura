@@ -50,7 +50,7 @@ auto Document::ToPosition(const uint32_t offset) const -> Position {
   };
 }
 
-auto Document::ToRange(const syntax::Span& span) const -> Range {
+auto Document::ToRange(const Span& span) const -> Range {
   return Range{
       .start = ToPosition(span.begin),
       .end = ToPosition(span.end),

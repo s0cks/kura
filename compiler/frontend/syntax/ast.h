@@ -11,6 +11,7 @@
 #include "compiler/frontend/syntax/diagnostic.h"
 #include "compiler/frontend/syntax/source.h"
 #include "compiler/frontend/syntax/token.h"
+#include "runtime/assert_op.h"
 
 namespace kura::syntax {
 // The syntax tree is *only* syntax: it mirrors what was written, keeps a Span
@@ -316,8 +317,17 @@ struct TestDecl : Node {
 
 struct Assert : Node {
   DEFINE_NODE(Assert);
+  kura::AssertOp op = kura::AssertOp::kAssertDefault;
   Node* cond = nullptr;
   Node* message = nullptr;
+
+#define DEFINE_OP_CHECK(Name)                   \
+  inline auto IsAssert##Name() const -> bool {  \
+    return op == kura::AssertOp::kAssert##Name; \
+  }
+
+  FOR_EACH_ASSERT_OP(DEFINE_OP_CHECK)
+#undef DEFINE_OP_CHECK
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, cond);

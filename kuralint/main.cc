@@ -6,6 +6,7 @@
 #include <memory>
 #include <print>
 
+#include "frontend/span.h"
 #include "heap/heap.h"
 #include "linter.h"
 
@@ -52,24 +53,21 @@ static inline auto operator<<(std::ostream& stream, const Format& rhs) -> std::o
   return p;
 }
 
-[[nodiscard]] static inline auto ToJson(const kura::syntax::SourceFile& source, const kura::syntax::Span& span)
-    -> json_t* {
+[[nodiscard]] static inline auto ToJson(const kura::syntax::SourceFile& source, const kura::Span& span) -> json_t* {
   json_t* s = json_object();
   json_object_set(s, "start", ToJson(source.GetPosition(span.begin)));
   json_object_set(s, "end", ToJson(source.GetPosition(span.end)));
   return s;
 }
 
-[[nodiscard]] static inline auto ToJson(const kura::syntax::SourceFile& source, const kura::syntax::Label& label)
-    -> json_t* {
+[[nodiscard]] static inline auto ToJson(const kura::syntax::SourceFile& source, const kura::Label& label) -> json_t* {
   json_t* l = json_object();
   json_object_set(l, "span", ToJson(source, label.span));
   json_object_set(l, "message", json_string(label.message.c_str()));
   return l;
 }
 
-static inline auto ToJson(const kura::syntax::SourceFile& source, const std::vector<kura::syntax::Label>& labels)
-    -> json_t* {
+static inline auto ToJson(const kura::syntax::SourceFile& source, const std::vector<kura::Label>& labels) -> json_t* {
   if (labels.empty())
     return nullptr;
 

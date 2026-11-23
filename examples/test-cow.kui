@@ -1,0 +1,37 @@
+use "stdio.h"
+
+type Message = Append(Int)
+
+type State = {
+  items: Seq<Int>,
+}
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    Append(n) => { state | items += [ n ] },
+    _ => state,
+  }
+
+test "test cow" {
+  let state: State = {
+    items: [ ],
+  }
+  let new_state = update(Append(10), state)
+
+  assert(new_state.items != [ ])
+  assert(new_state.items != [ 11 ])
+  assert(new_state.items == [ 10 ])
+}
+
+test "test cow 2" {
+  let state: State = {
+    items: [ ],
+  }
+  let new_state = update(Append(10), state)
+  new_state = update(Append(11), new_state)
+
+  assert(new_state.items != [ ])
+  assert(new_state.items != [ 10 ])
+  assert(new_state.items != [ 11 ])
+  assert(new_state.items == [ 10, 11 ])
+}

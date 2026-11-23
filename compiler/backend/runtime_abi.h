@@ -1,12 +1,15 @@
 #ifndef KURA_RUNTIME_ABI_H
 #define KURA_RUNTIME_ABI_H
 
+#include <chrono>
 #include <csetjmp>
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "frontend/span.h"
+#include "frontend/syntax/source.h"
 #include "renderer/renderer_abi.h"
 #include "runtime/test_suite.h"
 
@@ -59,26 +62,50 @@ static inline constexpr auto IsVariantTag(const uint64_t tag) -> bool {
 
 auto Format(const KuraValue& value) -> std::string;
 
-struct FailedTest {
+struct TestResult {
+  enum Status {
+    kPassed,
+    kSkipped,
+    kFailed,
+  };
+
+  Status status;
+  std::string name{};
+  std::string message{};
+  uint64_t duration_ms = 0;
+  std::vector<std::string> notes{};
+  std::vector<Label> labels{};
+
+  Span span{};
+  std::string span_label{};
+  std::string help{};
   std::string file{};
   uint64_t line = 0;
   uint64_t column = 0;
-  std::string message{};
+
+  auto WithNote(const std::string rhs) -> TestResult& {
+    notes.emplace_back(std::move(rhs));
+    return *this;
+  }
 };
 
 struct TestSuiteState {
-  uint64_t total = 0;
+  std::chrono::high_resolution_clock::time_point suite_start{};
+  std::chrono::high_resolution_clock::time_point suite_finish{};
   uint64_t passed = 0;
-  uint64_t failed = 0;
   uint64_t skipped = 0;
-  std::string name{};
-  kura::TestFlags flags = 0;
-  std::vector<FailedTest> failures{};
+  uint64_t num_failed = 0;
+  std::vector<TestResult> failed{};
+
   bool global_fail_fast = false;
   bool in_test = false;
   std::jmp_buf panic_jmp{};
   bool panicked = false;
   std::string panic_message{};
+  std::string name{};
+  kura::TestFlags flags = 0;
+  std::chrono::high_resolution_clock::time_point start{};
+  std::chrono::high_resolution_clock::time_point finish{};
 };
 
 extern TestSuiteState suite_;
@@ -168,6 +195,7 @@ auto MakeString(std::string_view value) -> KuraValue;
 // clang-format off
 #define KURA_RUNTIME_FUNCTIONS(V) \
   V(kura_rt_panic)                \
+  V(kura_rt_set_source)           \
   V(kura_rt_expect_tag)           \
   V(kura_rt_register_variant)     \
   V(kura_rt_string_new)           \
@@ -271,6 +299,8 @@ int64_t kura_rt_len(void* object);
 void kura_rt_store_index(void* object, int64_t index, uint64_t tag, uint64_t bits);
 void kura_rt_destroy(void* ptr);
 void* kura_rt_record_clone(void* src_ptr);
+
+void kura_rt_set_source(const kura::syntax::SourceFile* source);
 
 // ── rendering ──────────────────────────────────────────────────────────────
 // The draw calls compiled code makes. They forward to the renderer the host gave this thread (see

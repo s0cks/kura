@@ -35,10 +35,10 @@ class BuildError : public std::runtime_error {
  private:
   size_t line_;
   size_t column_;
-  syntax::Span span_;
+  Span span_;
 
  public:
-  BuildError(const size_t line, const size_t column, const std::string& message, const syntax::Span& span = {}) :
+  BuildError(const size_t line, const size_t column, const std::string& message, const Span& span = {}) :
     std::runtime_error(message),
     line_(line),
     column_(column),
@@ -56,7 +56,7 @@ class BuildError : public std::runtime_error {
   }
 
   // Where in the source the problem is, for tools that want to underline it.
-  auto GetSpan() const -> const syntax::Span& {
+  auto GetSpan() const -> const Span& {
     return span_;
   }
 
@@ -164,11 +164,11 @@ class ExprBuilder {
   uint32_t active_test_flags_ = 0;
   uint32_t num_tests_ = 0;
 
-  [[noreturn]] void Error(const syntax::Span& where, const std::string& message) const;
+  [[noreturn]] void Error(const Span& where, const std::string& message) const;
   [[noreturn]] void Error(const syntax::Node* where, const std::string& message) const;
 
   // An Int (`10`) or a Float (`10.0`).
-  auto NumberLiteral(const syntax::Span& where, const std::string& text, const bool negate) const -> Object*;
+  auto NumberLiteral(const Span& where, const std::string& text, const bool negate) const -> Object*;
   // Syntax that parses (it is part of v1) but that the Expr IR cannot represent yet.
   // Nothing in the core language is left in this state; it is only used for the
   // remaining unspecified corners (see the callers).
@@ -222,8 +222,8 @@ class ExprBuilder {
   // `value |> callee(args)`: the call with the value in front of the arguments
   auto PipeInto(Expr* value, const syntax::Node* callee, const std::vector<syntax::Node*>& args) -> Expr*;
   // The stage of a pipe or of a composition applied to a value: `add(_, 1)`, `add(1)`, or a function.
-  auto ApplyStage(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
-  auto BuildStageWith(Expr* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
+  auto ApplyStage(Expr* value, const syntax::Node* stage, const Span& where) -> Expr*;
+  auto BuildStageWith(Expr* value, const syntax::Node* stage, const Span& where) -> Expr*;
   // `add(_, 10)` is a function of the missing arguments; `f >> g` and `f << g` are functions of one
   auto BuildPartial(const syntax::Call* call) -> Expr*;
   auto BuildCompose(const syntax::Binary* binary) -> Expr*;
@@ -247,7 +247,7 @@ class ExprBuilder {
                         const std::vector<const syntax::UpdateEntry*>& entries) -> Expr*;
   // `f <| x`, and the shared part of `x |> stage` when the stage has a `_`
   auto BuildPipeBack(const syntax::PipeBack* back) -> Expr*;
-  auto BuildPipedStage(const syntax::Node* value, const syntax::Node* stage, const syntax::Span& where) -> Expr*;
+  auto BuildPipedStage(const syntax::Node* value, const syntax::Node* stage, const Span& where) -> Expr*;
   void BuildStaticAssert(const syntax::StaticAssert* assertion);
 
   // A value the compiler can compute: what `static-assert` conditions are made of.
@@ -282,8 +282,8 @@ class ExprBuilder {
 
   // `let x = ...` / `x = ...`. Redefinition inside the same block reuses the
   // local; redefinition from a nested block shadows it for that block only.
-  auto DeclareLocal(const syntax::Span& where, const std::string& name) -> LocalVariable*;
-  auto CreateLocal(const syntax::Span& where, const std::string& name) -> LocalVariable*;
+  auto DeclareLocal(const Span& where, const std::string& name) -> LocalVariable*;
+  auto CreateLocal(const Span& where, const std::string& name) -> LocalVariable*;
 
   // The text of a node, as it was written.
   auto TextOf(const syntax::Node* node) const -> std::string {

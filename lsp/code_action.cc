@@ -34,11 +34,11 @@ void CodeAction::operator>>(json_t* doc) const {
 }
 
 namespace {
-auto Overlaps(const syntax::Span& span, const syntax::Span& selection) -> bool {
+auto Overlaps(const Span& span, const Span& selection) -> bool {
   return span.Touches(selection.begin) || span.Touches(selection.end) || selection.Touches(span.begin);
 }
 
-static inline void AddElse(const Document& doc, const syntax::Diagnostic& diag, const syntax::Span& selection,
+static inline void AddElse(const Document& doc, const syntax::Diagnostic& diag, const Span& selection,
                            std::vector<CodeAction>& actions) {
   const auto* root = doc.GetRoot();
   if (!root)
@@ -66,7 +66,7 @@ static inline void AddElse(const Document& doc, const syntax::Diagnostic& diag, 
     return;
   }
 
-  if (!Overlaps(syntax::Span(expr->span.begin, diag.span.end), selection)) {
+  if (!Overlaps(Span(expr->span.begin, diag.span.end), selection)) {
     log::info("no overlaps");
     return;
   }
@@ -83,7 +83,7 @@ static inline void AddElse(const Document& doc, const syntax::Diagnostic& diag, 
 }
 
 // `fn name => ...` -> `fn name() => ...`
-void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, const syntax::Span& selection,
+void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, const Span& selection,
                            std::vector<CodeAction>& actions) {
   const auto* root = doc.GetRoot();
   if (!root)
@@ -101,7 +101,7 @@ void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, 
     return;
 
   // from `fn` (or its directives) to the token that should have been `(`
-  if (!Overlaps(syntax::Span(fn->span.begin, diag.span.end), selection))
+  if (!Overlaps(Span(fn->span.begin, diag.span.end), selection))
     return;
 
   // `fn name` gets the parentheses right after the name; with no name at all
@@ -112,7 +112,7 @@ void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, 
       .isPreferred = true,
       .uri = doc.GetUri(),
       .edits = {TextEdit{
-          .range = doc.ToRange(syntax::Span(at, at)),
+          .range = doc.ToRange(Span(at, at)),
           .newText = "()",
       }},
   });
@@ -124,7 +124,7 @@ auto GetCodeActions(const Document& doc, const Range& range) -> std::vector<Code
   if (!doc.IsTreeCurrent())
     return actions;
 
-  const auto selection = syntax::Span(doc.ToOffset(range.start), doc.ToOffset(range.end));
+  const auto selection = Span(doc.ToOffset(range.start), doc.ToOffset(range.end));
   for (const auto& diag : doc.GetTree()->GetDiagnostics()) {
     if (diag.code == static_cast<uint64_t>(syntax::DiagnosticCode::kFnWithoutParens))
       AddEmptyParameterList(doc, diag, selection, actions);

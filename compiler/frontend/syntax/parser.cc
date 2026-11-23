@@ -6,6 +6,7 @@
 #include "compiler/frontend/syntax/lexer.h"
 #include "frontend/syntax/ast.h"
 #include "frontend/syntax/diagnostic.h"
+#include "runtime/assert_op.h"
 
 namespace kura::syntax {
 namespace {
@@ -1570,12 +1571,14 @@ class TreeBuilder {
               "move this into a `test \"...\" { ... }` block, or use `static-assert(...)` for compile-time checks");
     }
     auto* node = New<Assert>(begin);
+
     const auto open = Peek();
     if (!Expect(K::kLParen)) {
       node->cond = NewMissing();
       node->span = SpanFrom(begin);
       return node;
     }
+
     node->cond = ParseExpression();
     if (Accept(K::kComma) && !Is(K::kRParen)) {
       node->message = ParseExpression();
@@ -1584,6 +1587,7 @@ class TreeBuilder {
                "not a string");
       }
     }
+
     ExpectClosing(K::kRParen, open.span);
     node->span = SpanFrom(begin);
     return node;

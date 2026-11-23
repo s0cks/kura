@@ -9,12 +9,14 @@ if(KURA_ADD_TRACING_SUPPORT)
 endif()
 
 target_link_libraries(kura-compiler
-  PUBLIC kurart)
+  PUBLIC kurart
+         kura-syntax)
 if(KURA_ADD_TRACING_SUPPORT)
   target_link_libraries(kura-compiler
       PUBLIC Tracy::TracyClient)
 endif()
 
-add_library(kura-heap-abi-check OBJECT
-  abi_check.cc)
-add_dependencies(kura-heap kura-heap-abi-check)
+#TODO(@s0cks): this is pretty stupid
+# add_library(kura-heap-abi-check OBJECT
+#   abi_check.cc)
+# add_dependencies(kura-heap kura-heap-abi-check)

@@ -71,7 +71,7 @@ class Document {
   // LSP columns are UTF-16 code units; the source is indexed by byte.
   auto ToOffset(const Position& rhs) const -> uint32_t;
   auto ToPosition(uint32_t offset) const -> Position;
-  auto ToRange(const syntax::Span& span) const -> Range;
+  auto ToRange(const Span& span) const -> Range;
 
   auto GetRoot() const -> const syntax::Module* {
     if (!tree_)

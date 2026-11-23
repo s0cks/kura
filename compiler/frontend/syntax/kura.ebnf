@@ -1,0 +1,373 @@
+(* ============================================================================
+   Kura -- master grammar (v1)
+
+   Tracks:   github.com/s0cks/kura, branch main
+   As of:    186db30  "feat: add unit testing syntax"  (2026-11-22)
+   Derived:  compiler/frontend/syntax/GRAMMAR.md, token.h, and the parser.cc /
+             expr_builder.cc changes in 186db30.
+
+   The hand-written parser is the source of truth. If this file and the parser
+   (or tests/syntax, tests/grammar) ever disagree, the parser wins -- fix this file.
+
+   Notation (ISO 14977 flavour, concatenation by juxtaposition)
+     =            definition              ;       end of rule
+     |            alternative             ( ... ) grouping
+     [ x ]        optional                { x }   zero or more   (one or more: x { x })
+     'tok'        a terminal / token      ? ... ? a character class or description
+     (* ... *)    comment
+   Rules the grammar cannot express are written as comments under the rule they
+   affect and collected in section 7 (Context rules).
+
+   There are NO statement terminators:  let a = 1 let b = 2  is two bindings.
+   ============================================================================ *)
+
+
+(* ============================================================================
+   1. LEXICAL
+   ============================================================================ *)
+
+(* Whitespace and comments separate tokens and mean nothing else. *)
+whitespace    = ? space, tab, CR or LF ? ;
+comment       = '//' { ? any character except LF ? } ;
+
+lower         = ? a-z ? ;
+upper         = ? A-Z ? ;
+digit         = ? 0-9 ? ;
+word-char     = lower | upper | digit | '_' ;
+
+(* The lexer takes the longest match; on a tie, keywords/literals beat `name`. *)
+
+(* kebab-case: `a-b` is ONE name. `_` alone is the wildcard; `_x` is a name. *)
+name          = ( lower | '_' ) { word-char } { '-' segment } ;
+segment       = word-char { word-char } ;
+                (* a segment needs at least one non-digit: `x-1` is `x` minus `1`
+                   (diagnostic: "did you mean `x - 1`?"), but `pos-2d` is one name *)
+
+Name          = upper { word-char } ;                   (* types and variants; no hyphens *)
+raw-name      = '`' raw-char { raw-char } '`' ;         (* C names that clash with keywords *)
+raw-char      = ? any character except '`', CR, LF ? ;
+
+directive-tok = '@' lower { lower | digit } { '-' ( lower | digit ) { lower | digit } } ;
+
+number        = digit { digit } [ '.' digit { digit } ] ;   (* `0..10` is `0` `..` `10` *)
+px-lit        = number 'px' ;
+pct-lit       = number '%' ;
+fr-lit        = number 'fr' ;                           (* the unit suffix always wins *)
+unit          = px-lit | pct-lit | fr-lit ;
+
+color         = 'black' | 'white' | 'red' | 'green' | 'blue' | 'yellow'
+              | 'cyan' | 'magenta' | 'gray' | 'orange' | 'purple' | 'transparent' ;
+
+string        = '"' { text | escape | interpolation } '"' ;      (* one line only *)
+text          = ? any character except '"', '\', '{', CR, LF ? ; (* a lone '}' is plain text *)
+escape        = '\' ( 'n' | 't' | '"' | '\' | '{' | '}' ) ;      (* `\{` `\}` are literal braces *)
+interpolation = '{' { interp-char | string | interpolation } '}' ;
+interp-char   = ? any character except '{', '}', '"', CR, LF ? ;
+                (* the text between the braces is parsed as exactly ONE expression, on
+                   its own; tokens keep their file offsets. `{}`, `{ a b }` and `{a:.2}`
+                   (format specifiers) are errors *)
+
+(* Reserved words. `test` and `assert` are new in 186db30: `fn test()` is no
+   longer legal (they remain usable as a member name: `x.test`). *)
+keyword       = 'let' | 'fn' | 'type' | 'if' | 'else' | 'match' | 'for' | 'in' | 'fold'
+              | 'use' | 'as' | 'extern' | 'when' | 'is' | 'static-assert'
+              | 'true' | 'false' | 'None'
+              | 'test' | 'assert' ;
+
+(* `set` is a keyword only where a set rule can start (the name `set` followed by
+   another name); anywhere else it is an ordinary name: `fn set(...)`, `set(1)`. *)
+
+wildcard      = '_' ;
+
+(* Punctuation / operators, longest match. *)
+operator      = '|>' | '<|' | '||' | '&&' | '??' | '==' | '!=' | '<=' | '>=' | '<' | '>'
+              | '!' | '+' | '-' | '*' | '/' | '%' | '=>' | '=' | '...' | '..' | '..='
+              | '.' | '?.' | ',' | ':' | '?' | '#' | '|' | '(' | ')' | '{' | '}' | '[' | ']'
+              | '+=' | '-=' | '*=' | '/=' | '%=' ;
+
+(* '-' is BIN_MINUS when whitespace is on BOTH sides (`a - b`), otherwise unary MINUS.
+   '>>' and '<<' are TWO tokens each ('>' '>' / '<' '<', nothing between them) so that
+   `Seq<Seq<Px>>` closes both lists; where an operator is expected the parser glues
+   them back into the composition operators. *)
+
+
+(* ============================================================================
+   2. DECLARATIONS
+   ============================================================================ *)
+
+source        = { item } ;
+
+item          = { directive } ( typeDecl | fnDecl | testDecl | externDecl | useDecl | binding )
+              | setRule                                 (* no directives on set rules *)
+              | staticAssert ;                          (* ...or on static-assert *)
+                (* the top level has no bare expressions *)
+
+binding       = 'let' ( name | recordPattern ) [ ':' type ] '=' expression
+              | name '=' expression ;                   (* redefinition *)
+                (* destructuring: let { message, status: code, ...rest } = r *)
+
+typeDecl      = 'type' Name [ '<' Name { ',' Name } '>' ] '=' type ;
+
+fnDecl        = 'fn' name '(' [ params ] ')' [ ':' type ] '=>' { setRule } expression ;
+                (* parentheses are required; `set` rules before the body need no braces;
+                   a `let` in a body needs braces:  => { let a = 1 ... } *)
+
+externDecl    = 'extern' [ string ] 'fn' cName '(' [ externParams ] ')' ':' type
+                [ '=>' expression ] ;
+                (* an interpolated string cannot be the symbol *)
+
+useDecl       = 'use' string [ 'as' ( name | Name ) ] ;
+                (* an interpolated string cannot be the header *)
+
+setRule       = 'set' name '(' [ uiArgs ] ')' ;         (* set button(fill: black) *)
+
+staticAssert  = 'static-assert' '(' expression [ ',' string ] [ ',' ] ')' ;
+
+params        = param { ',' param } [ ',' ] ;
+param         = name ':' type ;
+externParams  = params [ ',' '...' ] [ ',' ]
+              | '...' ;
+cName         = name | Name | raw-name ;
+
+directive     = directive-tok [ '(' [ uiArgs ] ')' ] ;  (* directive args are never puns *)
+
+
+(* ============================================================================
+   3. UNIT TESTS                                   (new in 186db30)
+   ============================================================================ *)
+
+testDecl      = 'test' string testBody ;
+                (* the name is a plain string: an interpolated name is an error.
+                   A missing name is E0035 "test is missing name". *)
+
+testBody      = '{' { binding | assertStmt | staticAssert | setRule | expression } '}' ;
+                (* same shape as `block`, plus `assert`. An expression, if present, is
+                   last. `set` rules currently still parse here: the "disallow set
+                   rules in a test" check in the parser is a TODO. *)
+
+assertStmt    = 'assert' '(' expression [ ',' [ string ] ] ')' ;
+                (* assert(cond)    assert(cond, "message")    assert(cond,)
+                   - the message is a string, plain or with interpolation; any other
+                     expression parses but reports E0036 "malformed 'assert'"
+                   - no trailing comma after the message (unlike static-assert)
+                   - default message: "assertion failed"
+                   - only allowed directly in a test body: E0037 "'assert' outside
+                     'test' block" anywhere else; see section 7 *)
+
+(* Directives on a test (checked by ExprBuilder, which rejects any other name with
+   "unknown test directive @name"):
+       @fail-fast    abort this test on its first failing assert
+       @should-fail  the test passes only if it fails or panics
+       @skip         reported as SKIPPED, body not run
+   Example:
+       test "test size" {
+         assert(size(0) == 1)
+         assert(size(6) == 2, "expected size(6) to equal 2")
+       }
+
+       @should-fail
+       test "test failure" { assert(1 == 0) }
+
+   Tests are only built into the module when compiled for `kurac test`; in every
+   other mode they are parsed and dropped. `kurac test <file> [--filter s] [--fail-fast]`. *)
+
+
+(* ============================================================================
+   4. TYPES
+   ============================================================================ *)
+
+type          = typeMember { '|' typeMember } ;
+
+typeMember    = Name '(' type ')'                        (* variant with a payload *)
+              | Name [ typeArgs ]                        (* named type *)
+              | ( name | Name ) '.' cName [ typeArgs ]   (* from a `use`d header, or `c.int` *)
+              | 'None'
+              | '{' [ field { ',' field } [ ',' ] ] '}'  (* record type *)
+              | '(' [ type { ',' type } [ ',' ] ] ')' '=>' type ;   (* function type *)
+
+field         = name [ '?' ] ':' type ;
+typeArgs      = '<' type { ',' type } '>' ;
+
+
+(* ============================================================================
+   5. EXPRESSIONS
+   ============================================================================ *)
+
+(* Precedence, loosest to tightest:
+     0  |>  <|                   pipes          (|> left, <| right; can't be mixed unparenthesized)
+     1  >>  <<                   composition    left
+     2  a..b  a..=b  a..  ..b  ..=b   ranges    none
+     3  ??                                      right
+     4  ||                                      left
+     5  &&                                      left
+     6  x is pattern                            left
+     7  ==  !=                                  left
+     8  <  <=  >  >=                            left
+     9  +  BIN_MINUS                            left
+    10  *  /  %                                 left
+    11  prefix  -  !
+    12  postfix  .m  ?.m  (args)  ?.(args)  [i]  ?.[i]   left                     *)
+
+expression    = operation { pipe } ;                     (* pipes of ONE direction only *)
+pipe          = '|>' stage | '<|' operation ;
+stage         = operation ;
+operation     = compose ;
+compose       = range { ( '>>' | '<<' ) range } ;
+range         = coalesce [ ( '..' | '..=' ) [ coalesce ] ]
+              | ( '..' | '..=' ) [ coalesce ] ;
+                (* a range's end is omitted when what follows can't start an expression *)
+coalesce      = or [ '??' coalesce ] ;
+or            = and { '||' and } ;
+and           = is { '&&' is } ;
+is            = equality { 'is' pattern } ;
+equality      = comparison { ( '==' | '!=' ) comparison } ;
+comparison    = additive { ( '<' | '<=' | '>' | '>=' ) additive } ;
+additive      = multiplicative { ( '+' | BIN_MINUS ) multiplicative } ;
+multiplicative= unary { ( '*' | '/' | '%' ) unary } ;
+unary         = { '-' | '!' } postfix ;
+postfix       = primary { '.' member | '?.' member | args | '?.' args | index | '?.' index } ;
+args          = '(' [ arg { ',' arg } [ ',' ] ] ')' ;
+arg           = '_' | expression ;                       (* whole-argument `_` = placeholder *)
+index         = '[' expression ']' ;                     (* the index may be a range: a slice *)
+member        = name | Name | raw-name | keyword | color ;
+
+(* Pipes and placeholders.
+   After `|>` the stage is an `operation` and means one of:
+     - it contains a `_`:  10 |> add(_, 10),  x |> _ + 1.  Every `_` is the piped value
+       (computed once); a `_` that is a whole argument of an INNER call counts too:
+       x |> f(g(_)).
+     - it has no `_` and is a call whose callee is a name, a Name, a `name.member`
+       chain, or a parenthesized expression: `x |> f(y)` is `f(x, y)`,
+       `payload |> Click()` is `Click(payload)`. Anything else (`x |> f`,
+       `x |> 1 + 2`) is an error.
+   Outside a pipe stage `_` is only legal as a whole argument of a call, where it
+   makes a partial application: `add(_, 10)`. `f <| x` is `f(x)`; `f <| g <| x` is
+   `f(g(x))`. Composition operands are stages: `add(10) >> mul(2)` is
+   `(x) => mul(add(x, 10), 2)`. *)
+
+primary       = number | string | 'true' | 'false' | 'None' | unit | color
+              | name | Name | '_'                        (* '_' only where the rules above allow *)
+              | seq | comprehension
+              | record | recordUpdate | block
+              | ifExpr | whenExpr | matchExpr | forExpr
+              | lambda
+              | '(' expression ')'
+              | uiElement ;
+
+lambda        = '(' [ name { ',' name } [ ',' ] ] ')' '=>' expression ;
+seq           = '[' [ expression { ',' expression } [ ',' ] ] ']' ;
+comprehension = '[' expression 'for' forHead ']' ;       (* no `fold` *)
+
+record        = '{' [ recordEntry { ',' recordEntry } [ ',' ] ] '}' ;
+recordEntry   = name ':' expression
+              | name                                     (* pun: { width, } is { width: width } *)
+              | '...' expression ;                       (* spread *)
+
+recordUpdate  = '{' path '|' updateEntry { ',' updateEntry } [ ',' ] '}' ;
+path          = name { '.' member } ;
+updateEntry   = path ( ':' | '+=' | '-=' | '*=' | '/=' | '%=' ) expression ;
+                (* `x += v` is `x: <record>.x + v`; nested paths change the field in place;
+                   a field may be updated once per update; at least one entry *)
+
+block         = '{' { binding | setRule | staticAssert | expression } '}' ;
+                (* an expression, if present, is last *)
+
+ifExpr        = 'if' condition block 'else' ( ifExpr | block ) ;    (* `else` required *)
+whenExpr      = 'when' condition block ;                 (* None when the condition is false *)
+matchExpr     = 'match' condition '{' arm { [ ',' ] arm } [ ',' ] '}' ;   (* >= 1 arm *)
+arm           = pattern [ 'if' expression ] '=>' expression ;
+forExpr       = 'for' forHead [ 'fold' name '=' expression ] '=>' expression ;
+forHead       = ( name | '_' ) [ ',' pattern ] 'in' expression [ 'if' expression ] ;
+condition     = expression ;                             (* see the `is` rule in section 7 *)
+
+(* Loop bindings follow Go:
+     for i in xs        single name = the INDEX
+     for i, x in xs     index and element
+     for _, x in xs     element only          for i, _ in xs   index only
+   The element may be a pattern: for _, { x, y } in points. Three names is an error. *)
+
+(* `{` starts
+     - a RECORD        when followed by `}`, `...`, `name :` or `name ,`
+     - a RECORD UPDATE when followed by `name { '.' member } |`
+     - otherwise a BLOCK.
+   So `{ x }` is a block returning x, and `{ x, }` is a one-entry punned record. *)
+
+
+(* ============================================================================
+   6. PATTERNS, STRINGS, UI ELEMENTS
+   ============================================================================ *)
+
+pattern       = '_' | name | 'None'
+              | variantPattern | recordPattern | rangePattern | literal ;
+variantPattern= Name [ '(' pattern ')' ] ;
+recordPattern = [ Name ] '{' [ fieldPattern { ',' fieldPattern } [ ',' ] ] '}' ;
+fieldPattern  = name [ ':' pattern ]                     (* bare name binds its own name *)
+              | '...' [ name ] ;                         (* rest of the fields; last *)
+literal       = [ '-' ] ( number | unit | color ) | string | 'true' | 'false' ;
+                (* strings with an interpolation aren't patterns *)
+rangePattern  = rangeEnd ( '..' | '..=' ) [ rangeEnd ]
+              | ( '..' | '..=' ) rangeEnd ;
+rangeEnd      = [ '-' ] ( number | unit | color ) ;
+
+(* Strings. A string with no `{` is plain; otherwise it is a template: texts and
+   expressions in alternation. "x is {pos.x}" is "x is ", pos.x, "". Each
+   interpolation holds exactly one expression, which may itself contain strings. *)
+
+uiElement     = { directive } '#' name [ '(' [ elementArgs ] ')' ] [ '{' { uiChild } '}' ] ;
+elementArgs   = uiId [ ',' uiArgs ] | uiArgs ;
+uiId          = ':' name ;                               (* #button(:my-button, fill: red); first arg *)
+uiArgs        = uiArg { ',' uiArg } [ ',' ] ;
+uiArg         = name ':' expression
+              | name                                     (* a pun when a comma follows: #button(width,) *)
+              | '...' expression                         (* record -> properties; later entry wins *)
+              | expression ;                             (* positional; must come last *)
+uiChild       = uiElement | binding | setRule
+              | string                                   (* a text node, #text("...") *)
+              | unit                                     (* spacer: 1fr, 10px, 50% *)
+              | whenExpr | ifExpr | forExpr | matchExpr
+              | expression ;                             (* starting with a name: a call, helper(1, 2) *)
+                (* a name that is the LAST argument, with no comma after it, is positional:
+                   #text(label). Adjacent strings stay separate text nodes. *)
+
+
+(* ============================================================================
+   7. CONTEXT RULES  (decided by the parser from surrounding tokens / lines)
+   ============================================================================ *)
+(*
+   x-1             lexer ends a name before a hyphen followed only by digits, so it is a
+                   subtraction; the diagnostic suggests `x - 1`.
+   `[` / `..`      at the START of a line begin something new (postfix `[`, infix `..`).
+   lambda          `(...)` followed by `=>` is a lambda, EXCEPT in a guard
+                   (`pattern if guard =>`, `for ... if guard =>`) where that `=>` belongs
+                   to the arm or loop.
+   `is`            in the condition of `if`, `when` and `match`, `Name {` ends the pattern:
+                   `if x is Point { 1 } else { 2 }` tests `x is Point`. Parenthesize to use
+                   a record pattern there: `if (x is Point { x, y }) { ... }`.
+   `_`             outside a pipe stage must be a whole argument of a call.
+   pipes           `|>` and `<|` cannot be mixed without parentheses.
+   element args    positional arguments come last: #text(fill: red, "hi").
+   record update   lists at least one field.
+   block contents  only let bindings, set rules, static-asserts and ONE final expression
+                   (plus `assert` inside a test body).
+   assert          legal only directly in a `test` body. The parser reports E0037 for any
+                   block parsed without allow_assert (as of 186db30 that is every block
+                   except a test's own body, so an `assert` nested in an if/for/match
+                   body inside a test appears to be rejected too); the ExprBuilder also
+                   errors if an assert is built outside a test.
+   test            `test` / `assert` are reserved words; a test name cannot be interpolated.
+*)
+
+
+(* ============================================================================
+   8. NOT IN THE GRAMMAR YET
+   ============================================================================ *)
+(*
+   bench       `kurac bench` and Jit::RunBenchmarks exist, but there is no `bench` keyword
+               in token.h and no parser rule. Add a benchBlock here when the syntax lands.
+   pub         `pub` (what a Kura-file import shares) is not in the keyword list; `use`
+               still takes only a string header.
+   Parsed but not yet built into Expr IR (ExprBuilder reports "valid v1 syntax but the
+   Expr IR has no node for it yet"): ranges outside patterns, slices, `...rest` and type
+   names in a destructuring `let`, `...rest` in a record pattern, spacer children.
+*)
+

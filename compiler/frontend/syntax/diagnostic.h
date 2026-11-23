@@ -78,12 +78,6 @@ auto ToString(DiagnosticCode code) -> std::string;
 auto GetSummary(DiagnosticCode code) -> std::string_view;
 auto ToString(Severity severity) -> std::string_view;
 
-// A secondary span: "this `{` is never closed".
-struct Label {
-  Span span;
-  std::string message;
-};
-
 struct Diagnostic {
   Severity severity = Severity::kError;
   uint64_t code = 0;
