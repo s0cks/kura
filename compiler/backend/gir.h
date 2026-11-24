@@ -558,11 +558,48 @@ class DrawLineInstr : public TemplateGraphicsInstr<2> {
   static const auto kBoundsPos = 1;
 
  public:
-  DrawLineInstr(Value* bounds, Value* color) {
+  enum Direction {
+    kHorizontal,
+    kVertical,
+  };
+
+  friend auto operator<<(std::ostream& stream, const Direction& rhs) -> std::ostream& {
+    switch (rhs) {
+      case kHorizontal:
+        return stream << "horizontal";
+      case kVertical:
+        return stream << "vertical";
+    }
+  }
+
+  static auto ParseDirection(String* rhs) -> Direction;
+
+ private:
+  Direction direction_;
+
+ public:
+  DrawLineInstr(const Direction direction, Value* bounds, Value* color) :
+    direction_(direction) {
     SetBounds(bounds);
     SetColor(color);
   }
   ~DrawLineInstr() override = default;
+
+  auto GetDirection() const -> Direction {
+    return direction_;
+  }
+
+  void SetDirection(const Direction rhs) {
+    direction_ = rhs;
+  }
+
+  inline auto IsHorizontal() const -> bool {
+    return direction_ == kHorizontal;
+  }
+
+  inline auto IsVertical() const -> bool {
+    return direction_ == kVertical;
+  }
 
   inline auto GetBounds() const -> Value* {
     return GetInputAt(kBoundsPos);
@@ -583,8 +620,16 @@ class DrawLineInstr : public TemplateGraphicsInstr<2> {
   DECLARE_INSTRUCTION_TYPE(DrawLine);
 
  public:
-  static inline auto New(Value* bounds, Value* color) -> DrawLineInstr* {
-    return new DrawLineInstr(bounds, color);
+  static inline auto New(const Direction dir, Value* bounds, Value* color) -> DrawLineInstr* {
+    return new DrawLineInstr(dir, bounds, color);
+  }
+
+  static inline auto NewHorizontal(Value* bounds, Value* color) -> DrawLineInstr* {
+    return New(kHorizontal, bounds, color);
+  }
+
+  static inline auto NewVertical(Value* bounds, Value* color) -> DrawLineInstr* {
+    return New(kVertical, bounds, color);
   }
 };
 

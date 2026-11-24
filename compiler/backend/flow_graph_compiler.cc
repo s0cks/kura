@@ -17,8 +17,12 @@ auto FlowGraphCompiler::Compile(Module* m, ModuleGraph* graphs, std::vector<std:
   if (!graphs || !TypeAnalysis::Run(m, graphs, &errors) || !PurityAnalysis::Run(m, graphs, &errors))
     return false;
 
-  for (FlowGraph* graph : graphs->GetGraphs())
+  for (FlowGraph* graph : graphs->GetGraphs()) {
+    if (graph->SimplifyCFG())
+      graph->RebuildCFG();
+    graph->EliminateDeadCode();
     graph->OptimizeCOWUpdates();
+  }
 
   EscapeAnalysis::Run(graphs);
 

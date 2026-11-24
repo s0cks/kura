@@ -146,6 +146,7 @@ class Generator {
     std::unordered_map<EntryInstr*, llvm::BasicBlock*> blocks{};
     std::unordered_map<EntryInstr*, llvm::BasicBlock*> ends{};
     std::vector<std::pair<PhiInstr*, llvm::PHINode*>> phis{};
+    std::unordered_map<Definition*, uint32_t> use_counts{};
   };
 
   llvm::LLVMContext& ctx_;
@@ -346,6 +347,16 @@ class Generator {
     return llvm::PoisonValue::get(Lower(to));
   }
 
+  static inline auto IsCold(const std::string_view rhs) -> bool {
+    return rhs == "kura_rt_destroy" || rhs == "kura_rt_panic" || rhs == "kura_rt_ffi_overflow" ||
+           rhs == "kura_rt_ffi_error" || rhs == "kura_rt_test_fail";
+  }
+
+  static inline auto IsReadOnly(const std::string_view rhs) -> bool {
+    return rhs == "kura_rt_len" || rhs == "kura_rt_string_cmp" || rhs == "kura_rt_record_count" ||
+           rhs == "kura_rt_seq_get_ptr" || "kura_rt_seq_get_bits";
+  }
+
   // ── runtime calls ────────────────────────────────────────────────────────
   // A tagged argument is passed as its two words.
   auto CallRt(const char* name, llvm::Type* ret, const std::vector<llvm::Value*>& args) -> llvm::Value* {
@@ -362,8 +373,33 @@ class Generator {
         types.push_back(arg->getType());
       }
     }
-    const auto callee = module_->getOrInsertFunction(name, llvm::FunctionType::get(ret, types, false));
+    auto callee = module_->getOrInsertFunction(name, llvm::FunctionType::get(ret, types, false));
+    if (auto* fn = llvm::dyn_cast<llvm::Function>(callee.getCallee())) {
+      fn->setDoesNotThrow();
+      fn->setWillReturn();
+      const std::string_view sv(name);
+      if (IsCold(sv)) {
+        fn->addFnAttr(llvm::Attribute::Cold);
+      } else if (IsReadOnly(sv)) {
+        fn->setOnlyReadsMemory();
+      }
+    }
     return b_.CreateCall(callee, flat);
+  }
+
+  static auto StaticRecordFieldValueOffset(CompileType* type, std::string_view field_name) -> std::optional<uint64_t> {
+    if (!type || !type->IsRecord())
+      return std::nullopt;
+    const auto& fields = type->GetFields();
+    for (size_t idx = 0; idx < fields.size(); idx++) {
+      if (fields[idx].optional)
+        return std::nullopt;  // an earlier optional field might be absent at runtime
+      if (fields[idx].name == field_name) {
+        // HeapObject (8) + count/capacity (8) + idx * sizeof(Field) (32) + offsetof(Field, value) (16)
+        return 16 + idx * 32 + 16;
+      }
+    }
+    return std::nullopt;
   }
 
   // A block of the function's stack as big as a heap object with `payload` bytes after its header. It is made at the
@@ -394,7 +430,10 @@ class Generator {
       strings_.push_back({value, global});
       it = string_index_.emplace(value, global).first;
     }
-    return b_.CreateLoad(ptr_ty_, it->second);
+
+    auto* load = b_.CreateLoad(ptr_ty_, it->second);
+    load->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(ctx_, {}));
+    return load;
   }
 
   // A pointer to the object in `value`, which holds a record, seq or node
@@ -544,14 +583,33 @@ class Generator {
     return result;
   }
 
-  void EmitRecordUpdates(llvm::Value* target_record, const std::vector<UpdateRecordInstr::Entry>& entries) {
+  void EmitRecordUpdates(llvm::Value* target_record, CompileType* base_type,
+                         const std::vector<UpdateRecordInstr::Entry>& entries) {
     llvm::Function* fn = b_.GetInsertBlock()->getParent();
 
     for (const auto& entry : entries) {
       const std::string name(entry.property->GetPropertyName()->GetData());
       const uint64_t hash = rt::HashName(name);
       llvm::Value* packed_val = As(entry.value, CompileType::Any());
+      CompileType* val_type = Type(entry.value);
+      const bool needs_release = !val_type || val_type->IsAny() || val_type->IsString() || val_type->IsSeq() ||
+                                 val_type->IsRecord() || val_type->IsVariant() || val_type->IsFunction() ||
+                                 val_type->IsNode();
 
+      // Fast path: static slot offset known at compile time -> 0 loops, 0 branches!
+      if (const auto offset = StaticRecordFieldValueOffset(base_type, name)) {
+        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, target_record, *offset, name + ".ptr");
+        if (needs_release) {
+          llvm::Value* old_val = b_.CreateLoad(value_ty_, field_ptr, "rec.old.val");
+          WithTaggedHeapPtr(old_val, [&](llvm::Value* ptr) {
+            EmitReleasePtr(ptr);
+          });
+        }
+        b_.CreateStore(packed_val, field_ptr);
+        continue;
+      }
+
+      // Fallback for records with optional fields
       llvm::Value* field_ptr = EmitRecordFieldLookup(target_record, hash);
       auto* store_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.store", fn);
       auto* fallback_bb = llvm::BasicBlock::Create(ctx_, "rec.upd.set", fn);
@@ -560,7 +618,15 @@ class Generator {
       b_.CreateCondBr(b_.CreateIsNotNull(field_ptr), store_bb, fallback_bb);
 
       // Existing field found -> direct 16-byte store (0 runtime calls!)
+      // Existing field found -> release old value if it may hold a heap pointer, then store
       b_.SetInsertPoint(store_bb);
+      if (!val_type || val_type->IsAny() || val_type->IsString() || val_type->IsSeq() || val_type->IsRecord() ||
+          val_type->IsVariant() || val_type->IsFunction() || val_type->IsNode()) {
+        llvm::Value* old_val = b_.CreateLoad(value_ty_, field_ptr, "rec.old.val");
+        WithTaggedHeapPtr(old_val, [&](llvm::Value* ptr) {
+          EmitReleasePtr(ptr);
+        });
+      }
       b_.CreateStore(packed_val, field_ptr);
       b_.CreateBr(next_bb);
 
@@ -923,6 +989,57 @@ class Generator {
 
     // strings
     if (ta->IsString() && tb->IsString()) {
+      if (op == BinaryOp::kAdd) {
+        // Check if this BinaryOp is itself an inner node of a larger single-use string concat chain
+        if (fn_->use_counts[instr] == 1) {
+          // Verify its single non-ARC user is another String BinaryOp(kAdd) in the same block
+          bool absorbed = false;
+          for (Instruction* scan = instr->GetNext(); scan != nullptr; scan = scan->GetNext()) {
+            if (const auto parent = scan->AsBinaryOp();
+                parent && parent->GetOp() == BinaryOp::kAdd && Type(parent->GetLeft())->IsString() &&
+                Type(parent->GetRight())->IsString() &&
+                (parent->GetLeft()->GetDefinition() == instr || parent->GetRight()->GetDefinition() == instr)) {
+              absorbed = true;
+              break;
+            }
+          }
+          if (absorbed) {
+            // Leave null in `fn_->values[instr]` so any trailing `ReleaseInstr` becomes a compile-time no-op!
+            return Define(instr, llvm::ConstantPointerNull::get(ptr_ty_), CompileType::String());
+          }
+        }
+
+        // Collect all leaf operands of this string concatenation tree left-to-right
+        std::vector<Value*> parts{};
+        const auto collect = [&](auto& self, Value* v) -> void {
+          Definition* def = v->GetDefinition();
+          if (const auto inner = def ? def->AsBinaryOp() : nullptr;
+              inner && inner->GetOp() == BinaryOp::kAdd && Type(inner->GetLeft())->IsString() &&
+              Type(inner->GetRight())->IsString() && fn_->values.contains(inner) &&
+              llvm::isa<llvm::ConstantPointerNull>(fn_->values[inner])) {
+            self(self, inner->GetLeft());
+            self(self, inner->GetRight());
+            return;
+          }
+          parts.push_back(v);
+        };
+        collect(collect, left);
+        collect(collect, right);
+
+        if (parts.size() > 2) {
+          auto* arr_ty = llvm::ArrayType::get(ptr_ty_, parts.size());
+          llvm::Value* arr_slot = EntryAlloca(arr_ty);
+          for (size_t i = 0; i < parts.size(); i++) {
+            llvm::Value* gep = b_.CreateConstInBoundsGEP2_64(arr_ty, arr_slot, 0, i);
+            b_.CreateStore(Val(parts[i]), gep);
+          }
+          return Define(instr, CallRt("kura_rt_string_join", ptr_ty_, {arr_slot, b_.getInt64(parts.size())}),
+                        CompileType::String());
+        }
+
+        return Define(instr, CallRt("kura_rt_string_concat", ptr_ty_, {a, b}), CompileType::String());
+      }
+
       if (op == BinaryOp::kAdd)
         return Define(instr, CallRt("kura_rt_string_concat", ptr_ty_, {a, b}), CompileType::String());
       if (is_compare) {
@@ -930,6 +1047,7 @@ class Generator {
         return Define(instr, b_.CreateICmp(IntPredicate(op), cmp, b_.getInt64(0)), bool_ty);
       }
     }
+
     if (op == BinaryOp::kAdd && ta->IsSeq() && tb->IsSeq())
       return Define(instr, CallRt("kura_rt_seq_concat", ptr_ty_, {a, b}), result);
     if (op == BinaryOp::kAdd && ta->IsRecord() && tb->IsRecord())
@@ -1131,6 +1249,16 @@ class Generator {
       if (IsFloatLike(type))
         return Define(instr, b_.CreateFNeg(value), type);
     }
+
+    if (op == UnaryOp::kStringify) {
+      if (type->IsString())
+        return Define(instr, value, CompileType::String());
+      if (type->IsInt())
+        return Define(instr, CallRt("kura_rt_int_to_string", ptr_ty_, {value}), CompileType::String());
+      if (type->IsFloat())
+        return Define(instr, CallRt("kura_rt_float_to_string", ptr_ty_, {value}), CompileType::String());
+    }
+
     Define(instr,
            CallRt("kura_rt_unop", value_ty_,
                   {b_.getInt64(static_cast<uint64_t>(op)), Convert(value, type, CompileType::Any())}),
@@ -1355,14 +1483,14 @@ class Generator {
 
       // ── Fast Path: refcount == 1 -> mutate `base` in place! ──
       b_.SetInsertPoint(fast_bb);
-      EmitRecordUpdates(base, instr->GetEntries());
+      EmitRecordUpdates(base, Type(instr->GetBase()), instr->GetEntries());
       b_.CreateBr(merge_bb);
       llvm::BasicBlock* fast_end = b_.GetInsertBlock();
 
       // ── Slow Path: refcount > 1 -> clone, write updates, release old `base` ──
       b_.SetInsertPoint(slow_bb);
       llvm::Value* cloned = CallRt("kura_rt_record_clone", ptr_ty_, {base});
-      EmitRecordUpdates(cloned, instr->GetEntries());
+      EmitRecordUpdates(cloned, Type(instr->GetBase()), instr->GetEntries());
       EmitReleasePtr(base);
       b_.CreateBr(merge_bb);
       llvm::BasicBlock* slow_end = b_.GetInsertBlock();
@@ -1377,7 +1505,7 @@ class Generator {
 
     // Non-moving update (`base` is still live elsewhere): always clone
     llvm::Value* cloned = CallRt("kura_rt_record_clone", ptr_ty_, {base});
-    EmitRecordUpdates(cloned, instr->GetEntries());
+    EmitRecordUpdates(cloned, Type(instr->GetBase()), instr->GetEntries());
     Define(instr, cloned, rec_type);
   }
 
@@ -1412,8 +1540,7 @@ class Generator {
     const auto plan = instr->GetPlan().get();
     // The family is a constant of the plan: its bytes, or no pointer at all for the default font.
     const auto& family = instr->GetFontFamily();
-    llvm::Value* family_data =
-        family.empty() ? llvm::Constant::getNullValue(ptr_ty_) : b_.CreateGlobalString(family, "kura.family");
+    llvm::Value* family_data = family.empty() ? llvm::Constant::getNullValue(ptr_ty_) : NameConstant(family);
     CallRt("kura_rt_layout_set_text", void_ty_,
            {LayoutTable(plan), b_.getInt64(plan->GetNumberOfNodes()), b_.getInt64(instr->GetNode()),
             As(instr->GetText(), CompileType::String()), llvm::ConstantFP::get(f64_, instr->GetFontSize()), family_data,
@@ -1489,8 +1616,11 @@ class Generator {
     CallRt("kura_rt_draw_rect", void_ty_, {});
   }
 
-  LOWER_FN(DrawLine) {
-    llvm::Value* vec = Val(instr->GetBounds());
+  inline void EmitDrawVerticalLine(llvm::Value* bounds, llvm::Value* color) {
+    NOT_IMPLEMENTED;
+  }
+
+  inline void EmitDrawHorizontalLine(llvm::Value* vec, llvm::Value* color) {
     llvm::Value* x = b_.CreateExtractElement(vec, b_.getInt64(0), "x");
     llvm::Value* y = b_.CreateExtractElement(vec, b_.getInt64(1), "y");
     llvm::Value* w = b_.CreateExtractElement(vec, b_.getInt64(2), "w");
@@ -1511,13 +1641,24 @@ class Generator {
     to = b_.CreateInsertElement(to, x2, b_.getInt64(0));
     to = b_.CreateInsertElement(to, y2, b_.getInt64(1));
 
-    llvm::Value* start_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.start");
+    llvm::Value* start_ptr = EntryAlloca(vec2_ty);
     b_.CreateStore(from, start_ptr);
 
-    llvm::Value* end_ptr = b_.CreateAlloca(vec2_ty, nullptr, "line.end");
+    llvm::Value* end_ptr = EntryAlloca(vec2_ty);
     b_.CreateStore(to, end_ptr);
 
-    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, ColorPtr(instr->GetColor())});
+    CallRt("kura_rt_draw_line", void_ty_, {start_ptr, end_ptr, color});
+  }
+
+  LOWER_FN(DrawLine) {
+    const auto bounds = Val(instr->GetBounds());
+    const auto color = ColorPtr(instr->GetColor());
+    switch (instr->GetDirection()) {
+      case DrawLineInstr::kHorizontal:
+        return EmitDrawHorizontalLine(bounds, color);
+      case DrawLineInstr::kVertical:
+        return EmitDrawVerticalLine(bounds, color);
+    }
   }
 
   // kura_rt_fill_rect takes the rect as the bits of f64s, whichever number type the operand is.
@@ -1801,10 +1942,21 @@ class Generator {
       return;
     }
     if (const auto l = instr->AsLoadIndex()) {
-      const auto object = ObjectPtr(Val(l->GetInstance()), Type(l->GetInstance()));
-      return Define(l, CallRt("kura_rt_seq_get", value_ty_, {object, As(l->GetIndex(), CompileType::Int())}),
-                    CompileType::Any());
+      const auto inst_ty = Type(l->GetInstance());
+      const auto object = ObjectPtr(Val(l->GetInstance()), inst_ty);
+      const auto index = As(l->GetIndex(), CompileType::Int());
+      CompileType* elem_ty = l->GetCompileType();
+
+      if (inst_ty->IsSeq() && elem_ty && RepOf(elem_ty) != Rep::kTagged && RepOf(elem_ty) != Rep::kNone) {
+        if (RepOf(elem_ty) == Rep::kPtr)
+          return Define(l, CallRt("kura_rt_seq_get_ptr", ptr_ty_, {object, index}), elem_ty);
+        if (RepOf(elem_ty) == Rep::kInt || RepOf(elem_ty) == Rep::kFloat || RepOf(elem_ty) == Rep::kBool)
+          return Define(l, FromBits(CallRt("kura_rt_seq_get_bits", i64_, {object, index}), elem_ty), elem_ty);
+      }
+
+      return Define(l, CallRt("kura_rt_seq_get", value_ty_, {object, index}), CompileType::Any());
     }
+
     if (const auto l = instr->AsLoadLength()) {
       const auto object = ObjectPtr(Val(l->GetInstance()), Type(l->GetInstance()));
       return Define(l, CallRt("kura_rt_len", i64_, {object}), CompileType::Int());
@@ -1913,6 +2065,15 @@ class Generator {
     const uint64_t hash = rt::HashName(name);
 
     if (!safe && RepOf(type) == Rep::kPtr && type->IsRecord()) {
+      if (const auto offset = StaticRecordFieldValueOffset(type, name)) {
+        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, value, *offset, name + ".ptr");
+        llvm::Value* loaded = b_.CreateLoad(value_ty_, field_ptr, name + ".val");
+        if (const auto load_instr = def->AsLoadProperty(); load_instr && load_instr->IsMove()) {
+          b_.CreateStore(Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0)), field_ptr);
+        }
+        return Define(def, loaded, CompileType::Any());
+      }
+
       llvm::Function* fn = b_.GetInsertBlock()->getParent();
       llvm::Value* field_ptr = EmitRecordFieldLookup(value, hash);
 
@@ -1974,7 +2135,17 @@ class Generator {
       return;
     }
 
+    if (const auto join = block->AsJoinEntry()) {
+      for (const auto phi : join->GetPhis()) {
+        const auto node = b_.CreatePHI(Lower(phi->GetCompileType()), phi->GetNumberOfIncoming());
+        fn_->values[phi] = node;
+        fn_->phis.push_back({phi, node});
+      }
+    }
+
     for (Instruction* instr = block->GetNext(); instr != nullptr; instr = instr->GetNext()) {
+      if (instr->IsPhi())
+        continue;
       if (const auto branch = instr->AsBranch()) {
         const auto condition = As(branch->GetCondition(), CompileType::Bool());
         fn_->ends[block] = b_.GetInsertBlock();
@@ -2462,6 +2633,28 @@ class Generator {
       return DefineExternNative(graph);
     FnState state{graph, natives_[graph]};
     fn_ = &state;
+
+    for (const auto block : graph->GetReversePostorder()) {
+      if (graph->IsDead(block))
+        continue;
+      if (const auto join = block->AsJoinEntry()) {
+        for (const auto phi : join->GetPhis()) {
+          for (const auto& in : phi->GetIncoming()) {
+            if (in.value && in.value->GetDefinition())
+              state.use_counts[in.value->GetDefinition()]++;
+          }
+        }
+      }
+      for (Instruction* instr = block->GetNext(); instr != nullptr; instr = instr->GetNext()) {
+        if (instr->IsPhi() || instr->IsRelease() || instr->IsRetain())
+          continue;
+        for (uint64_t i = 0; i < instr->GetNumberOfInputs(); i++) {
+          if (const auto in = instr->GetInputAt(i); in && in->GetDefinition())
+            state.use_counts[in->GetDefinition()]++;
+        }
+      }
+    }
+
     for (const auto block : graph->GetReversePostorder()) {
       if (block->IsGraphEntry())
         continue;
@@ -2544,8 +2737,15 @@ class Generator {
     }
 
     const auto name = graph->GetName();
-    natives_[graph] =
+    auto* native =
         llvm::Function::Create(retType, llvm::GlobalValue::InternalLinkage, "kura.fn." + name, module_.get());
+    natives_[graph] = native;
+    if (graph->IsPure()) {
+      native->setDoesNotThrow();
+      native->setWillReturn();
+      if (name != "view" && name != "update" && !graph->HasCOWMutations())
+        native->setMemoryEffects(llvm::MemoryEffects::readOnly() | llvm::MemoryEffects::inaccessibleMemOnly());
+    }
 
     if (graph == graphs_->GetInit())
       return;
@@ -2555,7 +2755,12 @@ class Generator {
       thunk_params.push_back(i64_);
       thunk_params.push_back(i64_);
     }
-    const auto exported = graph->GetFunction() != nullptr && !graph->IsExtern();
+
+    const auto fn = graph->GetFunction();
+    const bool is_entry = (name == "init" || name == "update" || name == "view" || name == "main");
+    const bool preserved = fn != nullptr && fn->HasDirective("preserve");
+    const bool exported = fn != nullptr && !graph->IsExtern() && (is_entry || preserved);
+
     thunks_[graph] =
         llvm::Function::Create(llvm::FunctionType::get(value_ty_, thunk_params, false),
                                exported ? llvm::GlobalValue::ExternalLinkage : llvm::GlobalValue::InternalLinkage,

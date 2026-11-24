@@ -27,9 +27,20 @@ auto RecordObj::Set(const uint64_t hash, const char* name, const Value value) ->
       return true;
     }
   }
+
   if (count >= capacity)
     return false;
-  fields()[count++] = {hash, name, value};
+
+  // Keep fields sorted alphabetically by `name` to match `CompileType::Record`'s canonical field order
+  uint32_t pos = 0;
+  while (pos < count && std::strcmp(fields()[pos].name, name) < 0) {
+    pos++;
+  }
+
+  if (pos < count)
+    std::memmove(&fields()[pos + 1], &fields()[pos], (count - pos) * sizeof(Field));
+  fields()[pos] = Field{hash, name, value};
+  count++;
   return true;
 }
 

@@ -79,15 +79,6 @@ auto Chain(const Path& path) -> std::string {
 
   return text;
 }
-
-auto HasDirective(Function* function, const std::string& name) -> bool {
-  for (const auto directive : function->GetDirectives()) {
-    if (directive->name == name)
-      return true;
-  }
-
-  return false;
-}
 }  // namespace
 
 auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::string>* errors) -> bool {
@@ -106,11 +97,13 @@ auto PurityAnalysis::Run(Module* module, ModuleGraph* graphs, std::vector<std::s
     if (!graph || function->IsExtern())
       continue;
 
+    const auto path = walker.Impurity(graph);
+    graph->SetPure(!path.has_value());
+
     const std::string name(function->GetName()->GetData());
-    if (HasDirective(function, "pure")) {
-      if (const auto path = walker.Impurity(graph))
-        fail("@pure function '" + name + "' is not pure: " + Chain(*path) +
-             " (a C function is pure when its header says `const` or `pure`, or it is declared `@pure`)");
+    if (function->HasDirective("pure")) {
+      fail("@pure function '" + name + "' is not pure: " + Chain(*path) +
+           " (a C function is pure when its header says `const` or `pure`, or it is declared `@pure`)");
     }
 
     if (name == "view")

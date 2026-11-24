@@ -159,8 +159,10 @@ class Analyzer {
     };
 
     // what is the same thing, or may be part of it
-    if (user->AsPhi() || user->AsBinaryOp() || user->AsUnaryOp() || user->AsLoadVariantPayload())
+    if (user->AsPhi() || user->AsLoadVariantPayload())
       return Follow(result);
+    if (user->AsBinaryOp() || user->AsUnaryOp())
+      return nullptr;
     if (const auto l = user->AsLoadIndex())
       return is(l->GetInstance()) ? Follow(result) : nullptr;
     if (const auto l = user->AsLoadProperty())

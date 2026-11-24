@@ -624,7 +624,47 @@ const char* kura_rt_string_cstr(void* string) {
   return string ? static_cast<StringObj*>(string)->data() : nullptr;
 }
 
+void* kura_rt_string_join(void* const* parts, const uint64_t count) {
+  uint64_t total = 0;
+  for (uint64_t i = 0; i < count; i++) {
+    if (parts[i])
+      total += static_cast<const StringObj*>(parts[i])->length;
+  }
+
+  auto* out = static_cast<StringObj*>(
+      TheHeap().AllocateObject(AllocationSpace(), ObjKind::kString, StringObj::PayloadSize(total)));
+  if (!out)
+    return nullptr;
+
+  out->length = total;
+  char* dst = out->data();
+  for (uint64_t i = 0; i < count; i++) {
+    if (const auto* s = static_cast<const StringObj*>(parts[i]); s && s->length > 0) {
+      std::memcpy(dst, s->data(), s->length);
+      dst += s->length;
+    }
+  }
+  *dst = '\0';
+  return out;
+}
+
 void kura_rt_destroy(void* ptr) {}
+
+void* kura_rt_seq_get_ptr(void* seq, const int64_t index) {
+  const auto s = static_cast<SeqObj*>(seq);
+  if (index < 0 || static_cast<uint64_t>(index) >= s->length)
+    Panic("index " + std::to_string(index) + " is out of range for a Seq of " + std::to_string(s->length));
+
+  return reinterpret_cast<void*>(s->items()[index].bits);
+}
+
+uint64_t kura_rt_seq_get_bits(void* seq, const int64_t index) {
+  const auto s = static_cast<SeqObj*>(seq);
+  if (index < 0 || static_cast<uint64_t>(index) >= s->length)
+    Panic("index " + std::to_string(index) + " is out of range for a Seq of " + std::to_string(s->length));
+
+  return s->items()[index].bits;
+}
 
 void* kura_rt_seq_append(void* seq_ptr, const uint64_t item_tag, const uint64_t item_bits) {
   auto* seq = static_cast<SeqObj*>(seq_ptr);
@@ -655,7 +695,7 @@ void* kura_rt_seq_append(void* seq_ptr, const uint64_t item_tag, const uint64_t 
 
     grown->Push(item);
     // Reclaim the old `seq` block immediately (its refcount was 1 and children were moved out)
-    // TODO(@s0cks): TheHeap().Reclaim(&seq->header);
+    kura::rt::ReleaseObj(seq);
     return grown;
   }
 
@@ -685,6 +725,26 @@ void* kura_rt_string_from_cstr(const char* data, const char* what) {
   if (!data)
     Panic(std::string(what) + " returned NULL, but its result is not declared `| None`");
   return NewStr(data);
+}
+
+void* kura_rt_int_to_string(const int64_t value) {
+  char buffer[32];
+  const auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value);
+  return NewStr(std::string_view(buffer, ptr - buffer));
+}
+
+void* kura_rt_float_to_string(const double value) {
+  char buffer[64];
+  const auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value);
+  std::string_view view(buffer, ptr - buffer);
+  if (view.find_first_of(".einf") == std::string_view::npos) {
+    char with_dot[66];
+    std::memcpy(with_dot, view.data(), view.size());
+    with_dot[view.size()] = '.';
+    with_dot[view.size() + 1] = '0';
+    return NewStr(std::string_view(with_dot, view.size() + 2));
+  }
+  return NewStr(view);
 }
 
 void* kura_rt_record_clone(void* src_ptr) {
@@ -726,10 +786,16 @@ void* kura_rt_string_new(const char* data, const uint64_t length) {
 void* kura_rt_string_concat(void* a, void* b) {
   const auto x = static_cast<StringObj*>(a);
   const auto y = static_cast<StringObj*>(b);
-  std::string joined{};
-  joined.reserve(x->length + y->length);
-  joined.append(x->view()).append(y->view());
-  return NewStr(joined);
+  const uint64_t total = x->length + y->length;
+  auto* out = static_cast<StringObj*>(
+      TheHeap().AllocateObject(AllocationSpace(), ObjKind::kString, StringObj::PayloadSize(total)));
+  if (!out)
+    return nullptr;
+  out->length = total;
+  std::memcpy(out->data(), x->data(), x->length);
+  std::memcpy(out->data() + x->length, y->data(), y->length);
+  out->data()[total] = '\0';
+  return out;
 }
 
 int64_t kura_rt_string_cmp(void* a, void* b) {

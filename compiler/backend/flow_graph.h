@@ -49,6 +49,8 @@ class FlowGraph {
   BlockList postorder_{};
   BlockList reverse_postorder_{};
   std::unordered_map<EntryInstr*, EntryInstr*> idom_{};
+  bool pure_ = false;
+  bool has_cow_ = false;
 
   void ComputeDominators();
 
@@ -192,6 +194,22 @@ class FlowGraph {
   // predecessors, and every use is dominated by its definition. On failure
   // returns false and describes the first problem in `error`.
   auto Verify(std::string* error) const -> bool;
+
+  auto IsPure() const -> bool {
+    return pure_;
+  }
+
+  void SetPure(const bool rhs) {
+    pure_ = rhs;
+  }
+
+  auto HasCOWMutations() const -> bool {
+    return has_cow_;
+  }
+
+  void SetHasCOWMutations(const bool rhs) {
+    has_cow_ = rhs;
+  }
 
   // The instruction that ends `block` (Goto, Branch, or Return).
   static auto GetTerminator(EntryInstr* block) -> Instruction*;

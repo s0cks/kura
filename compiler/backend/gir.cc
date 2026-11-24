@@ -227,10 +227,25 @@ auto FillBezierInstr::ToString() const -> std::string {
 auto DrawLineInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "DrawLine(";
+  ss << "direction=" << GetDirection() << ", ";
   ss << "bounds=" << Name(GetBounds()) << ", ";
   ss << "color=" << Name(GetColor());
   ss << ")";
   return ss.str();
+}
+
+auto DrawLineInstr::ParseDirection(String* s) -> DrawLineInstr::Direction {
+  if (s) {
+    std::string dir(s->GetData());
+    std::transform(dir.begin(), dir.end(), dir.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+
+    if (dir == "vertical")
+      return kVertical;
+  }
+
+  return kHorizontal;
 }
 
 auto DrawRoundRectInstr::ToString() const -> std::string {

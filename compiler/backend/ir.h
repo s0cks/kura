@@ -5,11 +5,14 @@
 #include <string>
 
 #include "binary_op.h"
+#include "color.h"
 #include "dom/kind.h"
 #include "frontend/expr.h"
 #include "frontend/math_op.h"
 #include "object.h"
 #include "property.h"
+#include "record.h"
+#include "type_id.h"
 #include "unary_op.h"
 
 namespace kura {
@@ -492,6 +495,22 @@ class ConstantInstr : public Definition {
   auto GetValue() const -> Object* {
     return value_;
   }
+
+#define DEFINE_TYPE_CHECK(Name)                                        \
+  inline auto IsConstant##Name() const -> bool {                       \
+    return value_ && value_->GetType() == BuiltinTypes::k##Name##Type; \
+  }
+
+  FOR_EACH_TYPE(DEFINE_TYPE_CHECK)
+#undef DEFINE_TYPE_CHECK
+
+#define DEFINE_TYPE_CAST(Name)                                         \
+  inline auto AsConstant##Name() const -> Name* {                      \
+    return IsConstant##Name() ? dynamic_cast<Name*>(value_) : nullptr; \
+  }
+
+  FOR_EACH_TYPE(DEFINE_TYPE_CAST)
+#undef DEFINE_TYPE_CAST
 
   auto GetCanonicalKey() const -> std::string;
 
@@ -1197,6 +1216,10 @@ class BranchInstr : public TemplateInstruction<1> {
     return then_;
   }
 
+  void SetThen(TargetEntryInstr* rhs) {
+    then_ = rhs;
+  }
+
   auto GetElse() const -> TargetEntryInstr* {
     return else_;
   }
@@ -1205,8 +1228,16 @@ class BranchInstr : public TemplateInstruction<1> {
     return GetElse() != nullptr;
   }
 
+  void SetElse(TargetEntryInstr* rhs) {
+    else_ = rhs;
+  }
+
   auto GetJoin() const -> JoinEntryInstr* {
     return join_;
+  }
+
+  void SetJoin(JoinEntryInstr* rhs) {
+    join_ = rhs;
   }
 
   HAS_NAMED_INPUT(Condition, 0);

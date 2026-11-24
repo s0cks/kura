@@ -522,7 +522,7 @@ auto FlowGraph::SimplifyCFG() -> bool {
       continue;
 
     EntryInstr* target = go->GetTarget();
-    if (!target || target == entry_ || target->IsJoinEntry() || target->GetNumberOfPredecessors() != 1)
+    if (!target || target == entry_ || target->GetNumberOfPredecessors() != 1)
       continue;
 
     if (const auto join = target->AsJoinEntry(); join && !join->GetPhis().empty())
@@ -551,6 +551,76 @@ auto FlowGraph::SimplifyCFG() -> bool {
     }
 
     changed = true;
+    break;
+  }
+
+  const auto can_thread = [&](EntryInstr* from, EntryInstr* via) -> EntryInstr* {
+    if (!via || via == entry_ || via->IsJoinEntry())
+      return nullptr;
+    Instruction* first = via->GetNext();
+    if (!first || !first->IsGoto())
+      return nullptr;
+    EntryInstr* dest = first->AsGoto()->GetTarget();
+    if (!dest || dest == via)
+      return nullptr;
+
+    if (const auto join = dest->AsJoinEntry(); join && !join->GetPhis().empty()) {
+      if (via->GetNumberOfPredecessors() != 1)
+        return nullptr;
+      for (uint64_t i = 0; i < dest->GetNumberOfPredecessors(); i++) {
+        if (dest->GetPredecessorAt(i) == from)
+          return nullptr;
+      }
+    }
+    return dest;
+  };
+
+  const auto rewrite_phi_pred = [](EntryInstr* dest, EntryInstr* old_pred, EntryInstr* new_pred) {
+    if (const auto join = dest->AsJoinEntry()) {
+      for (const auto phi : join->GetPhis()) {
+        for (auto& in : phi->GetIncoming()) {
+          if (in.predecessor == old_pred)
+            in.predecessor = new_pred;
+        }
+      }
+    }
+  };
+
+  for (const auto block : reverse_postorder_) {
+    if (block->IsGraphEntry())
+      continue;
+    const auto branch = GetTerminator(block)->AsBranch();
+    if (!branch)
+      continue;
+
+    EntryInstr* old_then = branch->GetThen();
+    if (EntryInstr* dest = can_thread(block, old_then)) {
+      if (auto* target = dest->AsTargetEntry()) {
+        rewrite_phi_pred(dest, old_then, block);
+        branch->SetThen(target);
+        changed = true;
+      }
+    }
+
+    if (branch->HasElse()) {
+      EntryInstr* old_else = branch->GetElse();
+      if (EntryInstr* dest = can_thread(block, old_else)) {
+        if (auto* target = dest->AsTargetEntry()) {
+          rewrite_phi_pred(dest, old_else, block);
+          branch->SetElse(target);
+          changed = true;
+        }
+      }
+    } else {
+      EntryInstr* old_join = branch->GetJoin();
+      if (EntryInstr* dest = can_thread(block, old_join)) {
+        if (auto* join = dest->AsJoinEntry()) {
+          rewrite_phi_pred(dest, old_join, block);
+          branch->SetJoin(join);
+          changed = true;
+        }
+      }
+    }
   }
 
   return changed;
@@ -614,6 +684,13 @@ auto InputIsConsumed(Instruction* instr, uint64_t idx) -> bool {
 
 void FlowGraph::InsertARC() {
   using DefSet = std::unordered_set<Definition*>;
+
+  const auto insert_at_block_start = [](EntryInstr* entry_block, Instruction* new_instr) {
+    Instruction* anchor = entry_block;
+    while (anchor->GetNext() && anchor->GetNext()->IsPhi())
+      anchor = anchor->GetNext();
+    InsertAfter(anchor, new_instr);
+  };
 
   // ── 1. Identify Borrowed Definitions ──────────────────────────────────────
   // `view`'s `state` parameter is borrowed by the host frame loop.
@@ -844,9 +921,9 @@ void FlowGraph::InsertARC() {
             const bool in_then = live_in[then_bb].contains(v);
             const bool in_else = live_in[else_bb].contains(v);
             if (in_then && !in_else && dropped_else.insert(v).second) {
-              InsertAfter(else_bb, ReleaseInstr::New(Value::New(v)));
+              insert_at_block_start(else_bb, ReleaseInstr::New(Value::New(v)));
             } else if (in_else && !in_then && dropped_then.insert(v).second) {
-              InsertAfter(then_bb, ReleaseInstr::New(Value::New(v)));
+              insert_at_block_start(then_bb, ReleaseInstr::New(Value::New(v)));
             }
           }
         }
@@ -899,6 +976,7 @@ auto FlowGraph::OptimizeCOWUpdates() -> bool {
             auto* append = SeqAppendInstr::New(Value::New(lhs), Value::New(elem));
             append->SetCompileType(bin->GetCompileType());
 
+            SetHasCOWMutations(true);
             ReplaceAllUsesWith(bin, append);
             Replace(bin, append);
             Remove(list);
@@ -915,15 +993,22 @@ auto FlowGraph::OptimizeCOWUpdates() -> bool {
 
         // Scan forward in the same block for its Spread and StoreProperty initializers
         Instruction* scan = next;
-        bool valid_fusion = false;
+        bool saw_spread = false;
+        bool self_ref = false;
         while (scan != nullptr) {
           if (const auto spread = scan->AsSpread();
               spread && spread->GetInstance()->GetDefinition() == rec && spread->GetValue()->GetDefinition() == base) {
+            saw_spread = true;
             to_remove.push_back(scan);
             scan = scan->GetNext();
             continue;
           }
           if (const auto store = scan->AsStoreProperty(); store && store->GetInstance()->GetDefinition() == rec) {
+            if (store->GetValue()->GetDefinition() == rec) {
+              self_ref = true;
+              break;
+            }
+
             entries.push_back({store->GetProperty(), Value::New(store->GetValue()->GetDefinition())});
             to_remove.push_back(scan);
             scan = scan->GetNext();
@@ -933,7 +1018,7 @@ auto FlowGraph::OptimizeCOWUpdates() -> bool {
         }
 
         // Only fuse if we found the Spread + at least one StoreProperty and `rec` isn't used inside those values
-        if (!entries.empty() && !to_remove.empty()) {
+        if (saw_spread && !self_ref && !entries.empty()) {
           auto* upd = UpdateRecordInstr::New(Value::New(base), std::move(entries));
           upd->SetCompileType(rec->GetCompileType());
 
@@ -945,6 +1030,7 @@ auto FlowGraph::OptimizeCOWUpdates() -> bool {
           for (Instruction* dead : to_remove) {
             Remove(dead);
           }
+          SetHasCOWMutations(true);
           changed = true;
         }
       }
@@ -959,8 +1045,16 @@ auto FlowGraph::OptimizeCOWUpdates() -> bool {
 auto FlowGraph::DedupeLayoutSlotBegins() -> bool {
   bool changed = false;
 
-  for (const auto block : reverse_postorder_) {
-    LayoutSlotBeginInstr* pending_begin = nullptr;
+  std::unordered_map<EntryInstr*, std::vector<EntryInstr*>> dom_children{};
+  for (const auto block : preorder_) {
+    if (EntryInstr* parent = GetImmediateDominator(block)) {
+      dom_children[parent].push_back(block);
+    }
+  }
+
+  const auto visit = [&](auto& self, EntryInstr* block, LayoutSlotBeginInstr* pending_begin) -> void {
+    if (block != entry_ && block->GetNumberOfPredecessors() != 1)
+      pending_begin = nullptr;
 
     for (Instruction* instr = block->GetNext(); instr != nullptr;) {
       Instruction* next = instr->GetNext();
@@ -978,8 +1072,12 @@ auto FlowGraph::DedupeLayoutSlotBegins() -> bool {
 
       instr = next;
     }
-  }
 
+    for (EntryInstr* child : dom_children[block])
+      self(self, child, pending_begin);
+  };
+
+  visit(visit, entry_, nullptr);
   return changed;
 }
 

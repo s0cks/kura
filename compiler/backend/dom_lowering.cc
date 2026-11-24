@@ -5,6 +5,7 @@
 #include "backend/runtime_abi.h"
 #include "color.h"
 #include "object.h"
+#include "type_id.h"
 
 namespace kura {
 auto DomLowering::Fail(const std::string& message) -> bool {
@@ -474,11 +475,19 @@ auto DomLowering::DrawLine(dom::Node& node) -> bool {
   if (!rect)
     return false;
 
+  DrawLineInstr::Direction direction = DrawLineInstr::kHorizontal;
+  {
+    Value* dv = ResolvePropertyByName(&node, "direction", resolved_[&node]);
+    if (dv)
+      if (const auto c = dv->GetDefinition()->AsConstant())
+        direction = DrawLineInstr::ParseDirection(c->AsConstantString());
+  }
+
   Value* color = ResolvePropertyByName(&node, "fill", resolved_[&node]);
   if (!color)
     color = host_->Bind(ConstantInstr::New(RgbaColor::New({0.0f, 0.0f, 0.0f, 0.0f})));
 
-  EmitRenderCall(DrawLineInstr::New(rect, color));
+  EmitRenderCall(DrawLineInstr::New(direction, rect, color));
   return true;
 }
 

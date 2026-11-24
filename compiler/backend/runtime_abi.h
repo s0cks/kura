@@ -232,9 +232,12 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_eq)                   \
   V(kura_rt_sdiv)                 \
   V(kura_rt_srem)                 \
+  V(kura_rt_string_join)          \
   V(kura_rt_string_cstr)          \
   V(kura_rt_string_from_cstr)     \
   V(kura_rt_string_from_cstr_opt) \
+  V(kura_rt_float_to_string)      \
+  V(kura_rt_int_to_string)        \
   V(kura_rt_ffi_overflow)         \
   V(kura_rt_ffi_error)            \
   V(kura_rt_check_renderer)       \
@@ -259,6 +262,8 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_layout_rect)          \
   V(kura_rt_register_event)       \
   V(kura_rt_seq_append)           \
+  V(kura_rt_seq_get_ptr)          \
+  V(kura_rt_seq_get_bits)         \
   V(kura_rt_destroy)              \
   V(kura_rt_record_clone)         \
   V(kura_rt_color_new)            \
@@ -323,6 +328,8 @@ void kura_rt_paint_box(const KuraRect* rect, const KuraColor*, const KuraColor* 
 void kura_rt_push_clip(const KuraRect* rect);
 void kura_rt_pop_clip();
 void* kura_rt_seq_append(void* seq, uint64_t item_tag, uint64_t item_bits);
+void* kura_rt_seq_get_ptr(void* seq, int64_t index);
+uint64_t kura_rt_seq_get_bits(void* seq, int64_t index);
 
 // Called by the host, not by compiled code. Sets the renderer this thread draws with; the host
 // creates it, owns it and destroys it, and the runtime keeps only a copy of the handle. The
@@ -425,6 +432,7 @@ uint64_t kura_rt_eq(uint64_t a_tag, uint64_t a_bits, uint64_t b_tag, uint64_t b_
 int64_t kura_rt_sdiv(int64_t a, int64_t b);
 int64_t kura_rt_srem(int64_t a, int64_t b);
 
+void* kura_rt_string_join(void* const* parts, const uint64_t count);
 const char* kura_rt_string_cstr(void* string);
 void* kura_rt_string_from_cstr(const char* data, const char* what);
 void* kura_rt_string_from_cstr_opt(const char* data);
@@ -438,6 +446,9 @@ void kura_rt_test_end();
 bool kura_rt_test_matches(const char* name, const char* filter);
 uint64_t kura_rt_test_suite_end();
 void kura_rt_test_invoke(void (*fn)(void));
+
+void* kura_rt_int_to_string(const int64_t value);
+void* kura_rt_float_to_string(const double value);
 }
 
 // ── events ─────────────────────────────────────────────────────────────────

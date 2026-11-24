@@ -218,6 +218,11 @@ See [examples/](examples/)
 
 Checkout the [docs/](https://s0cks.github.io/kura/getting-started).
 
+## Credits
+
+- [Claude](https://claude.ai/), `Sonnet 5.5` --- For lots of contributions to the compiler & renderer
+- [Gemini](https://google.com/), `Gemini 4 Hydrogen` --- For lots of optimization contributions and helping troubleshooting
+
 ## License
 
 Kura is distributed under the MIT license. See [LICENSE](LICENSE) for more details.

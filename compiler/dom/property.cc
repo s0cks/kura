@@ -36,6 +36,7 @@ constexpr std::string_view kAligns[] = {"start", "center", "end", "stretch"};
 constexpr std::string_view kJustifies[] = {"start", "center", "end", "space-between", "space-around", "space-evenly"};
 constexpr std::string_view kTextAligns[] = {"left", "center", "right"};
 constexpr std::string_view kFits[] = {"contain", "cover", "fill", "none"};
+constexpr std::string_view kLineDirections[] = {"horizontal", "vertical"};
 
 auto BuildSchema() -> std::vector<PropertyDef> {
   std::vector<PropertyDef> defs{};
@@ -84,6 +85,7 @@ auto BuildSchema() -> std::vector<PropertyDef> {
   add("value", MaskOf(Kind::kProgress), kNumbers, {}, 0, 1);
   add("source", MaskOf(Kind::kImage), kString);
   add("length", MaskOf(Kind::kLine), kSizes, kAuto);
+  add("direction", MaskOf(Kind::kLine), kString, kLineDirections);
 
   add("color", kFields, kColor);
   add("size", kFields, kPx, {}, 0);

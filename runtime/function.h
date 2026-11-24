@@ -2,11 +2,10 @@
 #define KURA_FUNCTION_H
 
 #include <string>
-
 #include <vector>
 
-#include "common.h"
 #include "c_type.h"
+#include "common.h"
 #include "frontend/type_expr.h"
 #include "object.h"
 
@@ -118,6 +117,7 @@ class Function {
     return GetEntry() != nullptr;
   }
 
+  auto HasDirective(const std::string_view rhs) -> bool;
   auto ToString() const -> std::string;
 
  public:
