@@ -1,3 +1,39 @@
 ---
-title: scroll
+title: "#scroll"
+description: Clipped container for scrolling overflowing content.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+A <Node name="container" /> for displaying content larger than its bounds. Children are laid out at their natural size while the box clips overflow to the current scroll offset.
+
+<Example>
+
+```kura
+#scroll(
+  height: 300px,
+  direction: "column",
+  gap: 8px,
+  on-scroll: Scrolled,
+) {
+  #text(size: 14px, "Item 1")
+  #text(size: 14px, "Item 2")
+}
+```
+
+</Example>
+
+<PropertyTable inherits="container">
+  <Property name="on-scroll" types={["Message"]}>
+    Message dispatched when the scroll offset changes.
+  </Property>
+</PropertyTable>
+
+## Behavior
+
+- **Box vs. Content properties:** `width`, `height`, `fill`, `border-*`, and `radius` apply to the outer viewport box; `padding`, `gap`, `direction`, `align`, and `justify` lay out the inner scrollable content.
+- **Wheel bubbling:** Host scroll events (`Session::Scroll` or `kura_rt_event_scroll`) move the topmost `#scroll` under the pointer that has remaining scroll room, bubbling to outer scroll containers once it reaches its limit.
+- **State retention:** Scroll offsets persist across frames and clamp automatically if content shrinks.

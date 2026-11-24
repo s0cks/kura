@@ -1,3 +1,104 @@
 ---
 title: Colors
+description: First-class RGBA, HSL, and HSB color constructors and built-in color literals.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+import Example from "../../../../components/Example.astro";
+
+Colors in Kura are first-class values.
+
+Internally, they are stored as `4 x Float32` and can be constructed using multiple color models:
+
+- [RGB](#rgb)
+- [HSL](#hsl)
+- [HSB / HSV](#hsb--hsv)
+
+## RGB
+
+You can specify colors using `rgb`:
+
+<Example level="3">
+
+```kura
+let my-color = rgb(1.0, 0.0, 0.0) // red
+```
+
+</Example>
+
+Or with an alpha channel using `rgba`:
+
+<Example level="3">
+
+```kura
+let my-color = rgba(1.0, 0.0, 0.0, 0.5) // red with half alpha
+```
+
+</Example>
+
+## HSL
+
+Using `hsl`:
+
+<Example level="3">
+
+```kura
+let my-color = hsl(0.667, 1.0, 0.5) // blue
+```
+
+</Example>
+
+Or with an alpha channel using `hsla`:
+
+<Example level="3">
+
+```kura
+let my-color = hsla(0.667, 1.0, 0.5, 0.25) // blue with 0.25 alpha
+```
+
+</Example>
+
+## HSB / HSV
+
+Using `hsb`:
+
+<Example level="3">
+
+```kura
+let my-color = hsb(0.0, 0.0, 1.0) // white
+```
+
+</Example>
+
+Or with an alpha channel using `hsba`:
+
+<Example level="3">
+
+```kura
+let my-color = hsba(0.0, 0.0, 1.0, 0.5) // white with 0.5 alpha
+```
+
+</Example>
+
+<Aside>
+  HSB colors can be specified using `hsb`, `hsba`, `hsv`, or `hsva`.
+</Aside>
+
+## Literals
+
+Kura supports the following named color literals:
+
+| Name | RGB | HSL | HSB | Literal |
+|:---:|:---:|:---:|:---:|:---|
+| Transparent | `rgba(0.0, 0.0, 0.0, 0.0)` | `hsla(0.0, 0.0, 0.0, 0.0)` | `hsba(0.0, 0.0, 0.0, 0.0)` | `transparent` |
+| Black | `rgb(0.0, 0.0, 0.0)` | `hsl(0.0, 0.0, 0.0)` | `hsb(0.0, 0.0, 0.0)` | `black` |
+| White | `rgb(1.0, 1.0, 1.0)` | `hsl(0.0, 0.0, 1.0)` | `hsb(0.0, 0.0, 1.0)` | `white` |
+| Red | `rgb(1.0, 0.0, 0.0)` | `hsl(0.0, 1.0, 0.5)` | `hsb(0.0, 1.0, 1.0)` | `red` |
+| Green | `rgb(0.0, 1.0, 0.0)` | `hsl(0.333, 1.0, 0.5)` | `hsb(0.333, 1.0, 1.0)` | `green` |
+| Blue | `rgb(0.0, 0.0, 1.0)` | `hsl(0.667, 1.0, 0.5)` | `hsb(0.667, 1.0, 1.0)` | `blue` |
+| Yellow | `rgb(1.0, 1.0, 0.0)` | `hsl(0.167, 1.0, 0.5)` | `hsb(0.167, 1.0, 1.0)` | `yellow` |
+| Purple | `rgb(0.5, 0.0, 0.5)` | `hsl(0.833, 1.0, 0.25)` | `hsb(0.833, 1.0, 0.5)` | `purple` |
+| Cyan | `rgb(0.0, 1.0, 1.0)` | `hsl(0.5, 1.0, 0.5)` | `hsb(0.5, 1.0, 1.0)` | `cyan` |
+| Magenta | `rgb(1.0, 0.0, 1.0)` | `hsl(0.833, 1.0, 0.5)` | `hsb(0.833, 1.0, 1.0)` | `magenta` |
+| Gray | `rgb(0.5, 0.5, 0.5)` | `hsl(0.0, 0.0, 0.5)` | `hsb(0.0, 0.0, 0.5)` | `gray` |
+| Orange | `rgb(1.0, 0.647, 0.0)` | `hsl(0.108, 1.0, 0.5)` | `hsb(0.108, 1.0, 1.0)` | `orange` |

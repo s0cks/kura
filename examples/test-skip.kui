@@ -1,0 +1,4 @@
+@skip
+test "this test should be skipped" {
+  assert(0 == 1)
+}

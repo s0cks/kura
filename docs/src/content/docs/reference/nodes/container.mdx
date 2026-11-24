@@ -1,0 +1,28 @@
+---
+title: Container
+description: A box element that also can have children.
+---
+
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+Containers are <Node name="box" /> elements that arrange children along a flex axis.
+
+<PropertyTable inherits="box">
+  <Property name="gap" types={["Px", "Pct"]}>
+    Spacing between adjacent children (`>= 0`).
+  </Property>
+  <Property name="direction" types={["Direction"]}>
+    Main layout axis: `"row"`, `"column"`, `"row-reverse"`, or `"column-reverse"`.
+  </Property>
+  <Property name="align" types={["Align"]}>
+    Cross-axis alignment of children: `"start"`, `"center"`, `"end"`, or `"stretch"`.
+  </Property>
+  <Property name="justify" types={["Justify"]}>
+    Main-axis distribution: `"start"`, `"center"`, `"end"`, `"space-between"`, `"space-around"`, or `"space-evenly"`.
+  </Property>
+  <Property name="wrap" types={["Bool"]}>
+    Whether children wrap onto multiple lines when they overflow the main axis.
+  </Property>
+</PropertyTable>

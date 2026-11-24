@@ -1,9 +1,16 @@
 ---
 interface Props {
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  heading?: string;
 }
 
 const {
+  level = 2,
+  heading = "Example",
 } = Astro.props;
+const safeLevel = Math.min(Math.max(Math.round(level), 1), 6);
+
+const Tag = `h${safeLevel}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 ---
-<h3>Example</h3>
+<Tag>{heading}</Tag>
 <slot />

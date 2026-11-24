@@ -100,19 +100,6 @@ dynamically selecting between contiguous vectors or linked allocations.
 * **Do not** assume elements occupy a contiguous block of memory.
 * You can hint to the compiler, by attaching the `@vec` or `@list` directives directly to the sequence. **Note** that these serve as hints, and are not strict behavioral guarantees.
 
-## Functions
-
-Functions are first-class citizens in Kura.
-They can be assigned to identifiers, passed as parameters, and returned from other evaluation blocks.
-
-```kura
-fn apply(op: (Int, Int) => Int, lhs: Int, rhs: Int): Int =>
-  op(lhs, rhs)
-
-fn add-one(x: Int): Int =>
-  apply((a, b) => a + b, x, 1)
-```
-
 ## Algebraic Types
 
 Kura supports robust algebraic data types (ADTs).

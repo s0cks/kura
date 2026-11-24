@@ -1,3 +1,44 @@
 ---
-title: text
+title: "#text"
+description: Renders word-wrapped text inside a box.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+import TableSeparator from "../../../../components/TableSeparator.astro";
+
+A <Node name="box" /> for displaying word-wrapped text.
+
+<Example>
+
+```kura
+#text(
+  size: 24px,
+  font-family: "Inter, sans-serif",
+  color: red,
+  "Hello World",
+)
+```
+
+</Example>
+
+<PropertyTable inherits="box">
+  <Property name="size" types={["Px"]} initial="9px">
+    Font size in `px` (`>= 0`).
+  </Property>
+  <Property name="font-family" types={["String"]}>
+    Font name or comma-separated list in order of preference.
+  </Property>
+  <Property name="color" types={["Color"]} initial="black">
+    Color of the text.
+  </Property>
+  <Property name="text-align" types={["String"]} initial="left">
+    Horizontal text alignment within its box: `"left"`, `"center"`, or `"right"`.
+  </Property>
+  <TableSeparator text="Positional Properties" color="primary" />
+  <Property name="value" types={["String"]}>
+    The text string to show.
+  </Property>
+</PropertyTable>

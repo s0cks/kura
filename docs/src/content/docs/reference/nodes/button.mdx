@@ -1,3 +1,27 @@
 ---
-title: button
+title: "#button"
+description: Interactive container that dispatches a message on click.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+A <Node name="container" /> that responds to pointer clicks by dispatching its `on-click` message.
+
+<Example>
+
+```kura
+#button(
+  padding: 10px,
+  fill: blue,
+  radius: 6px,
+  on-click: Submit,
+) {
+  #text(size: 14px, color: white, "Save")
+}
+```
+
+</Example>
+
+<PropertyTable inherits="container" />

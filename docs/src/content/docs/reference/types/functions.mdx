@@ -1,0 +1,68 @@
+---
+title: Functions
+description: First-class functions, higher-order parameters and C extern declarations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Example from "../../../../components/Example.astro"
+
+Functions are first-class citizens in Kura.
+They can be assigned to identifiers, passed as parameters, and returned from other evaluation blocks.
+
+<Example level="2">
+
+```kura
+fn multiply(x: Int, y: Int): Int => x * y
+```
+
+</Example>
+
+## Lambda Functions
+
+Kura also allows you to pass functions as a parameter (lambda).
+
+<Example level="3">
+
+```kura
+fn apply(op: (Int, Int) => Int, lhs: Int, rhs: Int): Int =>
+  op(lhs, rhs)
+
+fn add-one(x: Int): Int =>
+  apply((a, b) => a + b, x, 1)
+```
+
+</Example>
+
+
+## Extern Functions
+
+Kura allows you to apply an `extern` modifier to functions allowing you to declare them in Kura
+and define them using C.
+
+<Example level="3">
+
+```kura
+extern fn do-work(): Int
+```
+
+And in C
+
+```c
+#include <stdint.h>
+
+uint64_t do_work() {
+  return 1;
+}
+```
+
+</Example>
+
+---
+
+<Aside>
+
+Hyphens in Kura function names map to underscores in C symbols.
+
+See [C Interop](/kura/reference/c-interop/) for more details.
+
+</Aside>

@@ -1,3 +1,28 @@
 ---
-title: block
+title: "#block"
+description: General-purpose flex layout container.
 ---
+
+import Example from "../../../../components/Example.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+A `#block` is a general-purpose layout container for grouping and arranging child elements.
+
+<Example>
+
+```kura
+#block(
+  direction: "column",
+  gap: 12px,
+  padding: 16px,
+  fill: blue,
+  radius: 8px,
+){
+  #text(size: 20px, color: white, "Settings")
+  #text(size: 14px, color: black, "Manage your preferences.")
+}
+```
+
+</Example>
+
+<PropertyTable inherits="container" />

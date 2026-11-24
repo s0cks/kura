@@ -8,13 +8,15 @@ type TypeList = (string | TypeProps)[];
 interface Props {
   name: string;
   types?: TypeList;
-  desc: string;
+  initial?: string;
+  desc?: string;
   allowAuto?: boolean;
 }
 
 const {
   name,
   types = [],
+  initial,
   desc,
   allowAuto = false,
 } = Astro.props;
@@ -42,6 +44,13 @@ const hasContent = types.length > 0 || allowAuto;
     ) : (
       '-'
     )}
+  </td>
+  <td>
+    {initial !== undefined ? (
+        <span>{initial}</span>
+      ) : (
+        <span>-</span>
+      )}
   </td>
   <td>
     <slot>{desc}</slot>

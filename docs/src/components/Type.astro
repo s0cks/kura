@@ -4,9 +4,24 @@ interface Props {
   link?: string,
 }
 
+const TYPES = {
+  color: "/kura/reference/types/color",
+} as const;
+
 const {
   name,
   link = undefined,
 } = Astro.props;
+
+function isKnownType(k: string): key is keyof typeof TYPES {
+  return Object.hasOwn(TYPES, k);
+}
+
+function createLink(): string {
+  const normalized = name.toLowerCase();
+  if(isKnownType(normalized))
+    return TYPES[normalized];
+  return `/kura/reference/types/${normalized}`
+}
 ---
-<a href={link ?? "/kura/reference/types/" + name.toLowerCase()}>{name}</a>
+<a href={link ?? createLink() }>{name}</a>

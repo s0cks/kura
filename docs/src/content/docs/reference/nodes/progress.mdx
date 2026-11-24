@@ -1,3 +1,33 @@
 ---
-title: progress
+title: "#progress"
+description: Visual bar indicating completion ratio from 0 to 1.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+import TableSeparator from "../../../../components/TableSeparator.astro";
+
+A <Node name="box" /> visual indicator showing completion progress.
+
+<Example>
+
+```kura
+#progress(
+  width: 200px,
+  height: 8px,
+  fill: #333333,
+  radius: 4px,
+  0.75,
+)
+```
+
+</Example>
+
+<PropertyTable inherits="box">
+  <TableSeparator text="Positional Properties" color="primary" />
+  <Property name="value" types={["Float"]}>
+    Completion ratio between `0` (empty) and `1` (complete).
+  </Property>
+</PropertyTable>

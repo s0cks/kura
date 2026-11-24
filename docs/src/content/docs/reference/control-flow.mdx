@@ -2,6 +2,9 @@
 title: Control Flow
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+import Example from "../../../components/Example.astro";
+
 Kura is a functional-first language. 
 
 Control flow is treated as a series of expressions that evaluate to a value, rather than statements that mutate state. 
@@ -10,6 +13,8 @@ Control flow is treated as a series of expressions that evaluate to a value, rat
 
 If statements in Kura behave like your standard `if` in other languages:
 
+<Example level="3" heading="Example #1">
+
 ```kura
 fn get-text(count: Int): String =>
   if count > 10 {
@@ -17,8 +22,15 @@ fn get-text(count: Int): String =>
   } else {
     "Keep going"
   }
+```
 
-// you can also do if/else-if:
+</Example>
+
+You can also do if/else-if:
+
+<Example level="3" heading="Example #2">
+
+```kura
 fn get-text(count: Int): String =>
   if count > 10 {
     "Too much"
@@ -28,6 +40,40 @@ fn get-text(count: Int): String =>
     "Keep going"
   }
 ```
+
+</Example>
+
+## When
+
+`when` expressions in Kura are shorthand for an `if` expression.
+If the condition specified isn't met, the result is `None`.
+
+<Example heading="Example #1" level="3">
+
+```kura
+let n: Int = 11
+let node: Content = when n > 10 {
+  #text("Hello World")
+}
+```
+
+Since `n` is greater than 10, the condition is met and `node` is `#text("Hello World")`.
+
+</Example>
+
+<Example level="3" heading="Example #2">
+
+```kura
+let n: Int = 11
+let node: Content = when n > 20 {
+  #text("Hello World")
+}
+```
+
+Since `n` is less than 20, the condition is not met and `node` becomes `None` -
+or an empty `#fragment`.
+
+</Example>
 
 ## Pattern Matching
 
@@ -79,14 +125,6 @@ fn nested(m: Optional<Message>): Int =>
     None              => 3, // Matches the absence of a value
     _                 => 0 // Matches anything else
   }
-```
-
-## `when`
-
-`when` is an `if` whose `else` is `None`, which is what a view wants for content that is only sometimes there:
-
-```kura
-when model.loaded { #text("Ready") }   // a Node, or None
 ```
 
 ## Collection Expressions
@@ -144,3 +182,28 @@ For every item that passes the `if` constraint, the reducer expression evaluates
 The return value becomes the new value of the accumulator for the subsequent element.
 
 Once the sequence stream completes, the loop expression terminates and returns the final value of the accumulator directly.
+
+## Static Assertions
+
+`static-assert` checks a compile-time condition during compilation and fails the build with the provided message if the condition
+evaluates to `false`.
+
+<Example level="3">
+
+```kura
+let x = 10
+static-assert(x is Int)
+static-assert(x == 10, "Expected x to be equal to 10")
+```
+
+</Example>
+
+---
+
+<Aside>
+
+`static-assert` has the signature `static-assert(cond, message?)`.
+
+The failure `message` is optional.
+
+</Aside>

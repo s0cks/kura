@@ -1,0 +1,4 @@
+@should-fail
+test "test 0 equals 1" {
+  assert(0 == 1)
+}

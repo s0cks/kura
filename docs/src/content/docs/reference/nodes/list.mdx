@@ -1,3 +1,33 @@
 ---
-title: list
+title: "#list"
+description: Vertical scrollable container defaulting to column layout.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+`#list` is a vertical <Node name="scroll" /> container whose `direction` defaults to `"column"` unless overridden.
+
+<Example>
+
+```kura
+#list(height: 240px, gap: 6px) {
+  for _, item in model.items =>
+    #text(item.label)
+}
+```
+
+</Example>
+
+<PropertyTable inherits="container">
+  <Property name="on-scroll" types={["Message"]}>
+    Message dispatched when the scroll offset changes.
+  </Property>
+</PropertyTable>
+
+## Notes
+
+- Every row inside a `#list` is laid out and drawn regardless of whether it is currently within the visible scroll bounds.
+- Shares all scroll offset retention and wheel bubbling behavior with <Node name="scroll" />.

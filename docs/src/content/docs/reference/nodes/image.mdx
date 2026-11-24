@@ -1,3 +1,35 @@
 ---
-title: image
+title: "#image"
+description: Renders an image inside a box.
 ---
+
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+import TableSeparator from "../../../../components/TableSeparator.astro";
+
+A <Node name="box" /> for rendering an image or texture.
+
+<Example>
+
+```kura
+#image(
+  width: 120px,
+  height: 120px,
+  fit: "contain",
+  "assets/avatar.png",
+)
+```
+
+</Example>
+
+<PropertyTable inherits="box">
+  <Property name="fit" types={["String"]} initial='"fill"'>
+    How the image scales inside its box: `"contain"`, `"cover"`, `"fill"`, or `"none"`.
+  </Property>
+  <TableSeparator text="Positional Properties" color="primary" />
+  <Property name="source" types={["String"]}>
+    The source URI or path for the image.
+  </Property>
+</PropertyTable>

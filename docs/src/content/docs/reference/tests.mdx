@@ -1,0 +1,88 @@
+---
+title: Tests
+---
+
+import Example from "../../../components/Example.astro";
+import TestDemoGif from "../../../assets/test-example.gif";
+import TestSkipGif from "../../../assets/test-skip.gif";
+import TestShouldFailGif from "../../../assets/test-should-fail.gif";
+
+Kura has built-in test syntax that allows you to test your Kura code without needing a framework.
+
+You can run them using `kura test my-tests.kui`
+
+<Example>
+
+```kura
+test "test 0 equals 0" {
+  assert(0 == 0)
+}
+
+test "test 0 doesn't equal 1" {
+  assert(0 != 1, "expected 0 to not equal 1")
+}
+```
+
+---
+
+<img src={TestDemoGif.src} alt="Test demo" width={TestDemoGif.width} height={TestDemoGif.height} />
+
+</Example>
+
+## Directives
+
+Tests in Kura come with some directives to note how they should be run and how the results should be interpreted:
+
+### @fail-fast
+
+`@fail-fast` tells Kura to abort the test upon the first failing `assert`
+
+<Example level="4">
+
+```kura
+@fail-fast
+test "test 0" {
+  assert(0 == 1) // fails here
+  assert(0 == 2) // never runs because the above assertion failed first
+}
+```
+
+</Example>
+
+### @should-fail
+
+`@should-fail` tells Kura that test should only pass if it fails or panics.
+
+<Example level="4">
+
+```kura
+@should-fail
+test "test 0 equals 1" {
+  assert(0 == 1) // the assertion fails, but the test passes because that was expected
+}
+```
+
+---
+
+<img src={TestShouldFailGif.src} alt="Should fail test demo" width={TestShouldFailGif.width} height={TestShouldFailGif.height} />
+
+</Example>
+
+### @skip
+
+`@skip` tells Kura to skip this test when running
+
+<Example level="4">
+
+```kura
+@skip
+test "this test should be skipped" {
+  assert(0 == 0) // never runs
+}
+```
+
+---
+
+<img src={TestSkipGif.src} alt="Skip test demo" width={TestSkipGif.width} height={TestSkipGif.height} />
+
+</Example>

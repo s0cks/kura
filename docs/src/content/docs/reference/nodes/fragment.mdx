@@ -1,0 +1,62 @@
+---
+title: "#fragment"
+description: Groups sibling UI elements without affecting layout.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Example from "../../../../components/Example.astro";
+
+`#fragment` nodes group multiple UI elements without reserving layout space or accepting properties.
+
+<Aside>
+  `#fragment` nodes do not accept any properties.
+
+  You should use `#fragment` nodes to group sibling nodes together.
+</Aside>
+
+<Example heading="Example #1">
+
+```kura
+fn view(state: State): Node =>
+  #fragment {
+    #text(state.count)
+    #button(on-click: Increment) { #text("Increment") }
+  }
+```
+
+</Example>
+
+Returning `None` or when using `when` expressions behave identically to an empty `#fragment`
+
+<Example heading="Example #2">
+
+```kura
+fn my-helper(x: Int): Content =>
+  when x > 0 {
+    #text("Hello World")
+  }
+```
+
+Is identical to
+
+```kura
+fn my-helper(x: Int): Content =>
+  if x > 0 {
+    #text("Hello World")
+  } else {
+    None
+  }
+```
+
+Or
+
+```kura
+fn my-helper(x: Int): Content =>
+  if x > 0 {
+    #text("Hello World")
+  } else {
+    #fragment
+  }
+```
+
+</Example>

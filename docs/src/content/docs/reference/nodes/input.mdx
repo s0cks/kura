@@ -1,3 +1,65 @@
 ---
-title: input
+title: "#input"
+description: Controlled single-line text input primitive.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
+import Example from "../../../../components/Example.astro";
+import Node from "../../../../components/Node.astro";
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+import TableSeparator from "../../../../components/TableSeparator.astro";
+
+A single-line <Node name="box" /> for user text input.
+
+<Example>
+
+```kura
+type Message = UpdateQuery(String)
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    UpdateQuery(text) => { state | query: text },
+  }
+
+fn view(state: State): Node =>
+  #input(
+    size: 16px,
+    padding: 8px,
+    border-color: black,
+    border-width: 1px,
+    placeholder: "Search...",
+    on-input: UpdateQuery,
+    state.query,
+  )
+```
+
+</Example>
+
+<PropertyTable inherits="box">
+  <Property name="size" types={["Px"]} initial="9px">
+    Font size in `px` (`>= 0`).
+  </Property>
+  <Property name="font-family" types={["String"]}>
+    Font name or comma-separated list in order of preference.
+  </Property>
+  <Property name="color" types={["Color"]} initial="black">
+    Color of the input text.
+  </Property>
+  <Property name="text-align" types={["String"]} initial="left">
+    Horizontal text alignment: `"left"`, `"center"`, or `"right"`.
+  </Property>
+  <Property name="placeholder" types={["String"]}>
+    Dimmed placeholder text shown while the input is empty.
+  </Property>
+  <Property name="readonly" types={["Bool"]} initial="false">
+    Allows text selection and copying without modification. Defaults to `false`.
+  </Property>
+  <Property name="on-input" types={["Message"]}>
+    Variant constructor carrying a `String` dispatched when the user edits the text (e.g., `on-input: UpdateQuery` sends `UpdateQuery("new text")`). Inputs without `on-input` are read-only.
+  </Property>
+  <TableSeparator text="Positional Properties" color="primary" />
+  <Property name="value" types={["String"]}>
+    The controlled text value displayed in the input.
+  </Property>
+</PropertyTable>

@@ -11,6 +11,13 @@ import tailwindcss from "@tailwindcss/vite";
 
 const kura = JSON.parse(fs.readFileSync("./src/kura.tmLanguage.json", "utf-8"));
 
+function nodeSlug(name, label = undefined) {
+  return {
+    label: label === undefined ? `#${name}` : label,
+    slug: `reference/nodes/${name}`,
+  };
+}
+
 // https://astro.build/config
 export default defineConfig({
   site: "https://s0cks.github.io",
@@ -57,14 +64,42 @@ export default defineConfig({
           label: "Reference",
           items: [
             { label: "Syntax", slug: "reference/syntax" },
-            { label: "Primitives", slug: "reference/primitives" },
+            {
+              label: "Primitives",
+              collapsed: true,
+              items: [
+                { label: "Align", slug: "reference/types/align" },
+                { label: "Color", slug: "reference/types/color" },
+                { label: "Direction", slug: "reference/types/direction" },
+                { label: "Justify", slug: "reference/types/justify" },
+                { label: "Px", slug: "reference/types/px" },
+                { label: "Vec", slug: "reference/types/vec" },
+                { label: "Rect", slug: "reference/types/rect" },
+              ],
+            },
             { label: "Types", slug: "reference/types" },
             { label: "Control Flow", slug: "reference/control-flow" },
             { label: "Pipelines", slug: "reference/pipelines" },
-            { label: "UI Primitives", slug: "reference/ui-primitives" },
             { label: "Modules", slug: "reference/modules" },
             { label: "Directives", slug: "reference/directives" },
+            { label: "Tests", slug: "reference/tests" },
             { label: "C-Interop", slug: "reference/c-interop" },
+            {
+              label: "UI Primitives",
+              collapsed: true,
+              items: [
+                nodeSlug("box", "Box (Base)"),
+                nodeSlug("container", "Container"),
+                nodeSlug("fragment"),
+                nodeSlug("block"),
+                nodeSlug("text"),
+                nodeSlug("image"),
+                nodeSlug("list"),
+                nodeSlug("button"),
+                nodeSlug("input"),
+                nodeSlug("scroll"),
+              ],
+            },
           ],
         },
         {

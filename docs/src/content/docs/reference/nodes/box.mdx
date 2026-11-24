@@ -1,3 +1,69 @@
 ---
 title: Box
+description: Base layout, spacing, styling, and interaction properties shared by all visual nodes.
 ---
+
+import Property from "../../../../components/Property.astro";
+import PropertyTable from "../../../../components/PropertyTable.astro";
+
+`Box` is the base trait inherited by all visual UI primitives. It defines sizing constraints, flex child behavior, background/border styling, tooltips, and click handlers.
+
+<PropertyTable>
+  <Property name="width" types={["Px", "Pct", "Fr"]} allowAuto={true}>
+    Width of the box (`>= 0`).
+  </Property>
+  <Property name="height" types={["Px", "Pct", "Fr"]} allowAuto={true}>
+    Height of the box (`>= 0`).
+  </Property>
+  <Property name="min-width" types={["Px", "Pct"]}>
+    Minimum width constraint (`>= 0`).
+  </Property>
+  <Property name="min-height" types={["Px", "Pct"]}>
+    Minimum height constraint (`>= 0`).
+  </Property>
+  <Property name="max-width" types={["Px", "Pct"]}>
+    Maximum width constraint (`>= 0`).
+  </Property>
+  <Property name="max-height" types={["Px", "Pct"]}>
+    Maximum height constraint (`>= 0`).
+  </Property>
+  <Property name="padding" types={["Px", "Pct"]}>
+    Inner spacing between the box edge and its content (`>= 0`).
+  </Property>
+  <Property name="margin" types={["Px", "Pct"]}>
+    Outer spacing around the box.
+  </Property>
+  <Property name="grow" types={["Number"]}>
+    Flex grow factor when extra space is available (`>= 0`).
+  </Property>
+  <Property name="shrink" types={["Number"]}>
+    Flex shrink factor when space is constrained (`>= 0`).
+  </Property>
+  <Property name="basis" types={["Px", "Pct", "Fr"]} allowAuto={true}>
+    Initial main-axis size before growing or shrinking (`>= 0`).
+  </Property>
+  <Property name="align-self" types={["Align"]}>
+    Overrides the parent's `align`: `"start"`, `"center"`, `"end"`, `"stretch"`.
+  </Property>
+  <Property name="fill" types={["Color"]}>
+    Background fill color of the box.
+  </Property>
+  <Property name="border-color" types={["Color"]}>
+    Color of the box border. A color with no `border-width` is a border `1px` thick.
+  </Property>
+  <Property name="border-width" types={["Px"]}>
+    Thickness of the border, in `px` (`>= 0`). Drawn inside the box's edge without shrinking child space. Defaults to black if `border-color` is omitted.
+  </Property>
+  <Property name="radius" types={["Px"]}>
+    Corner rounding radius, in `px` (`>= 0`), clamped to half the smaller side.
+  </Property>
+  <Property name="tooltip" types={["String"]}>
+    Text shown next to the pointer after hovering for half a second. Inherited by children unless overridden, and clipped by `#scroll` bounds.
+  </Property>
+  <Property name="opacity" types={["Number"]}>
+    Opacity from `0` (transparent) to `1` (opaque). Affects only the box's own fill/border or text color, not children.
+  </Property>
+  <Property name="on-click" types={["Message"]}>
+    Message dispatched when the box is clicked.
+  </Property>
+</PropertyTable>
