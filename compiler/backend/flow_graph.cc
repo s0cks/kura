@@ -35,7 +35,7 @@ static inline auto HasNoSideEffects(Instruction* instr) -> bool {
          instr->IsLoadIndex() || instr->IsLoadLength() || instr->IsLoadVariantPayload() || instr->IsTestVariant() ||
          instr->IsNewVariant() || instr->IsNewList() || instr->IsNewRecord() || instr->IsLayoutRect() ||
          instr->IsRectIntersects() || instr->IsRectPastClip() || instr->IsNewColor() || instr->IsCastColor() ||
-         instr->IsMathCall();
+         instr->IsMathCall() || instr->IsLoadFunction();
 }
 
 static inline auto IsZeroAlphaConstant(Definition* def) -> bool {

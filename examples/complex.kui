@@ -1,0 +1,408 @@
+type Tab = Inventory | Crafting | Logs
+
+type Item = {
+  name: String,
+  category: String,
+  count: Int,
+  rarity: Int,
+}
+
+type Message = SelectSlot(Int)
+  | InspectItem(Int)
+  | EquipSelected
+  | SwitchTab(Tab)
+  | SetFilter(String)
+  | TakeDamage(Int)
+  | Heal(Int)
+  | CraftItem(String)
+  | SpawnLogs(Int)
+  | ClearLogs
+  | Resized(Size)
+
+type State = {
+  width: Float,
+  height: Float,
+  hp: Int,
+  max_hp: Int,
+  stamina: Int,
+  selected_slot: Int,
+  inspected_idx: Int,
+  tab: Tab,
+  filter: String,
+  hotbar: Seq<Item>,
+  backpack: Seq<Item>,
+  logs: Seq<String>,
+  log_count: Int,
+}
+
+fn init(): State =>
+  {
+    width: 0.0,
+    height: 0.0,
+    hp: 16,
+    max_hp: 20,
+    stamina: 85,
+    selected_slot: 0,
+    inspected_idx: 0,
+    tab: Inventory,
+    filter: "",
+    hotbar: [
+      { name: "Iron Sword", category: "Weapon", count: 1, rarity: 2 },
+      { name: "Torch", category: "Light", count: 48, rarity: 0 },
+      { name: "Cobblestone", category: "Block", count: 64, rarity: 0 },
+      { name: "Golden Apple", category: "Food", count: 3, rarity: 3 },
+      { name: "Oak Planks", category: "Block", count: 32, rarity: 0 },
+      { name: "Bow", category: "Weapon", count: 1, rarity: 1 },
+      { name: "Arrow", category: "Ammo", count: 24, rarity: 0 },
+      { name: "Water Bucket", category: "Tool", count: 1, rarity: 1 },
+      { name: "Pickaxe", category: "Tool", count: 1, rarity: 2 },
+    ],
+    backpack: [
+      { name: "Diamond", category: "Gem", count: 12, rarity: 3 },
+      { name: "Ender Pearl", category: "Magic", count: 6, rarity: 3 },
+      { name: "Obsidian", category: "Block", count: 28, rarity: 2 },
+      { name: "Redstone Dust", category: "Circuit", count: 64, rarity: 1 },
+      { name: "Iron Ingot", category: "Metal", count: 42, rarity: 1 },
+      { name: "Gold Ingot", category: "Metal", count: 19, rarity: 2 },
+      { name: "Cooked Beef", category: "Food", count: 16, rarity: 0 },
+      { name: "Lantern", category: "Light", count: 8, rarity: 1 },
+      { name: "Shield", category: "Armor", count: 1, rarity: 2 },
+      { name: "Compass", category: "Tool", count: 1, rarity: 1 },
+      { name: "Coal", category: "Fuel", count: 54, rarity: 0 },
+      { name: "Emerald", category: "Gem", count: 9, rarity: 3 },
+    ],
+    logs: [
+      "[00:01] World loaded (seed: 849201)",
+      "[00:04] Equipped Iron Sword",
+      "[00:09] Collected 16x Cobblestone",
+    ],
+    log_count: 3,
+  }
+
+fn clamp-int(v: Int, lo: Int, hi: Int): Int =>
+  if v < lo { lo } else if v > hi { hi } else { v }
+
+fn build-logs(start: Int, remaining: Int, acc: Seq<String>): Seq<String> =>
+  if remaining <= 0 {
+    acc
+  } else {
+    build-logs(start + 1, remaining - 1, acc + [ "[Event #{start + 1}] Tick update synced" ])
+  }
+
+fn replace-slot(items: Seq<Item>, target: Int, replacement: Item): Seq<Item> =>
+  [ if i == target { replacement } else { item } for i, item in items ]
+
+fn update(msg: Message, state: State): State =>
+  match msg {
+    SelectSlot(idx) =>
+      {
+        state |
+        selected_slot: idx,
+        logs += [ "Selected hotbar slot {idx + 1}" ],
+        log_count += 1,
+      }
+    InspectItem(idx) =>
+      { state | inspected_idx: idx }
+    EquipSelected => {
+      let chosen = state.backpack[state.inspected_idx] ?? { name: "Empty", category: "None", count: 0, rarity: 0 }
+      {
+        state |
+        hotbar: replace-slot(state.hotbar, state.selected_slot, chosen),
+        logs += [ "Equipped {chosen.name} to slot {state.selected_slot + 1}" ],
+        log_count += 1,
+      }
+    }
+    SwitchTab(next) =>
+      { state | tab: next }
+    SetFilter(text) =>
+      { state | filter: text }
+    TakeDamage(dmg) => {
+      let next_hp = clamp-int(state.hp - dmg, 0, state.max_hp)
+      {
+        state |
+        hp: next_hp,
+        logs += [ "Took {dmg} damage (HP: {next_hp}/{state.max_hp})" ],
+        log_count += 1,
+      }
+    }
+    Heal(amount) => {
+      let next_hp = clamp-int(state.hp + amount, 0, state.max_hp)
+      {
+        state |
+        hp: next_hp,
+        logs += [ "Healed +{amount} HP (HP: {next_hp}/{state.max_hp})" ],
+        log_count += 1,
+      }
+    }
+    CraftItem(item_name) =>
+      {
+        state |
+        stamina: clamp-int(state.stamina - 10, 0, 100),
+        logs += [ "Crafted 1x {item_name}" ],
+        log_count += 1,
+      }
+    SpawnLogs(n) =>
+      {
+        state |
+        logs: build-logs(state.log_count, n, state.logs),
+        log_count: state.log_count + n,
+      }
+    ClearLogs =>
+      { state | logs: [], log_count: 0 }
+    Resized(size) =>
+      { state | width: size.width, height: size.height }
+    _ => state
+  }
+
+fn rarity-color(rarity: Int) =>
+  match rarity {
+    3 => rgb(255, 196, 61),
+    2 => rgb(92, 184, 255),
+    1 => rgb(120, 224, 143),
+    _ => rgb(210, 214, 220),
+  }
+
+fn rarity-label(rarity: Int): String =>
+  match rarity {
+    3 => "Legendary",
+    2 => "Rare",
+    1 => "Uncommon",
+    _ => "Common",
+  }
+
+fn stat-pill(label: String, val: String, r: Float, g: Float, b: Float) =>
+  set text(size: 18px, color: rgb(236, 239, 244))
+  #block(direction: "row",
+         gap: 8px,
+         padding: 10px,
+         radius: 10px,
+         fill: rgb(32, 36, 44)){
+    #text(label)
+    #text(fill: rgb(r, g, b), val)
+  }
+
+fn hotbar-slot(idx: Int, item: Item, selected: Bool) => {
+  set text(size: 16px, color: rgb(236, 239, 244), text-align: "center")
+  let border = if selected { rgb(255, 214, 102) } else { rgb(68, 74, 88) }
+  let bg = if selected { rgb(52, 58, 74) } else { rgb(28, 31, 38) }
+
+  #button(on-click: SelectSlot(idx),
+          direction: "column",
+          grow: 1,
+          basis: 0px,
+          padding: 10px,
+          radius: 10px,
+          fill: bg,
+          border-color: border,
+          border-width: 2px,
+          gap: 4px,
+          align: "center",
+          justify: "center"){
+    #text(fill: rgb(150, 158, 174), "[{idx + 1}]")
+    #text(fill: rarity-color(item.rarity), item.name)
+    #text("x{item.count}")
+  }
+}
+
+fn backpack-card(idx: Int, item: Item, inspected: Bool) => {
+  set text(size: 16px, color: rgb(236, 239, 244))
+  let border = if inspected { rgb(92, 184, 255) } else { rgb(59, 66, 82) }
+  let bg = if inspected { rgb(42, 49, 64) } else { rgb(32, 36, 44) }
+
+  #button(on-click: InspectItem(idx),
+          direction: "column",
+          width: 220px,
+          padding: 12px,
+          radius: 10px,
+          fill: bg,
+          border-color: border,
+          border-width: 2px,
+          gap: 6px,
+          align: "start",
+          justify: "space-between"){
+    #block(direction: "row", width: 100%, justify: "space-between"){
+      #text(size: 14px, fill: rgb(150, 158, 174), item.category)
+      #text(size: 14px, fill: rgb(216, 222, 233), "x{item.count}")
+    }
+    #text(size: 18px, fill: rarity-color(item.rarity), item.name)
+  }
+}
+
+fn recipe-row(title: String, cost: String) =>
+  set text(size: 18px, color: rgb(236, 239, 244))
+  set button(padding: 10px, radius: 8px, fill: rgb(67, 133, 190))
+
+  #block(direction: "row",
+         width: 100%,
+         padding: 12px,
+         radius: 10px,
+         fill: rgb(32, 36, 44),
+         align: "center",
+         justify: "space-between"){
+    #block(direction: "column", gap: 4px){
+      #text(title)
+      #text(fill: rgb(160, 168, 184), cost)
+    }
+
+    #button(on-click: CraftItem(title)){
+      #text("Craft")
+    }
+  }
+
+fn log-row(entry: String) =>
+  set text(size: 16px, color: rgb(216, 222, 233))
+  #block(width: 100%, direction: "row", padding: 6px){
+    #text(fill: rgb(216, 222, 233), entry)
+  }
+
+fn view(state: State): Node => {
+  set text(size: 18px, color: rgb(236, 239, 244))
+  set button(padding: 12px, radius: 10px, fill: rgb(46, 52, 64), justify: "center")
+  set line(fill: rgb(59, 66, 82))
+
+  let hp_pct = (state.hp * 100) / state.max_hp
+  let inspected = state.backpack[state.inspected_idx] ?? { name: "None", category: "None", count: 0, rarity: 0 }
+
+  #block(direction: "column",
+         width: 1fr,
+         height: 1fr,
+         padding: 24px,
+         gap: 16px,
+         fill: rgb(20, 22, 27)){
+
+    // 1. Top HUD Status Bar
+    #block(direction: "row", width: 100%, gap: 12px, align: "center", justify: "space-between"){
+      #block(direction: "row", gap: 12px){
+        if state.hp <= 6 {
+          stat-pill("HP", "{state.hp} / {state.max_hp} ({hp_pct}%)", 220, 76, 70)
+        } else if state.hp <= 12 {
+          stat-pill("HP", "{state.hp} / {state.max_hp} ({hp_pct}%)", 235, 179, 66)
+        } else {
+          stat-pill("HP", "{state.hp} / {state.max_hp} ({hp_pct}%)", 118, 196, 98)
+        }
+
+        stat-pill("Stamina", "{state.stamina}%", 92, 184, 255)
+        stat-pill("Events", "{state.log_count}", 255, 214, 102)
+      }
+
+      #block(direction: "row", gap: 8px){
+        #button(on-click: TakeDamage(3), fill: rgb(168, 56, 56)){
+          #text("-3 HP")
+        }
+        #button(on-click: Heal(4), fill: rgb(58, 128, 72)){
+          #text("+4 HP")
+        }
+        #button(on-click: SpawnLogs(100)){
+          #text("+100 Logs")
+        }
+        #button(on-click: ClearLogs){
+          #text("Clear")
+        }
+      }
+    }
+
+    // Health Bar Track
+    #block(direction: "row", width: 100%, height: 12px, radius: 6px, fill: rgb(36, 40, 48)){
+      if state.hp <= 6 {
+        #block(width: 1fr, height: 100%, radius: 6px, fill: rgb(220, 76, 70))
+      } else if state.hp <= 12 {
+        #block(width: 1fr, height: 100%, radius: 6px, fill: rgb(235, 179, 66))
+      } else {
+        #block(width: 1fr, height: 100%, radius: 6px, fill: rgb(118, 196, 98))
+      }
+    }
+
+    #line
+
+    // 2. Tab Navigation + Search Filter
+    #block(direction: "row", width: 100%, gap: 12px, align: "center"){
+      #button(on-click: SwitchTab(Inventory),
+              fill: if state.tab is Inventory { rgb(67, 133, 190) } else { rgb(38, 43, 54) }){
+        #text("Inventory")
+      }
+      #button(on-click: SwitchTab(Crafting),
+              fill: if state.tab is Crafting { rgb(67, 133, 190) } else { rgb(38, 43, 54) }){
+        #text("Crafting")
+      }
+      #button(on-click: SwitchTab(Logs),
+              fill: if state.tab is Logs { rgb(67, 133, 190) } else { rgb(38, 43, 54) }){
+        #text("Event Log ({state.log_count})")
+      }
+      #input(size: 18px,
+              grow: 1,
+              placeholder: "Filter items or commands...",
+              on-input: SetFilter,
+              state.filter)
+    }
+
+    #block(direction: "column",
+      width: 100%,
+      grow: 1,
+      basis: 0px,
+      padding: 16px,
+      gap: 12px,
+      radius: 12px,
+      fill: rgb(26, 29, 36)){
+      match state.tab {
+        Inventory =>
+          #block(direction: "row", width: 100%, grow: 1, basis: 0px, gap: 16px){
+          // Left: Backpack Storage Grid
+          #block(direction: "column", grow: 1, basis: 0px, gap: 12px){
+          #text(size: 20px, "Backpack Storage ({state.inspected_idx + 1} / 12)")
+          #block(direction: "row", width: 100%, wrap: true, gap: 10px){
+          for i, item in state.backpack =>
+            backpack-card(i, item, i == state.inspected_idx)
+      }
+    }
+    // Right: Selected Item Inspector
+    #block(direction: "column",
+            width: 340px,
+            padding: 16px,
+            gap: 12px,
+            radius: 10px,
+            fill: rgb(32, 36, 44),
+            justify: "space-between"){
+      #block(direction: "column", gap: 10px){
+      #text(size: 14px, fill: rgb(150, 158, 174), "ITEM INSPECTOR")
+      #text(size: 24px, fill: rarity-color(inspected.rarity), inspected.name)
+      #line
+      #text(size: 16px, "Rarity: {rarity-label(inspected.rarity)}")
+      #text(size: 16px, "Category: {inspected.category}")
+      #text(size: 16px, "Stack Count: {inspected.count}")
+    }
+    #button(on-click: EquipSelected,
+            width: 100%,
+            fill: rgb(67, 133, 190)){
+      #text("Equip to Slot {state.selected_slot + 1}")
+    }
+  }
+}
+  Crafting =>
+    #block(direction: "column", width: 100%, gap: 10px){
+      #text(size: 20px, "Workbench Recipes")
+      recipe-row("Torch x4", "1x Coal + 1x Stick")
+      recipe-row("Iron Pickaxe", "3x Iron Ingot + 2x Stick")
+      recipe-row("Golden Apple", "8x Gold Ingot + 1x Apple")
+      recipe-row("Shield", "6x Oak Planks + 1x Iron Ingot")
+    }
+  Logs =>
+    #block(direction: "column", width: 100%, grow: 1, basis: 0px, gap: 8px){
+      #text(size: 20px, "Telemetry & Combat Log")
+      #scroll(width: 100%, grow: 1, basis: 0px){
+        #block(direction: "column", width: 100%){
+          #list(width: 100%){
+            for _, entry in state.logs =>
+              log-row(entry)
+          }
+        }
+      }
+    }
+  }
+}
+  // 4. Bottom 9-Slot Quickbar
+  #block(direction: "row", width: 100%, gap: 8px){
+    for i, item in state.hotbar =>
+      hotbar-slot(i, item, i == state.selected_slot)
+    }
+  }
+}

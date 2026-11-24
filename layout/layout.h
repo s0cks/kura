@@ -40,7 +40,7 @@
 
 namespace kura::layout {
 using Scalar = float;
-using NodeId = uint64_t;
+using NodeId = uint32_t;
 
 static constexpr NodeId kNoNode = std::numeric_limits<NodeId>::max();
 
@@ -260,6 +260,8 @@ class Engine {
 
   struct Item {
     NodeId id = kNoNode;
+    Align align = Align::kStretch;
+    bool frozen = false;
     Scalar margin_main_start = 0;
     Scalar margin_main_end = 0;
     Scalar margin_cross_start = 0;
@@ -270,7 +272,6 @@ class Engine {
     Scalar max_cross = kUndefined;
     Scalar pad_main = 0;
     Scalar style_cross = kUndefined;  // the cross size the style asks for, if it asks for one
-    Align align = Align::kStretch;
     Scalar grow = 0;
     Scalar shrink = 1;
     Scalar basis = 0;         // flex base size
@@ -280,7 +281,6 @@ class Engine {
     Scalar pos_main = 0;  // border box offset from the container's inner box
     Scalar pos_cross = 0;
     Scalar violation = 0;
-    bool frozen = false;
 
     inline auto ClampMain(const Scalar value) const -> Scalar {
       return Clamp(value, min_main, max_main);
@@ -319,12 +319,17 @@ class Engine {
   std::vector<NodeId> scratch_contents_{};
   std::vector<Item> scratch_items_{};
   std::vector<Line> scratch_lines_{};
+  bool has_contents_ = false;
+
+  auto MeasureLeaf(const NodeId id, Scalar kw, Scalar kh, const Scalar aw, const Scalar ah, const Scalar pw) -> Size;
+  auto SizeChild(const NodeId id, const Scalar kw, const Scalar kh, const Scalar aw, const Scalar ah, const Scalar pw)
+      -> Size;
 
   auto Compute(NodeId id, Scalar kw, Scalar kh, Scalar aw, Scalar ah, Scalar pw, bool commit, Scalar ox, Scalar oy)
       -> Size;
   auto ComputeUncached(NodeId id, Scalar kw, Scalar kh, Scalar aw, Scalar ah, Scalar pw, bool commit, Scalar ox,
                        Scalar oy) -> Size;
-  void CollectItems(NodeId parent, std::vector<NodeId>* items, std::vector<NodeId>* contents) const;
+  void CollectItems(NodeId parent, std::vector<NodeId>* items, std::vector<NodeId>* contents);
   auto FixContents(NodeId id) -> bool;
 };
 

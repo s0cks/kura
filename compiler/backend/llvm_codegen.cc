@@ -149,6 +149,16 @@ class Generator {
     std::unordered_map<Definition*, uint32_t> use_counts{};
   };
 
+  struct ConstBoxInit {
+    uint64_t payload_tag;
+    uint64_t payload_bits;
+    std::string payload_str;
+    bool is_string;
+    llvm::GlobalVariable* global;
+  };
+  std::vector<ConstBoxInit> const_boxes_{};
+  std::unordered_map<std::string, llvm::GlobalVariable*> const_box_index_{};
+
   llvm::LLVMContext& ctx_;
   std::unique_ptr<llvm::Module> module_;
   llvm::IRBuilder<> b_;
@@ -378,25 +388,31 @@ class Generator {
       fn->setDoesNotThrow();
       fn->setWillReturn();
       const std::string_view sv(name);
-      if (IsCold(sv)) {
+      if (sv == "kura_rt_destroy" || sv == "kura_rt_panic" || sv == "kura_rt_ffi_overflow" ||
+          sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail") {
         fn->addFnAttr(llvm::Attribute::Cold);
-      } else if (IsReadOnly(sv)) {
+      } else if (sv == "kura_rt_len" || sv == "kura_rt_string_cmp" || sv == "kura_rt_record_count" ||
+                 sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_closure_new") {
         fn->setOnlyReadsMemory();
       }
     }
     return b_.CreateCall(callee, flat);
   }
 
-  static auto StaticRecordFieldValueOffset(CompileType* type, std::string_view field_name) -> std::optional<uint64_t> {
+  struct StaticFieldSlot {
+    uint64_t offset;
+    CompileType* type;
+  };
+
+  static auto StaticRecordFieldSlot(CompileType* type, std::string_view field_name) -> std::optional<StaticFieldSlot> {
     if (!type || !type->IsRecord())
       return std::nullopt;
     const auto& fields = type->GetFields();
     for (size_t idx = 0; idx < fields.size(); idx++) {
       if (fields[idx].optional)
-        return std::nullopt;  // an earlier optional field might be absent at runtime
+        return std::nullopt;
       if (fields[idx].name == field_name) {
-        // HeapObject (8) + count/capacity (8) + idx * sizeof(Field) (32) + offsetof(Field, value) (16)
-        return 16 + idx * 32 + 16;
+        return StaticFieldSlot{16 + idx * 32 + 16, fields[idx].type};
       }
     }
     return std::nullopt;
@@ -597,8 +613,8 @@ class Generator {
                                  val_type->IsNode();
 
       // Fast path: static slot offset known at compile time -> 0 loops, 0 branches!
-      if (const auto offset = StaticRecordFieldValueOffset(base_type, name)) {
-        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, target_record, *offset, name + ".ptr");
+      if (const auto slot = StaticRecordFieldSlot(base_type, name)) {
+        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, target_record, slot->offset, name + ".ptr");
         if (needs_release) {
           llvm::Value* old_val = b_.CreateLoad(value_ty_, field_ptr, "rec.old.val");
           WithTaggedHeapPtr(old_val, [&](llvm::Value* ptr) {
@@ -617,11 +633,9 @@ class Generator {
 
       b_.CreateCondBr(b_.CreateIsNotNull(field_ptr), store_bb, fallback_bb);
 
-      // Existing field found -> direct 16-byte store (0 runtime calls!)
       // Existing field found -> release old value if it may hold a heap pointer, then store
       b_.SetInsertPoint(store_bb);
-      if (!val_type || val_type->IsAny() || val_type->IsString() || val_type->IsSeq() || val_type->IsRecord() ||
-          val_type->IsVariant() || val_type->IsFunction() || val_type->IsNode()) {
+      if (needs_release) {
         llvm::Value* old_val = b_.CreateLoad(value_ty_, field_ptr, "rec.old.val");
         WithTaggedHeapPtr(old_val, [&](llvm::Value* ptr) {
           EmitReleasePtr(ptr);
@@ -2014,15 +2028,84 @@ class Generator {
         return Define(v, Val(v->GetPayload()), Type(v->GetPayload()));
       variants_.insert(v->GetVariantName());
       llvm::Value* box = llvm::ConstantPointerNull::get(ptr_ty_);
-      if (v->HasPayload() && v->IsStackAllocated()) {
-        box = StackBlock(heap::BoxObj::PayloadSize());
-        CallRt("kura_rt_stack_box", void_ty_, {box, As(v->GetPayload(), CompileType::Any())});
-      } else if (v->HasPayload()) {
-        box = CallRt("kura_rt_box", ptr_ty_, {As(v->GetPayload(), CompileType::Any())});
+      if (v->HasPayload()) {
+        if (const auto c = v->GetPayload()->GetDefinition()->AsConstant()) {
+          Object* obj = c->GetValue();
+          uint64_t p_tag = rt::kTagNone;
+          uint64_t p_bits = 0;
+          std::string p_str{};
+          bool is_str = false;
+          bool hoistable = true;
+
+          switch (obj->GetType()) {
+            case kIntType:
+              p_tag = rt::kTagInt;
+              p_bits = static_cast<uint64_t>(static_cast<Int*>(obj)->GetValue());
+              break;
+            case kFloatType:
+              p_tag = rt::kTagFloat;
+              p_bits = std::bit_cast<uint64_t>(static_cast<Float*>(obj)->GetValue());
+              break;
+            case kPxType:
+              p_tag = rt::kTagPx;
+              p_bits = std::bit_cast<uint64_t>(static_cast<Px*>(obj)->GetValue());
+              break;
+            case kPctType:
+              p_tag = rt::kTagPct;
+              p_bits = std::bit_cast<uint64_t>(static_cast<Pct*>(obj)->GetValue());
+              break;
+            case kFrType:
+              p_tag = rt::kTagFr;
+              p_bits = std::bit_cast<uint64_t>(static_cast<Fr*>(obj)->GetValue());
+              break;
+            case kBoolType:
+              p_tag = rt::kTagBool;
+              p_bits = static_cast<Bool*>(obj)->GetValue() ? 1 : 0;
+              break;
+            case kNoneType:
+              p_tag = rt::kTagNone;
+              p_bits = 0;
+              break;
+            case kStringType:
+              p_tag = rt::kTagString;
+              p_str = static_cast<String*>(obj)->GetValue();
+              is_str = true;
+              break;
+            default:
+              hoistable = false;
+              break;
+          }
+
+          if (hoistable) {
+            const std::string key =
+                is_str ? ("S:" + p_str) : ("B:" + std::to_string(p_tag) + ":" + std::to_string(p_bits));
+            auto it = const_box_index_.find(key);
+            if (it == const_box_index_.end()) {
+              auto* global = new llvm::GlobalVariable(*module_, ptr_ty_, false, llvm::GlobalValue::InternalLinkage,
+                                                      llvm::ConstantPointerNull::get(ptr_ty_),
+                                                      "kura.box." + std::to_string(const_boxes_.size()));
+              const_boxes_.push_back(ConstBoxInit{p_tag, p_bits, std::move(p_str), is_str, global});
+              it = const_box_index_.emplace(key, global).first;
+            }
+            auto* load = b_.CreateLoad(ptr_ty_, it->second);
+            load->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(ctx_, {}));
+            box = load;
+            return Define(v, Pack(b_.getInt64(rt::VariantTag(v->GetVariantName())), b_.CreatePtrToInt(box, i64_)),
+                          CompileType::Any());
+          }
+        }
+
+        if (v->IsStackAllocated()) {
+          box = StackBlock(heap::BoxObj::PayloadSize());
+          CallRt("kura_rt_stack_box", void_ty_, {box, As(v->GetPayload(), CompileType::Any())});
+        } else {
+          box = CallRt("kura_rt_box", ptr_ty_, {As(v->GetPayload(), CompileType::Any())});
+        }
       }
       return Define(v, Pack(b_.getInt64(rt::VariantTag(v->GetVariantName())), b_.CreatePtrToInt(box, i64_)),
                     CompileType::Any());
     }
+
     if (const auto t = instr->AsTestVariant()) {
       const auto type = Type(t->GetValue());
       const auto value = Val(t->GetValue());
@@ -2065,42 +2148,28 @@ class Generator {
     const uint64_t hash = rt::HashName(name);
 
     if (!safe && RepOf(type) == Rep::kPtr && type->IsRecord()) {
-      if (const auto offset = StaticRecordFieldValueOffset(type, name)) {
-        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, value, *offset, name + ".ptr");
+      if (const auto slot = StaticRecordFieldSlot(type, name)) {
+        const auto load_instr = def->AsLoadProperty();
+        const bool is_move = load_instr && load_instr->IsMove();
+        const Rep field_rep = RepOf(slot->type);
+
+        if (field_rep == Rep::kInt || field_rep == Rep::kFloat || field_rep == Rep::kBool || field_rep == Rep::kPtr) {
+          llvm::Value* bits_ptr = b_.CreateConstInBoundsGEP1_64(i8_, value, slot->offset + 8, name + ".bits.ptr");
+          llvm::Value* bits = b_.CreateLoad(i64_, bits_ptr, name + ".bits");
+          if (is_move) {
+            llvm::Value* slot_ptr = b_.CreateConstInBoundsGEP1_64(i8_, value, slot->offset, name + ".slot.ptr");
+            b_.CreateStore(Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0)), slot_ptr);
+          }
+          return Define(def, FromBits(bits, slot->type), slot->type);
+        }
+
+        llvm::Value* field_ptr = b_.CreateConstInBoundsGEP1_64(i8_, value, slot->offset, name + ".ptr");
         llvm::Value* loaded = b_.CreateLoad(value_ty_, field_ptr, name + ".val");
-        if (const auto load_instr = def->AsLoadProperty(); load_instr && load_instr->IsMove()) {
+        if (is_move) {
           b_.CreateStore(Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0)), field_ptr);
         }
-        return Define(def, loaded, CompileType::Any());
+        return Define(def, loaded, slot->type);
       }
-
-      llvm::Function* fn = b_.GetInsertBlock()->getParent();
-      llvm::Value* field_ptr = EmitRecordFieldLookup(value, hash);
-
-      auto* hit_bb = llvm::BasicBlock::Create(ctx_, "rec.get.hit", fn);
-      auto* miss_bb = llvm::BasicBlock::Create(ctx_, "rec.get.miss", fn);
-      auto* done_bb = llvm::BasicBlock::Create(ctx_, "rec.get.done", fn);
-
-      b_.CreateCondBr(b_.CreateIsNotNull(field_ptr), hit_bb, miss_bb);
-
-      // Hit: load `{ i64, i64 }` directly
-      b_.SetInsertPoint(hit_bb);
-      llvm::Value* loaded = b_.CreateLoad(value_ty_, field_ptr, name + ".val");
-      if (const auto load_instr = def->AsLoadProperty(); load_instr && load_instr->IsMove()) {
-        b_.CreateStore(Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0)), field_ptr);
-      }
-      b_.CreateBr(done_bb);
-
-      // Miss: return None
-      b_.SetInsertPoint(miss_bb);
-      llvm::Value* none_val = Pack(b_.getInt64(rt::kTagNone), b_.getInt64(0));
-      b_.CreateBr(done_bb);
-
-      b_.SetInsertPoint(done_bb);
-      llvm::PHINode* phi = b_.CreatePHI(value_ty_, 2, name);
-      phi->addIncoming(loaded, hit_bb);
-      phi->addIncoming(none_val, miss_bb);
-      return Define(def, phi, CompileType::Any());
     }
 
     if (const auto lane = VectorPropertyLane(type, name)) {
@@ -2779,6 +2848,18 @@ class Generator {
     for (const auto& [value, global] : strings_) {
       const auto data = b_.CreateGlobalString(value, "kura.data");
       b_.CreateStore(CallRt("kura_rt_string_new", ptr_ty_, {data, b_.getInt64(value.size())}), global);
+    }
+    for (const auto& entry : const_boxes_) {
+      if (entry.global->use_empty())
+        continue;
+      llvm::Value* bits =
+          entry.is_string ? b_.CreatePtrToInt(StringLiteral(entry.payload_str), i64_) : b_.getInt64(entry.payload_bits);
+      llvm::Value* box = CallRt("kura_rt_box", ptr_ty_, {b_.getInt64(entry.payload_tag), bits});
+      // Mark header refcount as immortal (0x3FFF at bits 31..18) so Retain/Release are no-ops
+      llvm::Value* hdr = b_.CreateLoad(i64_, box);
+      llvm::Value* immortal_hdr = b_.CreateOr(hdr, b_.getInt64(0x3FFFULL << 18));
+      b_.CreateStore(immortal_hdr, box);
+      b_.CreateStore(box, entry.global);
     }
     if (graphs_->GetInit() && natives_.contains(graphs_->GetInit()))
       b_.CreateCall(natives_[graphs_->GetInit()], {});
