@@ -11,19 +11,28 @@ import TableSeparator from "../../../components/TableSeparator.astro";
 
 ## View
 
-The View is the window: the root of every view, which is there without being written. It has the box properties
-and the container properties, so a view can be given a background, a padding or a direction by writing it as the
-outermost element:
+The View is the window: the root of every view. Kura makes it, and the program can't: there is no `#view` to write.
+Writing one is an error. It has the box properties and the container properties, so it can be given a background, a
+padding or a direction with a `set view` rule, at the top level of a file or before the body of `view`:
+
+```kura
+set view(fill: white, padding: 16px, direction: "column")
+
+fn view(state: State): Node =>
+  #text("Hello")
+```
 
 ```kura
 fn view(state: State): Node =>
-  #view(fill: white, padding: 16px, direction: "column") {
-    #text("Hello")
-  }
+  set view(fill: white)
+  #text("Hello")
 ```
 
-A `#view` has to be the outermost element, and there is only one. Without one, the view still has its View, with
-nothing to paint.
+Without a rule the view still has its View, with nothing to paint. A `set view` rule anywhere else is an error, since
+there is only one View and it is the same for all of `view`.
+
+The program is run in its view: `init`, `update` and `view` are given it, as a `this` that they don't name and take no
+parameter for, and what belongs to the view (its layout, its inputs, where its elements are) is kept in it.
 
 ## Fragments
 

@@ -5,13 +5,12 @@ fn init(): Int => 0
 fn update(msg: Message, state: Int): Int => state
 
 set button(tooltip: "Press")
+set view(tooltip: "The window")
 
 fn view(state: Int): Node =>
-  #view(tooltip: "The window") {
-    #block(tooltip: "n is {state}") {
-      #text(tooltip: "A text", "x")
-      #button { #text("y") }
-      #scroll(tooltip: "A scroll") { #text("z") }
-      #list(tooltip: "A list") { #text("w") }
-    }
+  #block(tooltip: "n is {state}") {
+    #text(tooltip: "A text", "x")
+    #button { #text("y") }
+    #scroll(tooltip: "A scroll") { #text("z") }
+    #list(tooltip: "A list") { #text("w") }
   }

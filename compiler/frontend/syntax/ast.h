@@ -221,7 +221,7 @@ struct Directive : Node {
 };
 
 // An argument of a directive or of a `#element(...)`, or an entry of a record
-// literal: `name: value`, `...value`, just `value`, or a pun, `name,`, which
+// literal: `name: value`, `...value`, just `value`, or a pun, `name:` with no value, which
 // stands for `name: name` (the value is then a VarRef the parser made up).
 struct Arg : Node {
   enum Form : uint8_t { kNamed, kSpread, kPositional, kPun };

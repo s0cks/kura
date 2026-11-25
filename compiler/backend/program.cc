@@ -210,7 +210,11 @@ auto Program::Load(const std::string& path, const Options& options, std::string*
   }
 
   std::vector<std::string> errors{};
-  const auto graphs = FlowGraphBuilder::BuildModuleGraph(module, &errors, nullptr);
+  const auto graphs = FlowGraphBuilder::BuildModuleGraph(module, &errors, nullptr,
+                                                         TraceOptions{
+                                                             .enabled = options.trace,
+                                                             .file = "hello",
+                                                         });
   if (!graphs) {
     *error = Join(errors);
     return nullptr;
@@ -236,8 +240,9 @@ Program::~Program() {
 }
 
 auto Program::Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
-                   std::string* error) -> bool {
-  return CheckArguments(module_, graphs_, function, args, error) && jit_->Call(function, args, result, error);
+                   std::string* error, View* view) -> bool {
+  return CheckArguments(module_, graphs_, function, args, error) &&
+         jit_->Call(function, args, result, error, view != nullptr ? view : &View::Current());
 }
 
 auto Program::GetArity(const std::string& function) const -> int {

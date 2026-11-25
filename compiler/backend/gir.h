@@ -2,34 +2,65 @@
 #define KURA_GIR_H
 
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "backend/layout_plan.h"
 #include "ir.h"
 
 namespace kura {
-class TracyBeginZoneInstr : public EntryInstr {
+// Where a Tracy zone is, and what it is called. The compiler emits one of these per zone as a constant, so a
+// zone costs two runtime calls and nothing else; `color` is 0xRRGGBB, or 0 to let Tracy pick one.
+struct ZoneInfo {
+  std::string name{};
+  std::string function{};
+  std::string file{};
+  uint32_t line = 0;
+  uint32_t color = 0;
+};
+
+// Only emitted when the program is compiled with tracing on (`kurac --trace`), so a build without it has no zones
+// in it at all. The runtime keeps the zones that are open (see runtime_tracy.cc), so an end doesn't name its begin.
+class TracyBeginZoneInstr : public Instruction {
+ private:
+  ZoneInfo zone_;
+
  public:
-  TracyBeginZoneInstr() {}
+  explicit TracyBeginZoneInstr(ZoneInfo zone) :
+    zone_(std::move(zone)) {}
   ~TracyBeginZoneInstr() override = default;
+
+  auto GetZone() const -> const ZoneInfo& {
+    return zone_;
+  }
 
   DECLARE_INSTRUCTION_TYPE(TracyBeginZone);
 
  public:
-  static inline auto New() -> TracyBeginZoneInstr* {
-    return new TracyBeginZoneInstr();
+  static inline auto New(ZoneInfo zone) -> TracyBeginZoneInstr* {
+    return new TracyBeginZoneInstr(std::move(zone));
   }
 };
 
 class TracyEndZoneInstr : public Instruction {
+ private:
+  std::string name_;
+
  public:
-  TracyEndZoneInstr() = default;
+  explicit TracyEndZoneInstr(std::string name = {}) :
+    name_(std::move(name)) {}
   ~TracyEndZoneInstr() override = default;
+
+  // The zone this closes, for the printer; the runtime closes the innermost one.
+  auto GetName() const -> const std::string& {
+    return name_;
+  }
 
   DECLARE_INSTRUCTION_TYPE(TracyEndZone);
 
  public:
-  static inline auto New() -> TracyEndZoneInstr* {
-    return new TracyEndZoneInstr();
+  static inline auto New(std::string name = {}) -> TracyEndZoneInstr* {
+    return new TracyEndZoneInstr(std::move(name));
   }
 };
 

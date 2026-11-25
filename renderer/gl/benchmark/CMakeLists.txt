@@ -8,7 +8,8 @@ target_link_libraries(kura-gl-renderer-benchmark-core
          kura-renderer-base
          kura-text
          PkgConfig::EPOXY
-         benchmark::benchmark)
+         benchmark::benchmark
+         kura-tracing)
 target_compile_definitions(kura-gl-renderer-benchmark-core
   PUBLIC
     KURA_EXAMPLES_DIR="${CMAKE_SOURCE_DIR}/examples")

@@ -162,8 +162,8 @@ TEST(V1Syntax, CompositionIsLooserThanArithmeticAndTighterThanPipes) {
 
 // ---- puns and spread --------------------------------------------------------------------------
 
-TEST(V1Syntax, ATrailingCommaMakesARecordWithAPun) {
-  const auto tree = Tree("let a = { width, }\nlet b = { width }\nlet c = { width, height: 4, depth }");
+TEST(V1Syntax, AColonWithNoValueMakesARecordWithAPun) {
+  const auto tree = Tree("let a = { width: }\nlet b = { width }\nlet c = { width:, height: 4, depth: }");
   ASSERT_TRUE(tree->IsValid()) << RenderToString(tree->GetSource(), tree->GetDiagnostics());
   const auto* a = tree->GetRoot()->items[0]->As<Binding>()->value->As<RecordLit>();
   ASSERT_NE(a, nullptr);
@@ -172,7 +172,7 @@ TEST(V1Syntax, ATrailingCommaMakesARecordWithAPun) {
   EXPECT_EQ(pun->form, Arg::kPun);
   EXPECT_EQ(pun->name.text, "width");
   EXPECT_EQ(Sexp(pun->value), "width");
-  // without the comma it is a block that returns `width`
+  // without the colon it is a block that returns `width`
   EXPECT_TRUE(tree->GetRoot()->items[1]->As<Binding>()->value->Is<Block>());
   const auto* c = tree->GetRoot()->items[2]->As<Binding>()->value->As<RecordLit>();
   ASSERT_NE(c, nullptr);
@@ -180,14 +180,14 @@ TEST(V1Syntax, ATrailingCommaMakesARecordWithAPun) {
   EXPECT_EQ(c->entries[2]->As<Arg>()->form, Arg::kPun);
 }
 
-TEST(V1Syntax, ElementArgumentsPunWithATrailingComma) {
-  const auto tree = Tree("fn v() => #button(width, height,)\nfn w() => #text(label)");
+TEST(V1Syntax, ElementArgumentsPunWithAColon) {
+  const auto tree = Tree("fn v() => #button(width:, height:)\nfn w() => #text(label)");
   ASSERT_TRUE(tree->IsValid()) << RenderToString(tree->GetSource(), tree->GetDiagnostics());
   const auto* button = tree->GetRoot()->items[0]->As<FnDecl>()->body->As<UiElement>();
   ASSERT_EQ(button->props.size(), 2U);
   EXPECT_EQ(button->props[0]->As<Arg>()->form, Arg::kPun);
   EXPECT_EQ(button->props[1]->As<Arg>()->form, Arg::kPun);
-  // a lone name with no comma is positional, as before
+  // a lone name with no colon is positional, as before
   const auto* text = tree->GetRoot()->items[1]->As<FnDecl>()->body->As<UiElement>();
   EXPECT_EQ(text->props[0]->As<Arg>()->form, Arg::kPositional);
 }

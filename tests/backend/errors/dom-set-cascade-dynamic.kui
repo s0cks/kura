@@ -1,0 +1,11 @@
+// error: #text 'size': the value of a `set` rule has to be a compile-time constant
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn label() => #text("a")
+
+fn view(state: Int): Node => {
+  set text(size: 10px * state)
+  label()
+}

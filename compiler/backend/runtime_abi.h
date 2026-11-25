@@ -99,6 +99,11 @@ struct TestSuiteState {
 
   bool global_fail_fast = false;
   bool in_test = false;
+  std::string expect{};
+  // how many views were entered when the test began, for the same reason
+  uint64_t view_depth = 0;
+  // how many Tracy zones were open when the test began, so the zones a panic leaves open can be closed
+  uint64_t zone_depth = 0;
   std::jmp_buf panic_jmp{};
   bool panicked = false;
   std::string panic_message{};
@@ -268,7 +273,12 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_record_clone)         \
   V(kura_rt_color_new)            \
   V(kura_rt_color_unbox)          \
+  V(kura_rt_view_enter)           \
+  V(kura_rt_view_leave)           \
+  V(kura_rt_tracy_zone_begin)     \
+  V(kura_rt_tracy_zone_end)       \
   V(kura_rt_test_fail)            \
+  V(kura_rt_test_fail_cmp)        \
   V(kura_rt_test_suite_begin)     \
   V(kura_rt_test_begin)           \
   V(kura_rt_test_end)             \
@@ -327,6 +337,31 @@ void kura_rt_paint_box(const KuraRect* rect, const KuraColor*, const KuraColor* 
 // What is drawn until `pop_clip` stays inside the rect.
 void kura_rt_push_clip(const KuraRect* rect);
 void kura_rt_pop_clip();
+
+// ── views ──────────────────────────────────────────────────────────────────
+// Compiled `init`, `update` and `view` are given the view they run in (a kura::View*, as a hidden last argument that
+// Kura code can't name) and run inside it: the runtime parts they call keep what they need in it. `view` may be null,
+// for code that wasn't given one.
+void kura_rt_view_enter(void* view);
+void kura_rt_view_leave();
+// How many views are entered, and leaving the innermost until `depth` are: for the test runner, to balance the ones a
+// panic jumped out of.
+uint64_t kura_rt_view_depth();
+void kura_rt_view_unwind(uint64_t depth);
+
+// ── tracing ────────────────────────────────────────────────────────────────
+// The zones `kurac --trace` compiles into a program. `srcloc` is a constant the compiler emits, laid out as Tracy's
+// `___tracy_source_location_data`. The runtime keeps the zones that are open on the thread, so an end closes the
+// innermost one. Without tracing support all of these do nothing (`kura_rt_tracy_enabled` says which it is).
+void kura_rt_tracy_zone_begin(const void* srcloc);
+void kura_rt_tracy_zone_end();
+// A zone whose name is only known at run time: the name is copied. Ended with `kura_rt_tracy_zone_end`.
+void kura_rt_tracy_zone_begin_named(const char* name, uint64_t length, uint32_t color);
+// How many zones are open on this thread, and closing the innermost ones until `depth` are: for the test runner, to
+// balance the zones that a panic jumped out of.
+uint64_t kura_rt_tracy_depth();
+void kura_rt_tracy_unwind(uint64_t depth);
+int kura_rt_tracy_enabled();
 void* kura_rt_seq_append(void* seq, uint64_t item_tag, uint64_t item_bits);
 void* kura_rt_seq_get_ptr(void* seq, int64_t index);
 uint64_t kura_rt_seq_get_bits(void* seq, int64_t index);
@@ -440,8 +475,13 @@ void* kura_rt_string_from_cstr_opt(const char* data);
 [[noreturn]] void kura_rt_ffi_error(const char* message);
 
 void kura_rt_test_suite_begin(const uint64_t total, const char* filter, const bool fail_fast);
-void kura_rt_test_begin(const char* name, uint32_t flags);
-void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, void* msg);
+// `expect` is what the failure of a @should-fail or @should-panic test has to contain, or null.
+void kura_rt_test_begin(const char* name, uint32_t flags, const char* expect);
+// A failed assertion: where it is (`length` bytes from the line and column), and what it said.
+void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, uint64_t length, void* msg);
+// One that was a comparison, `op` a BinaryOp, of two tagged values (`lt`/`lb` the tag and bits of the left side).
+void kura_rt_test_fail_cmp(void* file, uint64_t line, uint64_t col, uint64_t length, void* msg, uint64_t op,
+                           uint64_t lt, uint64_t lb, uint64_t rt, uint64_t rb);
 void kura_rt_test_end();
 bool kura_rt_test_matches(const char* name, const char* filter);
 uint64_t kura_rt_test_suite_end();

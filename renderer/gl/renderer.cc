@@ -1,6 +1,7 @@
 #include "renderer/gl/renderer.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <epoxy/gl.h>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include "text/text.h"
+#include "tracing/tracing.h"
 
 #ifndef KURA_MAX_NUMBER_OF_VERTICES
 #define KURA_MAX_NUMBER_OF_VERTICES 16384
@@ -79,6 +81,13 @@ constexpr const char* kTextFragmentShader =
 // The side of a font's glyph atlas, in texels. One texture holds a family's glyphs at every size drawn; when
 // it fills up it's emptied and filled again, which only costs rasterizing what's drawn next.
 constexpr int kAtlasSize = 1024;
+
+// A block of solid white texels in the corner of every atlas. A rect is drawn as a quad that samples one of them, so
+// it goes through the same pipeline as a glyph, into the same batch, and a box and its text are one draw call and not
+// two. (The glyphs start after it, and an atlas that is emptied keeps it.) The sample is the middle of the block, so
+// even a filter that looked around it would only see white.
+constexpr int kWhiteBlock = 2;
+constexpr float kWhiteUV = (static_cast<float>(kWhiteBlock) * 0.5f) / static_cast<float>(kAtlasSize);
 
 // The same checks the headless renderer makes, so that renderers agree on what is an error.
 inline auto IsValid(const float value) -> bool {
@@ -245,6 +254,7 @@ class GlImpl {
     if (width > KURA_RENDERER_MAX_SURFACE_SIZE || height > KURA_RENDERER_MAX_SURFACE_SIZE)
       return KURA_RENDERER_ERR_INVALID_ARG;
 
+    KURA_ZONE_C("gl.begin_frame", kura::tracing::kColorRender);
     Save();
     width_ = width;
     height_ = height;
@@ -266,8 +276,13 @@ class GlImpl {
     idx_.clear();
     text_verts_.clear();
     text_idx_.clear();
-    active_atlas_ = nullptr;
+    // Once anything has been drawn with text, rects go through the text pipeline from the first one of the frame,
+    // and the frame is one draw call (a clip splits it).
+    active_atlas_ = last_atlas_;
     clips_.clear();
+    stat_draw_calls_ = 0;
+    stat_vertices_ = 0;
+    stat_glyph_uploads_ = 0;
     in_frame_ = true;
     return KURA_RENDERER_OK;
   }
@@ -276,12 +291,16 @@ class GlImpl {
     if (!in_frame_)
       return KURA_RENDERER_ERR_NOT_IN_FRAME;
 
-    if (active_atlas_) {
+    KURA_ZONE_C("gl.end_frame", kura::tracing::kColorRender);
+    if (active_atlas_)
       FlushText(*active_atlas_);
-      active_atlas_ = nullptr;
-    }
+    active_atlas_ = nullptr;
 
     Flush();
+    // a UI that has settled should be a few draw calls and no glyph uploads, whatever is on the screen
+    KURA_PLOT("gl.draw_calls", stat_draw_calls_);
+    KURA_PLOT("gl.vertices", stat_vertices_);
+    KURA_PLOT("gl.glyph_uploads", stat_glyph_uploads_);
     in_frame_ = false;
     const auto balanced = clips_.empty();
     clips_.clear();
@@ -363,12 +382,16 @@ class GlImpl {
       return KURA_RENDERER_ERR_NOT_IN_FRAME;
     if (!IsValid(pos) || !IsValid(style) || !IsValid(color) || (utf8 == nullptr && length != 0))
       return KURA_RENDERER_ERR_INVALID_ARG;
+    KURA_ZONE_C("gl.draw_text", kura::tracing::kColorRender);
     const auto font = fonts_.Find(FamilyOf(style));
     if (font == nullptr)
       return KURA_RENDERER_OK;
-    const auto lines = font->Shape(std::string_view(length == 0 ? "" : utf8, length), style.size);
+    // a reference: this is the run the font cached, and copying it (its lines, and the glyphs of each) for every text
+    // drawn was an allocation or more per text per frame. Nothing below shapes, so the cache can't move under it.
+    const auto& lines = font->Shape(std::string_view(length == 0 ? "" : utf8, length), style.size);
     const auto metrics = font->GetMetrics(style.size);
 
+    // what rects were batched before the text is drawn first (it is the same as nothing, once the frame is going)
     Flush();
     EnsureTextPipeline();
     auto& atlas = AtlasFor(font);
@@ -376,6 +399,7 @@ class GlImpl {
     if (active_atlas_ && active_atlas_ != &atlas)
       FlushText(*active_atlas_);
     active_atlas_ = &atlas;
+    last_atlas_ = &atlas;
 
     const auto r = Channel(color.r);
     const auto g = Channel(color.g);
@@ -481,7 +505,15 @@ class GlImpl {
   std::unordered_map<const text::Font*, Atlas> atlases_{};
   std::vector<TextVertex> text_verts_{};
   std::vector<uint32_t> text_idx_{};
-  const Atlas* active_atlas_ = nullptr;
+  // The atlas whose pipeline the quads go to (text, and rects once there is text), and the last one that text was
+  // drawn with, which the next frame starts with. Either is null until there has been text.
+  Atlas* active_atlas_ = nullptr;
+  Atlas* last_atlas_ = nullptr;
+
+  // What the frame cost the GPU's driver, for the trace
+  uint32_t stat_draw_calls_ = 0;
+  uint32_t stat_vertices_ = 0;
+  uint32_t stat_glyph_uploads_ = 0;
 
   void EnsureTextPipeline() {
     if (text_program_ != 0)
@@ -544,8 +576,27 @@ class GlImpl {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      UploadWhiteBlock();
+      ResetPacking(&atlas);
     }
     return atlas;
+  }
+
+  // The solid texels rects sample (see kWhiteBlock), in the corner of the atlas that is bound.
+  static void UploadWhiteBlock() {
+    static constexpr std::array<unsigned char, kWhiteBlock * kWhiteBlock> kWhite = {255, 255, 255, 255};
+    GLint alignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kWhiteBlock, kWhiteBlock, GL_RED, GL_UNSIGNED_BYTE, kWhite.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+  }
+
+  // Glyphs are packed in rows after the white block, which an emptied atlas keeps.
+  static void ResetPacking(Atlas* atlas) {
+    atlas->cursor_x = kWhiteBlock + 1;
+    atlas->cursor_y = 0;
+    atlas->row_height = kWhiteBlock;
   }
 
   // The glyph in the atlas, rasterized and uploaded the first time it's asked for. Null only if the atlas
@@ -555,6 +606,8 @@ class GlImpl {
     if (const auto it = atlas.glyphs.find(key); it != atlas.glyphs.end())
       return &it->second;
 
+    KURA_ZONE_C("gl.glyph_upload", kura::tracing::kColorText);
+    stat_glyph_uploads_++;
     const auto bitmap = font->Rasterize(id, size);
     GlyphEntry entry{};
     // one texel of room around each glyph, so nothing bleeds into its neighbor
@@ -572,7 +625,7 @@ class GlImpl {
     if (atlas.cursor_y + bitmap.height + 1 > kAtlasSize) {
       FlushText(atlas);
       atlas.glyphs.clear();
-      atlas.cursor_x = atlas.cursor_y = atlas.row_height = 0;
+      ResetPacking(&atlas);
     }
 
     GLint alignment = 4;
@@ -611,6 +664,9 @@ class GlImpl {
   void FlushText(const Atlas& atlas) {
     if (text_idx_.empty())
       return;
+    KURA_ZONE_C("gl.flush_text", kura::tracing::kColorRender);
+    stat_draw_calls_++;
+    stat_vertices_ += static_cast<uint32_t>(text_verts_.size());
     glUseProgram(text_program_);
     glUniform2f(text_u_res_, static_cast<float>(width_), static_cast<float>(height_));
     glActiveTexture(GL_TEXTURE0);
@@ -686,6 +742,7 @@ class GlImpl {
         glDeleteTextures(1, &atlas.texture);
     }
     atlases_.clear();
+    active_atlas_ = last_atlas_ = nullptr;
     if (text_vao_ != 0)
       glDeleteVertexArrays(1, &text_vao_);
     if (text_vbo_ != 0)
@@ -768,10 +825,9 @@ class GlImpl {
 
   // Draws what was batched under the old clip, and then switches to the current one.
   void ApplyClip() {
-    if (active_atlas_ != nullptr) {
+    // the atlas stays the one quads go to: it is only what was queued under the old clip that has to be drawn
+    if (active_atlas_ != nullptr)
       FlushText(*active_atlas_);
-      active_atlas_ = nullptr;
-    }
 
     Flush();
     if (clips_.empty()) {
@@ -795,9 +851,14 @@ class GlImpl {
   }
 
   void AddQuad(const Vertex& a, const Vertex& b, const Vertex& c, const Vertex& d) {
+    // Once there is text, a flat quad is a glyph that is all white: it goes in the batch the text is in, so that
+    // painting a box and then its text doesn't end a draw call and begin another each time.
     if (active_atlas_ != nullptr) {
-      FlushText(*active_atlas_);
-      active_atlas_ = nullptr;
+      AddGlyphQuad(*active_atlas_, TextVertex{a.x, a.y, kWhiteUV, kWhiteUV, a.r, a.g, a.b, a.a},
+                   TextVertex{b.x, b.y, kWhiteUV, kWhiteUV, b.r, b.g, b.b, b.a},
+                   TextVertex{c.x, c.y, kWhiteUV, kWhiteUV, c.r, c.g, c.b, c.a},
+                   TextVertex{d.x, d.y, kWhiteUV, kWhiteUV, d.r, d.g, d.b, d.a});
+      return;
     }
 
     if (verts_.size() + 4 > kMaxVertices || idx_.size() + 6 > kMaxIndices)
@@ -811,6 +872,9 @@ class GlImpl {
   void Flush() {
     if (idx_.empty())
       return;
+    KURA_ZONE_C("gl.flush_rects", kura::tracing::kColorRender);
+    stat_draw_calls_++;
+    stat_vertices_ += static_cast<uint32_t>(verts_.size());
     glUseProgram(program_);
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);

@@ -182,12 +182,8 @@ class ExprBuilder {
   // A `set` rule gives the elements of a kind below it defaults for properties they don't set themselves. It is
   // in force for the rest of the block, element, function or file it is written in, and for what is inside that.
   // Its values are built where it is written, so what names mean in them is what it means there.
-  struct SetEntry {
-    NodeExpr::Kind kind;
-    std::string property;
-    Expr* value;
-  };
-  using SetEntries = std::vector<SetEntry>;
+  using SetEntry = SetRuleEntry;
+  using SetEntries = SetRuleEntries;
   // the rules in force, outermost first; the entries of one are in the order written, the last of them winning
   std::vector<SetEntries> set_scopes_{};
 
@@ -205,8 +201,15 @@ class ExprBuilder {
     }
   };
 
+  // every rule in force, outermost first: what a call carries into the helper it calls
+  auto ActiveSetRules() const -> SetEntries;
   auto BuildSetRule(const syntax::SetRule* rule) -> SetEntries;
   void AddSetRule(const syntax::SetRule* rule);
+  // `set view(...)` says how the view looks, and the view is not written anywhere, so it can be set only where it
+  // is for the whole of it: the top level of a file, and before the body of `view`.
+  void RejectViewRules(const syntax::SetRule* rule, const std::string& where);
+  // The properties the rules in force give the View, for the root of `view`'s body: the innermost, latest wins.
+  auto ViewRuleProperties() -> NodeExpr::PropertyList;
   auto BuildBinding(const syntax::Binding* binding) -> StoreLocalExpr*;
   auto BuildDirectives(const std::vector<syntax::Node*>& directives) -> DirectiveList;
   auto BuildType(const syntax::Node* node) -> TypeExpr*;

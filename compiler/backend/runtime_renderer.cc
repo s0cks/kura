@@ -14,6 +14,7 @@
 #include "backend/runtime_abi.h"
 #include "backend/runtime_input.h"
 #include "renderer/renderer_abi.h"
+#include "tracing/tracing.h"
 
 namespace {
 // The renderer is thread-local so that two threads (two UIs, or a UI and a test) can render at the
@@ -217,7 +218,12 @@ void kura_rt_end_frame() {
   // over everything that was drawn
   kura_rt_tooltip_draw();
   kura::rt::input::EndFrame();
-  Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
+  {
+    KURA_ZONE_C("renderer.end_frame", kura::tracing::kColorRender);
+    Record("kura_rt_end_frame", ops.end_frame(tl_renderer.self));
+  }
+  // every renderer's frames are Tracy's frames, so the frame time and the frame's zones line up in the trace
+  KURA_FRAME_MARK();
 }
 
 void kura_rt_fill_rect(const KuraRect* rect, const KuraColor* color) {

@@ -30,6 +30,13 @@ enum PaintPass : uint8_t {
   kTextOnly,
 };
 
+// What `kurac --trace` asks for: a Tracy zone around every function (and the frame in `view`), emitted into the
+// program itself. `file` is the source file the zones are attributed to.
+struct TraceOptions {
+  bool enabled = false;
+  std::string file{};
+};
+
 class FlowGraphBuilder {
   friend class EffectVisitor;
   friend class ValueVisitor;
@@ -44,6 +51,8 @@ class FlowGraphBuilder {
     std::vector<std::string> errors{};
     // where to dump the virtual DOM of each view; null: don't
     std::ostream* dump_dom = nullptr;
+    // whether to emit Tracy zones into the program, and what to call the file they are in
+    TraceOptions trace{};
     // the top-level `let`s, and which of them are constants, as far as it has been worked out (null: not one)
     std::vector<expr::StoreLocalExpr*> bindings{};
     std::unordered_map<LocalVariable*, Object*> constants{};
@@ -52,12 +61,6 @@ class FlowGraphBuilder {
 
  private:
   Context* ctx_;
-#ifdef KURA_DEBUG
-  bool enable_tracing_ = true;
-#else
-  // TODO(@s0cks): check init runtime value for release builds
-  bool enable_tracing_ = false;
-#endif  // KURA_DEBUG
   std::string name_;
   Function* function_;
   BlockId current_block_id_ = 0;
@@ -132,6 +135,12 @@ class FlowGraphBuilder {
   // Writes the virtual DOM under `root` to `Context::dump_dom`, if it is set.
   void DumpDom(dom::Node* root) const;
 
+  // Whether the function being built gets a zone: when tracing is on, the functions the user wrote do, and the
+  // lambdas, the tests (the runner times them) and the compiler's own functions do not.
+  auto ShouldTrace() const -> bool;
+  void BeginZone(const std::string& name);
+  void EndZone(const std::string& name);
+
   auto BuildBody(expr::Expr* body) -> bool;
   auto BuildViewBody(expr::Expr* body) -> bool;
   auto BuildInit(const std::vector<expr::StoreLocalExpr*>& bindings) -> bool;
@@ -148,7 +157,7 @@ class FlowGraphBuilder {
 
  public:
   static auto BuildModuleGraph(Module* module, std::vector<std::string>* errors = nullptr,
-                               std::ostream* dump_dom = nullptr) -> ModuleGraph*;
+                               std::ostream* dump_dom = nullptr, const TraceOptions& trace = {}) -> ModuleGraph*;
 
   static auto BuildFlowGraph(expr::SeqExpr* expr) -> FlowGraph*;
 };

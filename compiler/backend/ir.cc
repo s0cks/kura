@@ -342,6 +342,9 @@ auto LabelInstr::ToString() const -> std::string {
 auto TracyBeginZoneInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "TracyBeginZoneInstr(";
+  ss << "name=" << zone_.name;
+  if (!zone_.function.empty())
+    ss << ", function=" << zone_.function;
   ss << ")";
   return ss.str();
 }
@@ -349,6 +352,8 @@ auto TracyBeginZoneInstr::ToString() const -> std::string {
 auto TracyEndZoneInstr::ToString() const -> std::string {
   std::stringstream ss{};
   ss << "TracyEndZoneInstr(";
+  if (!name_.empty())
+    ss << "name=" << name_;
   ss << ")";
   return ss.str();
 }
@@ -418,6 +423,8 @@ auto AssertInstr::ToString() const -> std::string {
   ss << "file=" << file_ << ", ";
   ss << "line=" << line_ << ", ";
   ss << "column=" << column_ << ", ";
+  if (has_operands_)
+    ss << "left=" << Name(GetLeft()) << ", right=" << Name(GetRight()) << ", ";
   ss << "fail_fast=" << fail_fast_;
   ss << ")";
   return ss.str();

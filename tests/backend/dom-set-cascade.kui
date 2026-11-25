@@ -1,0 +1,24 @@
+// A `set` rule cascades into the helpers that are called under it, however deep: they are defaults for the elements
+// the helpers build, below what an element is given and what a rule written in the helper gives.
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn leaf() => #text("leaf")                      // size from the caller
+fn own() =>
+  set text(size: 20px)
+  #text("own")                                  // its own rule wins over the caller's
+fn given() => #text(size: 30px, "given")        // what it sets itself wins over both
+fn middle() => #block { leaf() }                // the rule goes on through a call that calls
+
+set view(fill: white, padding: 8px)
+
+fn view(state: Int): Node => {
+  set text(size: 12px, color: red)
+  #block(direction: "column") {
+    leaf()
+    own()
+    given()
+    middle()
+  }
+}

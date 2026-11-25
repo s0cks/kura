@@ -491,6 +491,10 @@ LOWER_FN(Arg) {
       }
       break;
     case kura::syntax::Arg::kPun:
+      // `width:`, the name and nothing after: the value is the one the parser made up
+      parts.push_back(FormatName(rhs.name));
+      parts.push_back(NewText(":"));
+      break;
     case kura::syntax::Arg::kPositional:
       parts.push_back(Lower(config, *rhs.value));
       break;

@@ -1,0 +1,10 @@
+// error: `set view` can't be written in a function that isn't `view`
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn other(): Node =>
+  set view(fill: white)
+  #text("a")
+
+fn view(state: Int): Node => other()

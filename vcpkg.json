@@ -12,7 +12,10 @@
     "rang",
     "benchmark",
     "freetype",
-    "tracy",
+    {
+      "name": "tracy",
+      "features": ["on-demand"]
+    },
     "argparse",
     {
       "name": "harfbuzz",

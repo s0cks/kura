@@ -506,9 +506,19 @@ class TreeBuilder {
     return Is(K::kIdent) && Text(Peek().span) == "set" && PeekKind(1) == K::kIdent;
   }
 
-  // A name used as both the property and its value: makes the name and the VarRef that reads it.
+  // `name:` with nothing after it, up to the `,` or the closing bracket that ends the entry: a pun, the name used as
+  // both the property and its value (`width:` is `width: width`). `at` is where the token after the colon is.
+  auto AtPun(const size_t at = 2) const -> bool {
+    if (!Is(K::kIdent) || PeekKind(1) != K::kColon)
+      return false;
+    const auto after = PeekKind(at);
+    return after == K::kComma || after == K::kRParen || after == K::kRBrace;
+  }
+
+  // The name of a pun, and the VarRef that reads it.
   auto ParsePun(Name& name) -> Node* {
     const auto token = Next();
+    Next();  // ':'
     name = MakeName(token.span, Text(token.span));
     auto* ref = VarRef::New(token.span);
     ref->name = name;
@@ -521,21 +531,21 @@ class TreeBuilder {
         .WithHelp("use `\\{` for a literal brace");
   }
 
-  // `allow_pun`: whether `name,` is a pun. Directive arguments are plain values, so `@pure(sqrt, floor)`
+  // `allow_pun`: whether `name:` is a pun. Directive arguments are plain values, so `@pure(sqrt, floor)`
   // lists two names.
   auto ParseUiArg(const bool allow_pun = true) -> Node* {
     const auto begin = Here();
     auto* arg = Arg::New(Span(begin, begin));
-    if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
+    if (allow_pun && AtPun()) {
+      // `#button(width:)`: a name and a colon with nothing after is `width: width`
+      arg->form = Arg::kPun;
+      arg->value = ParsePun(arg->name);
+    } else if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
       const auto token = Next();
       Next();  // ':'
       arg->form = Arg::kNamed;
       arg->name = MakeName(token.span, Text(token.span));
       arg->value = ParseExpression();
-    } else if (allow_pun && Is(K::kIdent) && PeekKind(1) == K::kComma) {
-      // `#button(width,)`: a name followed by a comma is `width: width`
-      arg->form = Arg::kPun;
-      arg->value = ParsePun(arg->name);
     } else if (Accept(K::kSpread)) {
       arg->form = Arg::kSpread;
       arg->value = ParseExpression();
@@ -1366,17 +1376,13 @@ class TreeBuilder {
     return node;
   }
 
-  // `{` starts a record when it is `{}`, `{ ...`, `{ name: ` or `{ name, `; a record update when it is
-  // `{ base | `; otherwise a block. `{ x }` is a block and `{ x, }` is a record with a punned entry.
+  // `{` starts a record when it is `{}`, `{ ...` or `{ name: `; a record update when it is `{ base | `; otherwise a
+  // block. `{ x }` is a block, and `{ x: }` is a record with a punned entry.
   auto AtRecordStart() const -> bool {
     const auto next = PeekKind(1);
     if (next == K::kRBrace || next == K::kSpread)
       return true;
-    if (next == K::kIdent) {
-      const auto after = PeekKind(2);
-      return after == K::kColon || after == K::kComma;
-    }
-    return false;
+    return next == K::kIdent && PeekKind(2) == K::kColon;
   }
 
   // `{ name.member.member |`
@@ -1412,28 +1418,28 @@ class TreeBuilder {
     ParseDelimited(K::kRBrace, open.span, [&] {
       const auto entry_begin = Here();
       auto* entry = Arg::New(Span(entry_begin, entry_begin));
-      if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
+      if (AtPun()) {
+        // `{ width: }`: the same as `{ width: width }`
+        entry->form = Arg::kPun;
+        entry->value = ParsePun(entry->name);
+      } else if (Is(K::kIdent) && PeekKind(1) == K::kColon) {
         const auto name = Next();
         Next();  // ':'
         entry->form = Arg::kNamed;
         entry->name = MakeName(name.span, Text(name.span));
         entry->value = ParseExpression();
-      } else if (Is(K::kIdent) && (PeekKind(1) == K::kComma || PeekKind(1) == K::kRBrace)) {
-        // `{ width, }`: the same as `{ width: width }`
-        entry->form = Arg::kPun;
-        entry->value = ParsePun(entry->name);
       } else if (Accept(K::kSpread)) {
         entry->form = Arg::kSpread;
         entry->value = ParseExpression();
       } else {
         // `{ a: 1, 2 }`: not an entry. Say what an entry looks like and skip it.
         ReportHere(DiagnosticCode::kBadRecordEntry,
-                   "expected `name: value`, `name` or `...spread` in this record, found " + Found(Peek()),
+                   "expected `name: value`, `name:` or `...spread` in this record, found " + Found(Peek()),
                    "not a record entry")
             .WithLabel(open.span, "this `{` starts a record")
             .WithHelp(
-                "every entry in a record needs a name, like `{ x: 1, y: 2 }`, or is a name on its own, like "
-                "`{ x, y }`; to copy another record's entries use `...other`");
+                "every entry in a record needs a name, like `{ x: 1, y: 2 }`, or is a name and a colon on its own, "
+                "like `{ x:, y: }`; to copy another record's entries use `...other`");
         SkipUntil(K::Set({K::kComma}));
         entry->form = Arg::kPositional;
         entry->value = NewError(entry_begin);

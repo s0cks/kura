@@ -96,13 +96,35 @@ A rule is in force from where it is written to the end of what it is written in,
 
 | Written in                  | It applies to                                            |
 | --------------------------- | -------------------------------------------------------- |
-| the top level of a file     | the functions below it                                   |
-| before a function's body    | all of that function                                     |
-| a `{ ... }` block           | the rest of the block                                    |
+| the top level of a file     | the functions below it, and the helpers they call        |
+| before a function's body    | all of that function, and the helpers it calls           |
+| a `{ ... }` block           | the rest of the block, and the helpers called in it      |
 | the children of an element  | the children after it, and what is inside them           |
 
-What an element sets itself wins over a rule, and of two rules the inner, later one wins. Rules are lexical: a
-helper that a view calls has the rules of where the helper is written, not those of where it is called.
+What an element sets itself wins over a rule, and of two rules the inner, later one wins.
+
+Rules cascade into the helpers that are called under them, however deep. The elements of a helper get the rules in
+force where it is called as defaults, below what they set themselves and below the rules written in the helper:
+
+```kura
+fn label() => #text("hi")                  // 12px, red: from the call below
+fn warning() =>
+  set text(color: yellow)
+  #text("careful")                         // 12px, yellow: its own rule wins over the caller's
+
+fn view(state: State): Node =>
+  #block {
+    set text(size: 12px, color: red)
+    label()
+    warning()
+  }
+```
+
+A rule that a helper gets from its caller is a default for a property the element doesn't have, so it never changes
+a property that is there. The value still has to be a compile-time constant.
+
+The View is set with `set view(...)`, at the top level of a file or before the body of `view`: it can't be written
+as an element, and a `set view` anywhere else is an error.
 
 ```kura
 set text(size: 12px)

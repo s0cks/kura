@@ -8,6 +8,8 @@
 // `args` are what the view is called with, written like they are for `kura --run`; if there are none,
 // each parameter gets the zero of its type. A view draws into a 1024x1024 frame, so that's the window.
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -24,11 +26,13 @@
 #include "renderer/gl/renderer.h"
 
 // TODO(@s0cks): move to common
-#define PROFILE_BEGIN(Name) const auto Name##_start = std::chrono::high_resolution_clock::now();
-#define PROFILE_END(Name)                                                                                     \
-  const auto Name##_end = std::chrono::high_resolution_clock::now();                                          \
-  const auto Name##_dur = std::chrono::duration_cast<std::chrono::microseconds>((Name##_end - Name##_start)); \
-  Name##_samples.push_back(Name##_dur.count());
+// steady_clock, because high_resolution_clock is system_clock on some standard libraries, which can jump; and the
+// samples are fractional microseconds, because a frame that is a few hundred of them should not lose half of one to
+// truncation each time.
+#define PROFILE_BEGIN(Name) const auto Name##_start = std::chrono::steady_clock::now();
+#define PROFILE_END(Name)                                   \
+  const auto Name##_end = std::chrono::steady_clock::now(); \
+  Name##_samples.push_back(std::chrono::duration<double, std::micro>(Name##_end - Name##_start).count());
 
 namespace {
 // The window starts this big, in screen points, and can be resized.
@@ -40,6 +44,7 @@ struct Options {
   std::vector<std::string> args{};
   long frames = -1;
   bool optimize = true;
+  bool trace = false;
 };
 
 auto ParseOptions(const int argc, char** argv, Options* options) -> bool {
@@ -58,6 +63,8 @@ auto ParseOptions(const int argc, char** argv, Options* options) -> bool {
         options->frames = std::atol(value.c_str());
     } else if (arg == "--no-opt") {
       options->optimize = false;
+    } else if (arg == "--trace") {
+      options->trace = true;
     } else if (options->file.empty()) {
       options->file = arg;
     } else {
@@ -337,7 +344,7 @@ int main(const int argc, char** argv) {
 
   int exit_code = EXIT_SUCCESS;
   long frame = 0;
-  std::vector<uint64_t> render_samples{};
+  std::vector<double> render_samples{};
   render_samples.reserve(1024);
   while (!glfwWindowShouldClose(window) && (options.frames < 0 || frame < options.frames)) {
     glfwPollEvents();
@@ -497,10 +504,21 @@ int main(const int argc, char** argv) {
     frame++;
   }
 
-  const auto render_sample_sum = std::accumulate(render_samples.begin() + 10, render_samples.end(), 0.0);
-  const auto render_sample_avg = render_sample_sum / (render_samples.size() - 10);
-
-  std::println("render avg {:.2f}us over {} frames", render_sample_avg, render_samples.size());
+  // The first frames build the atlas, shape every string and warm the driver up, which is not what a frame costs.
+  constexpr size_t kWarmupFrames = 10;
+  if (render_samples.size() > kWarmupFrames) {
+    std::vector<double> steady(render_samples.begin() + kWarmupFrames, render_samples.end());
+    std::sort(steady.begin(), steady.end());
+    const auto at = [&](const double q) {
+      return steady[std::min(steady.size() - 1, static_cast<size_t>(q * static_cast<double>(steady.size())))];
+    };
+    const auto avg = std::accumulate(steady.begin(), steady.end(), 0.0) / static_cast<double>(steady.size());
+    std::println("render avg {:.2f}us  p50 {:.2f}us  p99 {:.2f}us  max {:.2f}us  over {} frames ({} warmup skipped)",
+                 avg, at(0.50), at(0.99), steady.back(), steady.size(), kWarmupFrames);
+  } else {
+    std::println("rendered {} frames, too few to report (the first {} are warmup)", render_samples.size(),
+                 kWarmupFrames);
+  }
 
   kura_rt_set_renderer(nullptr);
   renderer.ops->destroy(renderer.self);

@@ -1,0 +1,9 @@
+// error: `set view` can't be written in a block
+type Message = Tick | Tock
+fn init(): Int => 0
+fn update(msg: Message, state: Int): Int => state
+
+fn view(state: Int): Node => {
+  set view(fill: white)
+  #text("a")
+}

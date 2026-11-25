@@ -1,0 +1,8 @@
+test "not false" {
+  assert(!false)
+}
+
+@should-fail
+test "not true" {
+  assert(!true)
+}

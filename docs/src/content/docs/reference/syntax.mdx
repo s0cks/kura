@@ -83,9 +83,14 @@ fn pos(): Position => { x: 1, y: 2 }   // record
 fn sum(): Int => { let a = 1  a + 2 }  // block
 ```
 
-`{ x }` is a block that returns `x`. With a comma, `{ x, }` is a record with one **pun**: it means
-`{ x: x }`. Element arguments pun the same way: `#button(width,)` is `#button(width: width)`. Positional
+`{ x }` is a block that returns `x`. With a colon, `{ x: }` is a record with one **pun**: it means
+`{ x: x }`. Element arguments pun the same way: `#button(width:)` is `#button(width: width)`. Positional
 arguments come last.
+
+```kura
+let width = 300px
+#block(width:)            // the same as #block(width: width)
+```
 
 An element can be given an **id**, a name for it, written first in its arguments with a colon:
 `#button(:my-button, fill: red)`. An element has one id, and an id names one element in a view.

@@ -5,7 +5,8 @@ add_library(kura-test-harness STATIC
   golden.cc)
 target_link_libraries(kura-test-harness
   PUBLIC GTest::gtest
-         kura-renderer-headless)
+         kura-renderer-headless
+         kura-tracing)
 target_include_directories(kura-test-harness
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(kura-test-harness
@@ -52,7 +53,8 @@ add_executable(kura-runtime-renderer-tests
 target_link_libraries(kura-runtime-renderer-tests
   PRIVATE kura-compiler
           kura-renderer-headless
-          GTest::gtest_main)
+          GTest::gtest_main
+          kura-tracing)
 gtest_discover_tests(kura-runtime-renderer-tests
   DISCOVERY_MODE PRE_TEST)
 

@@ -1,5 +1,7 @@
 #include "text/text.h"
 
+#include "tracing/tracing.h"
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include <algorithm>
@@ -221,6 +223,9 @@ struct Font::Impl {
   }
 
   auto ShapeUncached(const std::string_view utf8, const float size) -> CachedRun {
+    // what the run cache is for: every one of these is a harfbuzz shape
+    KURA_ZONE_C("text.shape", kura::tracing::kColorText);
+    KURA_ZONE_TEXT(utf8.data(), std::min<size_t>(utf8.size(), 64));
     SetSize(size);
 
     const auto& m = face->size->metrics;

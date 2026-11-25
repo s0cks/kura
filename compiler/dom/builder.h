@@ -30,6 +30,8 @@ class Builder {
   FunctionResolver functions_{};
   // the helpers being inlined right now, innermost last: a helper that reaches itself is recursion
   std::vector<Function*> inlining_{};
+  // The `set` rules of the calls being built, outermost call first. The elements of a helper get these as defaults.
+  std::vector<const expr::SetRuleEntries*> rule_frames_{};
   std::vector<std::string> errors_{};
   // the `let`s seen so far that hold a constant
   std::unordered_map<LocalVariable*, Object*> constants_{};
@@ -42,6 +44,7 @@ class Builder {
   void BuildInto(Node* parent, expr::Expr* expr, const TagList& tags);
   void BuildElement(Node* parent, expr::NodeExpr* expr, const TagList& tags);
   void BuildProperties(Node* node, expr::NodeExpr* expr);
+  void ApplyInheritedRules(Node* node, expr::NodeExpr* expr);
   void BuildBind(Node* parent, expr::StoreLocalExpr* expr);
   auto FindHelper(expr::CallExpr* call) -> Function*;
   void InlineHelper(Node* parent, Function* helper, expr::CallExpr* call, const TagList& tags);

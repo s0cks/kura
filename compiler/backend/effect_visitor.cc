@@ -15,8 +15,42 @@ void EffectVisitor::ReturnDefinition(Definition* defn) {
   }
 }
 
+namespace {
+auto IsComparison(const BinaryOp op) -> bool {
+  switch (op) {
+    case BinaryOp::kEq:
+    case BinaryOp::kNeq:
+    case BinaryOp::kGreaterThan:
+    case BinaryOp::kGreaterThanEqual:
+    case BinaryOp::kLessThan:
+    case BinaryOp::kLessThanEqual:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 auto EffectVisitor::VisitAssert(expr::AssertExpr* expr) -> VisitResult {
-  const auto cond = Eval(expr->GetCond());
+  Value* cond = nullptr;
+  Value* left = nullptr;
+  Value* right = nullptr;
+  auto op = BinaryOp::kEq;
+  if (const auto binary = expr->GetCond() != nullptr ? expr->GetCond()->AsBinary() : nullptr;
+      binary != nullptr && IsComparison(binary->GetOp())) {
+    // Each side is evaluated once, here, and the comparison is made of them: a failure can say what they were
+    // without the assertion having evaluated either of them twice.
+    left = Eval(binary->GetLeft());
+    if (!left)
+      return false;
+    right = Eval(binary->GetRight());
+    if (!right)
+      return false;
+    op = binary->GetOp();
+    cond = Bind(BinaryOpInstr::New(op, left, right));
+  } else {
+    cond = Eval(expr->GetCond());
+  }
   if (!cond)
     return false;
   const auto msg = Eval(expr->GetMessage());
@@ -24,9 +58,12 @@ auto EffectVisitor::VisitAssert(expr::AssertExpr* expr) -> VisitResult {
     return false;
 
   const auto a = AssertInstr::New(cond, msg);
+  if (left != nullptr)
+    a->SetOperands(op, left, right);
   a->SetFile(expr->GetFile());
   a->SetLine(expr->GetLine());
   a->SetColumn(expr->GetColumn());
+  a->SetLength(expr->GetLength());
   a->SetFailFast(expr->ShouldFailFast());
 
   Emit(a);

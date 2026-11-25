@@ -45,6 +45,9 @@ class Session {
 
  private:
   Program* program_;
+  // The view the program runs in. It is made with the session, handed to `init`, `update` and `view` as their `this`,
+  // and is where the runtime keeps what belongs to the view: its layout, its inputs, where its elements are.
+  View* view_ = nullptr;
   rt::KuraValue state_{rt::kTagNone, 0};
   bool has_update_ = false;
   bool has_view_ = false;
@@ -61,7 +64,7 @@ class Session {
   auto Deliver(const rt::KuraValue& message, std::string* error) -> bool;
 
  public:
-  ~Session() = default;
+  ~Session();
   Session(const Session&) = delete;
   Session& operator=(const Session&) = delete;
 
@@ -69,6 +72,10 @@ class Session {
   // the host to give it with `SetState` (or not, if its view takes none). The program has to outlive the
   // session.
   static auto Create(Program* program, std::string* error) -> std::unique_ptr<Session>;
+
+  auto GetView() const -> View* {
+    return view_;
+  }
 
   auto GetState() const -> const rt::KuraValue& {
     return state_;

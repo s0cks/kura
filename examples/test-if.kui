@@ -1,16 +1,24 @@
-fn x2(x: Number): Number => x * 2
-
-fn size(n: Number): Number =>
+fn size(n: Int): Int =>
   if n > 10 { 3 } else if n > 5 { 2 } else { 1 }
 
-test "test size" {
+test "size" {
   assert(size(0) == 1)
   assert(size(1) == 1, "expected size(1) to equal 1")
   assert(size(6) == 2, "expected size(6) to equal 2")
 }
 
-@should-fail
-test "test failure" {
+// An `if` chain is only ever wrong at its edges, so test both sides of each one.
+test "size at the edges" {
+  assert(size(5) == 1, "5 is not over 5")
+  assert(size(6) == 2)
+  assert(size(10) == 2, "10 is not over 10")
+  assert(size(11) == 3)
+}
+
+// Passes because it fails. The text keeps it from passing for a reason it didn't mean: a typo in the test, or a
+// failure somewhere else, would fail with something other than this.
+@should-fail("this was expected to fail")
+test "failure" {
   assert(1 == 0)
   assert(1 == 2, "this was expected to fail")
 }

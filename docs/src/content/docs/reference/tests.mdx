@@ -68,6 +68,37 @@ test "test 0 equals 1" {
 
 </Example>
 
+`@should-fail` can be given the text the failure has to contain, so that the test can't pass for a reason it didn't
+mean (a typo in the test, or something failing that shouldn't):
+
+<Example level="4">
+
+```kura
+@should-fail("0 is not 1")
+test "test 0 equals 1" {
+  assert(0 == 1, "0 is not 1")
+}
+```
+
+</Example>
+
+### @should-panic
+
+`@should-panic` tells Kura that test should only pass if it panics. A failed assertion isn't a panic, so a test that
+only fails assertions fails. Like `@should-fail`, it can be given the text the panic has to contain. A test can't be
+both.
+
+<Example level="4">
+
+```kura
+@should-panic("division by zero")
+test "dividing by zero" {
+  assert(1 / 0 == 0)
+}
+```
+
+</Example>
+
 ### @skip
 
 `@skip` tells Kura to skip this test when running

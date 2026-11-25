@@ -16,6 +16,7 @@
 #include "backend/runtime_input.h"
 #include "backend/runtime_text.h"
 #include "object.h"
+#include "view.h"
 
 namespace {
 using kura::rt::KuraValue;
@@ -34,7 +35,7 @@ constexpr KuraTooltipStyle kDefaultStyle{
     .color = KuraColor{0xF5 / 255.0f, 0xF5 / 255.0f, 0xF5 / 255.0f, 1.0f},
 };
 
-struct State {
+struct State : kura::View::ViewState {
   KuraTooltipStyle style = kDefaultStyle;
 
   bool has_pointer = false;
@@ -58,11 +59,14 @@ struct State {
   bool pending = false;
 };
 
-thread_local State tl_state{};
+// The tooltip of a view is in the view.
+inline auto Tip() -> State& {
+  return kura::View::Current().GetState<State>();
+}
 
 auto Now() -> double {
-  if (tl_state.clock_set)
-    return tl_state.clock;
+  if (Tip().clock_set)
+    return Tip().clock;
   using Clock = std::chrono::steady_clock;
   return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
 }
@@ -80,23 +84,23 @@ auto Same(const KuraRect& a, const std::string& a_text, const KuraRect& b, const
 
 extern "C" {
 void kura_rt_pointer_moved(const double x, const double y) {
-  tl_state.has_pointer = true;
-  tl_state.pointer_x = x;
-  tl_state.pointer_y = y;
+  Tip().has_pointer = true;
+  Tip().pointer_x = x;
+  Tip().pointer_y = y;
 }
 
 void kura_rt_pointer_left() {
-  tl_state.has_pointer = false;
+  Tip().has_pointer = false;
 }
 
 void kura_rt_set_time(const double seconds) {
   kura::rt::input::SetClock(seconds);
-  tl_state.clock_set = true;
-  tl_state.clock = seconds;
+  Tip().clock_set = true;
+  Tip().clock = seconds;
 }
 
 void kura_rt_tooltip_dismiss() {
-  auto& state = tl_state;
+  auto& state = Tip();
   if (!state.hovering)
     return;
   state.dismissed = true;
@@ -106,15 +110,15 @@ void kura_rt_tooltip_dismiss() {
 }
 
 int kura_rt_tooltip_pending() {
-  return tl_state.pending ? 1 : 0;
+  return Tip().pending ? 1 : 0;
 }
 
 void kura_rt_tooltip_configure(const KuraTooltipStyle* style) {
-  tl_state.style = *style;
+  Tip().style = *style;
 }
 
 KuraTooltipStyle kura_rt_tooltip_style() {
-  return tl_state.style;
+  return Tip().style;
 }
 
 KuraTooltipStyle kura_rt_tooltip_default_style() {
@@ -124,7 +128,7 @@ KuraTooltipStyle kura_rt_tooltip_default_style() {
 void kura_rt_tooltip_reset() {
   // what was over, waited for or hidden belonged to the frames of a program that is gone; the host's style and
   // where the pointer is are the host's
-  auto& state = tl_state;
+  auto& state = Tip();
   state.hovering = false;
   state.dismissed = false;
   state.pending = false;
@@ -133,7 +137,7 @@ void kura_rt_tooltip_reset() {
 }
 
 void kura_rt_tooltip_draw() {
-  auto& state = tl_state;
+  auto& state = Tip();
   state.pending = false;
 
   KuraRect anchor{};

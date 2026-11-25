@@ -1,11 +1,13 @@
 // args: 0
-// An explicit #view: its padding is the window's, and its fill paints all of it.
+// The rules for the view: its padding is the window's, and its fill paints all of it.
 type Message = Tick | Tock
 fn init(): Int => 0
 fn update(msg: Message, state: Int): Int => state
 
+set view(fill: white, padding: 8px, direction: "column", gap: 4px)
+
 fn view(state: Int): Node =>
-  #view(fill: white, padding: 8px, direction: "column", gap: 4px){
+  #fragment {
     #text("a")
     #block(fill: red, height: 10px)
   }

@@ -138,6 +138,25 @@ void FlowGraphBuilder::DumpDom(dom::Node* root) const {
   dom::Printer::Print(*ctx_->dump_dom, root, Indent{1});
 }
 
+auto FlowGraphBuilder::ShouldTrace() const -> bool {
+  if (!ctx_->trace.enabled || function_ == nullptr)
+    return false;
+  // `%test.0` and the like are the compiler's; the test runner opens a zone for each test
+  return !name_.empty() && name_.front() != '%';
+}
+
+void FlowGraphBuilder::BeginZone(const std::string& name) {
+  ZoneInfo zone{};
+  zone.name = name;
+  zone.function = name_;
+  zone.file = ctx_->trace.file;
+  Emit(TracyBeginZoneInstr::New(std::move(zone)));
+}
+
+void FlowGraphBuilder::EndZone(const std::string& name) {
+  Emit(TracyEndZoneInstr::New(name));
+}
+
 auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
   {
     const auto defn = BeginFrameInstr::New();
@@ -146,8 +165,8 @@ auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
 #else
     Emit(defn);
 #endif  // KURA_DEBUG
-    if (enable_tracing_)
-      Emit(TracyBeginZoneInstr::New());
+    if (ShouldTrace())
+      BeginZone("view");
   }
 
   NodeVisitor for_body(this);
@@ -161,8 +180,8 @@ auto FlowGraphBuilder::BuildViewBody(expr::Expr* body) -> bool {
 #else
     Emit(defn);
 #endif  // KURA_DEBUG
-    if (enable_tracing_)
-      Emit(TracyEndZoneInstr::New());
+    if (ShouldTrace())
+      EndZone("view");
   }
 
   Terminate(ReturnInstr::New());
@@ -173,6 +192,10 @@ auto FlowGraphBuilder::BuildBody(expr::Expr* body) -> bool {
   if (name_ == "view")
     return BuildViewBody(body);
 
+  const auto traced = ShouldTrace();
+  if (traced)
+    BeginZone(name_);
+
   ValueVisitor for_body(this);
   if (!body->Accept(&for_body))
     return false;
@@ -180,6 +203,10 @@ auto FlowGraphBuilder::BuildBody(expr::Expr* body) -> bool {
   Value* value = for_body.GetValue();
   if (!value)
     value = Bind(ConstantInstr::New(None::Get()));
+
+  // the body has one way out, the return below, so this is the only place a zone has to end
+  if (traced)
+    EndZone(name_);
 
   Terminate(ReturnInstr::New(value));
   return true;
@@ -446,11 +473,12 @@ auto FlowGraphBuilder::BuildLambda(Context* ctx, expr::LambdaExpr* lambda, const
   return ctx->errors.empty() ? graph : nullptr;
 }
 
-auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>* errors, std::ostream* dump_dom)
-    -> ModuleGraph* {
+auto FlowGraphBuilder::BuildModuleGraph(Module* module, std::vector<std::string>* errors, std::ostream* dump_dom,
+                                        const TraceOptions& trace) -> ModuleGraph* {
   Context ctx{};
   ctx.graph = new ModuleGraph();
   ctx.dump_dom = dump_dom;
+  ctx.trace = trace;
   ctx.bindings = module->bindings;
   for (const auto func : module->functions)
     ctx.functions[std::string(func->GetName()->GetData())] = func;

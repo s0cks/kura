@@ -11,6 +11,7 @@ add_executable(kura-session-tests
   test_input.cc
   test_text_edit.cc
   test_heap_wiring.cc
+  test_view.cc
   environment.cc)
 target_compile_definitions(kura-session-tests
   PRIVATE KURA_EXAMPLES_DIR="${PROJECT_SOURCE_DIR}/examples"

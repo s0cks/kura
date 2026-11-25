@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "backend/text_edit.h"
+#include "view.h"
 
 namespace kura::rt::input {
 namespace {
@@ -57,7 +58,8 @@ struct Place {
   KuraValue message{kTagNone, 0};
 };
 
-struct Registry {
+// What the inputs of one view need: their text, and which has focus. It is kept in the view.
+struct Registry : kura::View::ViewState {
   std::unordered_map<Id, State, KeyHash> states{};
   std::vector<Place> places{};
   std::optional<Id> focus{};
@@ -65,11 +67,13 @@ struct Registry {
   double clock = 0;
 };
 
-thread_local Registry tl{};
+inline auto Reg() -> Registry& {
+  return kura::View::Current().GetState<Registry>();
+}
 
 auto Now() -> double {
-  if (tl.clock_set)
-    return tl.clock;
+  if (Reg().clock_set)
+    return Reg().clock;
   using Clock = std::chrono::steady_clock;
   return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
 }
@@ -133,20 +137,20 @@ auto OffsetAt(const std::string& text, const float x, const float size, const st
 }
 
 auto FocusedPlace() -> Place* {
-  if (!tl.focus)
+  if (!Reg().focus)
     return nullptr;
-  for (auto& place : tl.places) {
-    if (place.key == *tl.focus)
+  for (auto& place : Reg().places) {
+    if (place.key == *Reg().focus)
       return &place;
   }
   return nullptr;
 }
 
 auto FocusedState() -> State* {
-  if (!tl.focus)
+  if (!Reg().focus)
     return nullptr;
-  const auto it = tl.states.find(*tl.focus);
-  return it == tl.states.end() ? nullptr : &it->second;
+  const auto it = Reg().states.find(*Reg().focus);
+  return it == Reg().states.end() ? nullptr : &it->second;
 }
 
 // What the text became is a Message: the variant `on-input` names, with the text in it.
@@ -170,13 +174,13 @@ auto Faded(KuraColor color, const double factor) -> KuraColor {
 
 void Draw(const Field& field) {
   const Id key{field.owner, field.node};
-  auto& state = tl.states[key];
+  auto& state = Reg().states[key];
   state.seen = true;
   // the view is what the text is: what was typed since is gone if the program didn't take it
   if (state.edit.GetText() != field.text)
     state.edit.SetText(field.text);
 
-  const auto focused = tl.focus && *tl.focus == key;
+  const auto focused = Reg().focus && *Reg().focus == key;
   const auto editable = !field.readonly && field.message.tag != kTagNone;
   const auto& text = state.edit.GetText();
   const auto line = LineHeightOf(field.size, field.family);
@@ -203,9 +207,9 @@ void Draw(const Field& field) {
   }
 
   // where a click on it goes: the clips it is drawn in apply
-  tl.places.push_back(Place{key, origin, field.size, field.family, editable, field.message});
+  Reg().places.push_back(Place{key, origin, field.size, field.family, editable, field.message});
   kura_rt_event_add(field.box.x, field.box.y, field.box.width, field.box.height, kEventInput, kTagInt,
-                    tl.places.size() - 1);
+                    Reg().places.size() - 1);
 
   // what is in the input stays in it
   const KuraRect clip{field.box.x + field.padding_left, field.box.y, room, field.box.height};
@@ -241,49 +245,49 @@ void Draw(const Field& field) {
 }
 
 void BeginFrame() {
-  for (auto& [key, state] : tl.states)
+  for (auto& [key, state] : Reg().states)
     state.seen = false;
 }
 
 void EndFrame() {
   // an input that wasn't drawn is gone, and the keyboard with it
-  for (auto it = tl.states.begin(); it != tl.states.end();) {
+  for (auto it = Reg().states.begin(); it != Reg().states.end();) {
     if (it->second.seen)
       ++it;
     else
-      it = tl.states.erase(it);
+      it = Reg().states.erase(it);
   }
-  if (tl.focus && tl.states.find(*tl.focus) == tl.states.end())
-    tl.focus.reset();
+  if (Reg().focus && Reg().states.find(*Reg().focus) == Reg().states.end())
+    Reg().focus.reset();
 }
 
 void ClearPlaces() {
-  tl.places.clear();
+  Reg().places.clear();
 }
 
 void Reset() {
-  tl.states.clear();
-  tl.places.clear();
-  tl.focus.reset();
+  Reg().states.clear();
+  Reg().places.clear();
+  Reg().focus.reset();
 }
 
 auto Click(const double x, const double y) -> bool {
   KuraRect box{};
   KuraValue found{};
-  if (!kura_rt_event_topmost(kEventInput, x, y, &box, &found) || found.bits >= tl.places.size()) {
-    tl.focus.reset();
+  if (!kura_rt_event_topmost(kEventInput, x, y, &box, &found) || found.bits >= Reg().places.size()) {
+    Reg().focus.reset();
     return false;
   }
 
-  const auto& place = tl.places[found.bits];
-  const auto it = tl.states.find(place.key);
-  if (it == tl.states.end()) {
-    tl.focus.reset();
+  const auto& place = Reg().places[found.bits];
+  const auto it = Reg().states.find(place.key);
+  if (it == Reg().states.end()) {
+    Reg().focus.reset();
     return false;
   }
 
   auto& state = it->second;
-  tl.focus = place.key;
+  Reg().focus = place.key;
   const auto& text = state.edit.GetText();
   state.edit.SetCaret(OffsetAt(text, static_cast<float>(x) - place.origin, place.size, place.family));
   Touch(&state);
@@ -330,7 +334,7 @@ auto Press(const Key key, const int mods, KuraValue* message) -> int {
       edit.SelectAll();
       break;
     case kEscape:
-      tl.focus.reset();
+      Reg().focus.reset();
       return kHandled;
     case kBackspace:
     case kDelete: {
@@ -364,7 +368,7 @@ auto Blinking() -> bool {
 }
 
 void SetClock(const double seconds) {
-  tl.clock_set = true;
-  tl.clock = seconds;
+  Reg().clock_set = true;
+  Reg().clock = seconds;
 }
 }  // namespace kura::rt::input

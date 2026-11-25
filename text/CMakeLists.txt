@@ -9,7 +9,8 @@ set_target_properties(kura-text PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(kura-text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(kura-text
   PUBLIC Freetype::Freetype
-         PkgConfig::HARFBUZZ)
+         PkgConfig::HARFBUZZ
+  PRIVATE kura-tracing)
 if(FONTCONFIG_FOUND)
   message(STATUS "kura-text: finding system fonts with fontconfig")
   target_link_libraries(kura-text PRIVATE PkgConfig::FONTCONFIG)

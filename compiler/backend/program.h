@@ -9,6 +9,7 @@
 #include "backend/jit.h"
 #include "backend/runtime_abi.h"
 #include "module.h"
+#include "view.h"
 
 namespace kura {
 // A `.kui` file that has been parsed, compiled and loaded into a JIT: what a host that runs Kura
@@ -18,6 +19,7 @@ class Program {
  public:
   struct Options {
     bool optimize = true;
+    bool trace = false;
   };
 
  private:
@@ -37,8 +39,11 @@ class Program {
 
   // The arguments are checked against the function's signature first: handing compiled code a
   // value of the wrong type is undefined behaviour, not an error it can report.
+  //
+  // `init`, `update` and `view` run in a view, which is the one given, or else the view the thread is in: the base of
+  // it that the host set, or a view of the thread's own.
   auto Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
-            std::string* error) -> bool;
+            std::string* error, View* view = nullptr) -> bool;
 
   // Whether the program defines `function`: a host asks for `init` and `update`, which are optional.
   // The flow graphs the program was compiled from, for tests that look at what the analyses decided.

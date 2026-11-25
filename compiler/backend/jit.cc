@@ -122,7 +122,7 @@ auto Jit::Initialize(std::string* error) -> bool {
 }
 
 auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
-               std::string* error) -> bool {
+               std::string* error, void* view) -> bool {
   auto symbol = jit_->lookup(EntryPointName(function));
   if (!symbol) {
     llvm::consumeError(symbol.takeError());
@@ -137,14 +137,14 @@ auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& ar
   const auto& a = args;
   switch (args.size()) {
     case 0:
-      *result = reinterpret_cast<KuraValue (*)(void*)>(fn)(nullptr);
+      *result = reinterpret_cast<KuraValue (*)(void*)>(fn)(view);
       // TODO(@s0cks): remove this is a hack for void returns of view func
       if (function == "view")
         (*result) = KuraValue{};
 
       return true;
     case 1:
-      *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t)>(fn)(nullptr, a[0].tag, a[0].bits);
+      *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t)>(fn)(view, a[0].tag, a[0].bits);
       // TODO(@s0cks): remove this is a hack for void returns of view func
       if (function == "view")
         (*result) = KuraValue{};
@@ -152,7 +152,7 @@ auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& ar
       return true;
     case 2:
       *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t)>(fn)(
-          nullptr, a[0].tag, a[0].bits, a[1].tag, a[1].bits);
+          view, a[0].tag, a[0].bits, a[1].tag, a[1].bits);
       // TODO(@s0cks): remove this is a hack for void returns of view func
       if (function == "view")
         (*result) = KuraValue{};
@@ -160,7 +160,7 @@ auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& ar
       return true;
     case 3:
       *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t)>(fn)(
-          nullptr, a[0].tag, a[0].bits, a[1].tag, a[1].bits, a[2].tag, a[2].bits);
+          view, a[0].tag, a[0].bits, a[1].tag, a[1].bits, a[2].tag, a[2].bits);
       // TODO(@s0cks): remove this is a hack for void returns of view func
       if (function == "view")
         (*result) = KuraValue{};
@@ -169,7 +169,7 @@ auto Jit::Call(const std::string& function, const std::vector<rt::KuraValue>& ar
     case 4:
       *result = reinterpret_cast<KuraValue (*)(void*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                                                uint64_t, uint64_t)>(fn)(
-          nullptr, a[0].tag, a[0].bits, a[1].tag, a[1].bits, a[2].tag, a[2].bits, a[3].tag, a[3].bits);
+          view, a[0].tag, a[0].bits, a[1].tag, a[1].bits, a[2].tag, a[2].bits, a[3].tag, a[3].bits);
       // TODO(@s0cks): remove this is a hack for void returns of view func
       if (function == "view")
         (*result) = KuraValue{};

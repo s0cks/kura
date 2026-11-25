@@ -39,8 +39,21 @@
       }
     },
     {
-      "name": "clang-debug",
-      "displayName": "Debug (Clang)",
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": {
+          "value": "Release",
+          "type": "STRING"
+        }
+      },
+      "environment": {
+        "BUILD_ENVIRONMENT": "release"
+      }
+    },
+    {
+      "name": "debug",
+      "hidden": true,
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": {
           "value": "Debug",
@@ -49,8 +62,17 @@
       },
       "environment": {
         "BUILD_ENVIRONMENT": "dev"
-      },
-      "inherits": ["base-clang"]
+      }
+    },
+    {
+      "name": "clang-release",
+      "binaryDir": "${sourceDir}/build-release",
+      "inherits": ["release", "base-clang"]
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Debug (Clang)",
+      "inherits": ["debug", "base-clang"]
     },
     {
       "name": "clang-debug-tmp",
@@ -78,6 +100,11 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "clang-release",
+      "displayName": "Release (Clang)",
+      "configurePreset": "clang-release"
+    },
     {
       "name": "clang-debug",
       "displayName": "Debug (Clang)",

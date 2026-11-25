@@ -614,6 +614,7 @@ void Builder::BuildElement(Node* parent, expr::NodeExpr* expr, const TagList& in
   }
 
   BuildProperties(node, expr);
+  ApplyInheritedRules(node, expr);
 
   if (!CanHaveChildren(node->GetKind())) {
     if (!expr->GetChildren().empty())
@@ -661,6 +662,45 @@ void Builder::BuildProperties(Node* node, expr::NodeExpr* expr) {
       value.expr = store->GetValue();
     }
     node->SetProperty(value);
+  }
+}
+
+// The rules of the calls this element is being built under are defaults for it, as the rules written around it are:
+// a property it was given, by itself or by a rule where it is written, is not touched, and of the rules left the
+// call nearest to it wins, and in a call the latest rule.
+void Builder::ApplyInheritedRules(Node* node, expr::NodeExpr* expr) {
+  if (rule_frames_.empty())
+    return;
+
+  const auto where = "#" + std::string(node->GetTag());
+  for (auto frame = rule_frames_.rbegin(); frame != rule_frames_.rend(); ++frame) {
+    for (auto entry = (*frame)->rbegin(); entry != (*frame)->rend(); ++entry) {
+      if (entry->kind != expr->GetKind())
+        continue;
+
+      const auto def = FindProperty(node->GetKind(), entry->property);
+      if (!def) {
+        ReportUnknownProperty(node, entry->property);
+        continue;
+      }
+      if (node->FindProperty(def))
+        continue;
+
+      const auto folded = Fold(entry->value);
+      if (!folded) {
+        Error(where + " '" + entry->property + "': the value of a `set` rule has to be a compile-time constant, found " +
+              std::string{entry->value->GetName()});
+        continue;
+      }
+      if (const auto problem = CheckConstant(*def, folded)) {
+        Error(where + " '" + entry->property + "': " + *problem);
+        continue;
+      }
+      PropertyValue value{};
+      value.def = def;
+      value.constant = folded;
+      node->SetProperty(value);
+    }
   }
 }
 
@@ -716,9 +756,11 @@ void Builder::InlineHelper(Node* parent, Function* helper, expr::CallExpr* call,
   }
 
   inlining_.push_back(helper);
+  rule_frames_.push_back(&call->GetInheritedRules());
   for (size_t i = 0; i < params.size(); i++)
     BuildBind(parent, new expr::StoreLocalExpr(params[i].local, call->GetArgAt(i)));
   BuildInto(parent, helper->GetBody(), tags);
+  rule_frames_.pop_back();
   inlining_.pop_back();
 }
 

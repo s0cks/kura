@@ -6,6 +6,7 @@
 #include <print>
 
 #include "heap/heap.h"
+#include "tracing/tracing.h"
 
 namespace kura {
 auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Session> {
@@ -15,6 +16,9 @@ auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Se
   }
 
   std::unique_ptr<Session> session(new Session(program));
+  // the host's own calls (an event from the window) are about this view, as the program's are
+  session->view_ = View::New();
+  View::SetBase(session->view_);
   session->has_view_ = program->HasFunction("view");
   session->has_update_ = program->HasFunction("update");
   if (program->HasFunction("init")) {
@@ -23,7 +27,7 @@ auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Se
       return nullptr;
     }
 
-    if (!program->Call("init", {}, &session->state_, error))
+    if (!program->Call("init", {}, &session->state_, error, session->view_))
       return nullptr;
   }
 
@@ -33,6 +37,10 @@ auto Session::Create(Program* program, std::string* error) -> std::unique_ptr<Se
     return nullptr;
   }
   return session;
+}
+
+Session::~Session() {
+  View::Destroy(view_);
 }
 
 auto Session::AddListener(Listener listener) -> ListenerId {
@@ -75,6 +83,7 @@ auto Session::Send(const rt::KuraValue& message, std::string* error) -> bool {
 }
 
 auto Session::Deliver(const rt::KuraValue& message, std::string* error) -> bool {
+  KURA_ZONE_C("session.deliver", kura::tracing::kColorHeap);
   const auto previous = state_;
   // A built-in message (see rt::IsBuiltinMessage) is sent to every UI, whether or not it asked for it, so one
   // that isn't in the program's Message type isn't an error: `update` can't take it, and never sees it. The
@@ -82,7 +91,7 @@ auto Session::Deliver(const rt::KuraValue& message, std::string* error) -> bool 
   const auto wanted = !rt::IsBuiltinMessage(message) || program_->Accepts("update", 0, message);
   if (has_update_ && wanted) {
     rt::KuraValue next{};
-    if (!program_->Call("update", {message, state_}, &next, error))
+    if (!program_->Call("update", {message, state_}, &next, error, view_))
       return false;
     state_ = next;
   }
@@ -114,9 +123,12 @@ auto Session::Render(std::string* error) -> bool {
     return false;
   }
   // the places of the last frame mean nothing to this one, and neither does what it made: the frame's arena is reset
+  KURA_ZONE_C("session.render", kura::tracing::kColorRender);
   kura_rt_events_clear();
-  if (const auto heap = heap::Heap::Current())
+  if (const auto heap = heap::Heap::Current()) {
+    KURA_ZONE_C("heap.reset_frame", kura::tracing::kColorHeap);
     heap->ResetFrame();
+  }
 
   std::vector<rt::KuraValue> args{};
   if (program_->GetArity("view") > 0)
@@ -124,7 +136,11 @@ auto Session::Render(std::string* error) -> bool {
   rt::KuraValue ignored{};
   // everything `view` allocates is for this frame
   const rt::PhaseScope frame(rt::Phase::kFrame);
-  const auto ok = program_->Call("view", args, &ignored, error);
+  bool ok = false;
+  {
+    KURA_ZONE_C("program.view", kura::tracing::kColorRender);
+    ok = program_->Call("view", args, &ignored, error, view_);
+  }
 #ifndef NDEBUG
   // the model and the tenured space never point into the frame: a bug in what decides where things live shows up here
   if (const auto heap = heap::Heap::Current(); heap && !heap->Verify(&std::cerr)) {

@@ -53,6 +53,8 @@ struct CliOptions {
   bool dump_ir = false;
   bool dump_dom = false;
   bool dump_draw = false;
+  // compile Tracy zones into the program (see TraceOptions)
+  bool trace = false;
   bool emit_llvm = false;
   std::string emit_object{};
   std::string emit_header{};
@@ -67,6 +69,20 @@ struct CliOptions {
   std::string function{};
   std::vector<std::string> args{};
 };
+
+// What `--trace` means for the graphs: zones in the program, attributed to the file it was built from. A kurac built
+// without tracing support can still compile them (they are two runtime calls that do nothing), but says so, because
+// a profiler would otherwise just show nothing.
+auto TraceOptionsFor(const CliOptions& options) -> TraceOptions {
+  TraceOptions trace{};
+  trace.enabled = options.trace;
+  trace.file = options.filename;
+  if (options.trace && kura_rt_tracy_enabled() == 0)
+    std::cerr << "warning: --trace: this kurac was built without tracing support (KURA_ADD_TRACING_SUPPORT), so "
+                 "the zones are compiled in but nothing records them"
+              << std::endl;
+  return trace;
+}
 
 auto FindLibrary(const CliOptions& options, const std::string& name) -> std::string {
   std::vector<std::string> dirs = options.library_dirs;
@@ -118,6 +134,10 @@ void RegisterCommonArgs(argparse::ArgumentParser& cmd, CliOptions& opts) {
     opts.optimize = false;
   });
   cmd.add_argument("--dump-dom").help("Dump lowered UI DOM tree").flag().store_into(opts.dump_dom);
+  cmd.add_argument("--trace")
+      .help("Compile Tracy zones into the program: one per function, and one for each frame of `view`")
+      .flag()
+      .store_into(opts.trace);
 }
 
 auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
@@ -215,7 +235,8 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
 
 auto RunCheck(Module* m, const CliOptions& opts) -> bool {
   std::vector<std::string> errors{};
-  const auto graph = FlowGraphBuilder::BuildModuleGraph(m, &errors, opts.dump_dom ? &std::cout : nullptr);
+  const auto graph =
+      FlowGraphBuilder::BuildModuleGraph(m, &errors, opts.dump_dom ? &std::cout : nullptr, TraceOptionsFor(opts));
   if (!graph || !TypeAnalysis::Run(m, graph, &errors) || !PurityAnalysis::Run(m, graph, &errors)) {
     for (const auto& err : errors)
       std::cerr << "error: " << err << '\n';
@@ -262,7 +283,8 @@ auto main(int argc, char** argv) -> int {
   }
 
   std::vector<std::string> errors{};
-  const auto graphs = FlowGraphBuilder::BuildModuleGraph(m, &errors, opts.dump_dom ? &std::cerr : nullptr);
+  const auto graphs =
+      FlowGraphBuilder::BuildModuleGraph(m, &errors, opts.dump_dom ? &std::cerr : nullptr, TraceOptionsFor(opts));
   if (!graphs) {
     for (const auto& err : errors)
       std::cerr << "error: " << err << '\n';

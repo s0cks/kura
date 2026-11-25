@@ -14,6 +14,8 @@ project(kura
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+add_compile_definitions(TRACY_ENABLE)
+
 if(CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug")
   add_compile_definitions(KURA_DEBUG)
   add_compile_definitions(_NDEBUG)
@@ -39,6 +41,7 @@ endif()
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 add_subdirectory(libs)
+add_subdirectory(tracing)
 add_subdirectory(heap)
 add_subdirectory(runtime)
 add_subdirectory(layout)

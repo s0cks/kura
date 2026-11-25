@@ -27,8 +27,9 @@ class Jit {
   auto Initialize(std::string* error) -> bool;
   auto RunTests(const char* filter, bool fail_fast, uint64_t* failed, std::string* error) -> bool;
   auto RunBenchmarks(const char* filter, uint64_t* over_budget, std::string* error) -> bool;
+  // `view` is the kura::View the function runs in: compiled `init`, `update` and `view` are given it.
   auto Call(const std::string& function, const std::vector<rt::KuraValue>& args, rt::KuraValue* result,
-            std::string* error) -> bool;
+            std::string* error, void* view = nullptr) -> bool;
 
  public:
   static auto Create(std::string* error) -> std::unique_ptr<Jit>;

@@ -1338,9 +1338,21 @@ class RecordExpr : public Expr {
   }
 };
 
+// What one entry of a `set` rule says: every #element of this kind that doesn't give `property` has `value`.
+struct SetRuleEntry {
+  NodeExpr::Kind kind;
+  std::string property;
+  Expr* value;
+};
+using SetRuleEntries = std::vector<SetRuleEntry>;
+
 class CallExpr : public TemplateExpr<1> {
  private:
   ExprList args_{};
+  // The `set` rules in force where this is called, outermost first. A helper that returns a node is built where it
+  // is called, and these cascade into it: they are defaults for its elements, below what they and the helper's own
+  // rules give.
+  SetRuleEntries inherited_rules_{};
 
   inline void SetArgAt(const uint64_t idx, Expr* value) {
     args_.at(idx) = value;
@@ -1359,6 +1371,14 @@ class CallExpr : public TemplateExpr<1> {
 
   auto GetNumberOfArgs() const -> uint64_t {
     return args_.size();
+  }
+
+  auto GetInheritedRules() const -> const SetRuleEntries& {
+    return inherited_rules_;
+  }
+
+  void SetInheritedRules(SetRuleEntries rules) {
+    inherited_rules_ = std::move(rules);
   }
 
   auto GetArgAt(const uint64_t idx) const -> Expr* {
@@ -1449,6 +1469,7 @@ class AssertExpr : public TemplateExpr<2> {
   std::string file_;
   uint32_t line_;
   uint32_t column_;
+  uint32_t length_ = 0;
   bool fail_fast_;
 
  public:
@@ -1477,6 +1498,15 @@ class AssertExpr : public TemplateExpr<2> {
 
   auto GetColumn() const -> uint32_t {
     return column_;
+  }
+
+  // how many bytes of source the assertion is, `assert(` to `)`, for what is underlined when it fails
+  auto GetLength() const -> uint32_t {
+    return length_;
+  }
+
+  void SetLength(const uint32_t rhs) {
+    length_ = rhs;
   }
 
   void SetColumn(const uint32_t rhs) {

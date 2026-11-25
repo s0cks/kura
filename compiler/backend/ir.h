@@ -1781,18 +1781,26 @@ class CastColorInstr : public TemplateDefinition<1> {
   }
 };
 
-class AssertInstr : public TemplateInstruction<2> {
+// `assert(cond, message)`. When the condition is a comparison, `a == b`, the two sides are values of their own, so a
+// failure can say what they were (left and right are the sides, and the condition is the comparison of them); for any
+// other condition they are the condition again, and `HasOperands` is false.
+class AssertInstr : public TemplateInstruction<4> {
  private:
   std::string file_{};
   uint32_t line_ = 0;
   uint32_t column_ = 0;
+  uint32_t length_ = 0;
   bool fail_fast_ = false;
+  bool has_operands_ = false;
+  BinaryOp op_ = BinaryOp::kEq;
 
  public:
   AssertInstr(Value* cond, Value* message = nullptr) {
     SetCond(cond);
     if (message)
       SetMessage(message);
+    SetLeft(cond);
+    SetRight(cond);
   }
   ~AssertInstr() override = default;
 
@@ -1824,6 +1832,14 @@ class AssertInstr : public TemplateInstruction<2> {
     column_ = rhs;
   }
 
+  auto GetLength() const -> uint32_t {
+    return length_;
+  }
+
+  void SetLength(const uint32_t rhs) {
+    length_ = rhs;
+  }
+
   auto ShouldFailFast() const -> bool {
     return fail_fast_;
   }
@@ -1832,8 +1848,25 @@ class AssertInstr : public TemplateInstruction<2> {
     fail_fast_ = rhs;
   }
 
+  auto HasOperands() const -> bool {
+    return has_operands_;
+  }
+
+  auto GetOp() const -> BinaryOp {
+    return op_;
+  }
+
+  void SetOperands(const BinaryOp op, Value* left, Value* right) {
+    has_operands_ = true;
+    op_ = op;
+    SetLeft(left);
+    SetRight(right);
+  }
+
   HAS_NAMED_INPUT(Cond, 0);
   HAS_NAMED_INPUT(Message, 1);
+  HAS_NAMED_INPUT(Left, 2);
+  HAS_NAMED_INPUT(Right, 3);
   DECLARE_INSTRUCTION_TYPE(Assert);
 
  public:

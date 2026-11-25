@@ -23,6 +23,8 @@
 #include "backend/runtime_text.h"
 #include "layout/layout.h"
 #include "object.h"
+#include "tracing/tracing.h"
+#include "view.h"
 
 namespace {
 namespace lay = kura::layout;
@@ -68,6 +70,14 @@ struct Line {
   float height = 0;
 };
 
+// A text node's text as it was wrapped the last time it was drawn, and the room it was wrapped to. Drawing wraps it
+// again only when the text or the room has changed, which on most frames is never.
+struct WrappedText {
+  bool valid = false;
+  float room = 0;
+  std::vector<Line> lines{};
+};
+
 struct Context {
   const void* table = nullptr;
   // by the id of the viewport node
@@ -77,6 +87,7 @@ struct Context {
   std::vector<std::string> texts{};
   std::vector<float> sizes{};
   std::vector<std::string> families{};
+  std::vector<WrappedText> wrapped{};
   std::unordered_map<uint64_t, Slot> slots{};
   // the context this one is an instance in, or null for the tree's own
   Context* owner = nullptr;
@@ -88,10 +99,6 @@ struct Context {
   Flat flat{};
 };
 
-thread_local std::unordered_map<const void*, std::unique_ptr<Context>> tl_contexts{};
-// The template tables that mean an instance right now.
-thread_local std::unordered_map<const void*, Context*> tl_bindings{};
-
 // The scroll containers drawn this frame, in drawing order, with where they are on the screen.
 struct Scroller {
   Context* context;
@@ -99,7 +106,20 @@ struct Scroller {
   lay::Box box;
   kura::rt::KuraValue message;
 };
-thread_local std::vector<Scroller> tl_scrollers{};
+
+// What the layout of one view is: it is kept in the view, and so is each view's own.
+struct LayoutState : kura::View::ViewState {
+  std::unordered_map<const void*, std::unique_ptr<Context>> contexts{};
+  // The template tables that mean an instance right now.
+  std::unordered_map<const void*, Context*> bindings{};
+  std::vector<Scroller> scrollers{};
+  // how many times a text had to be wrapped, for the trace's plot: it should stop rising once a UI settles
+  [[maybe_unused]] uint64_t wrap_misses = 0;
+};
+
+inline auto Layout() -> LayoutState& {
+  return kura::View::Current().GetState<LayoutState>();
+}
 
 auto NewContext(const void* table, const uint64_t count) -> std::unique_ptr<Context> {
   auto context = std::make_unique<Context>();
@@ -111,13 +131,14 @@ auto NewContext(const void* table, const uint64_t count) -> std::unique_ptr<Cont
   context->texts.resize(count);
   context->sizes.assign(count, kDefaultFontSize);
   context->families.resize(count);
+  context->wrapped.resize(count);
   return context;
 }
 
 auto ContextFor(const void* table, const uint64_t count) -> Context& {
-  if (const auto bound = tl_bindings.find(table); bound != tl_bindings.end())
+  if (const auto bound = Layout().bindings.find(table); bound != Layout().bindings.end())
     return *bound->second;
-  auto& slot = tl_contexts[table];
+  auto& slot = Layout().contexts[table];
   if (slot && slot->nodes.size() == count)
     return *slot;
   slot = NewContext(table, count);
@@ -132,9 +153,9 @@ void Touch(Context* context) {
 
 // Forgets what a context that is going away was bound to.
 void Forget(Context* context) {
-  for (auto it = tl_bindings.begin(); it != tl_bindings.end();) {
+  for (auto it = Layout().bindings.begin(); it != Layout().bindings.end();) {
     if (it->second == context)
-      it = tl_bindings.erase(it);
+      it = Layout().bindings.erase(it);
     else
       ++it;
   }
@@ -520,6 +541,8 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
       family == nullptr ? std::string_view{} : std::string_view(family, static_cast<size_t>(family_length));
   if (context.texts[node] == value && context.sizes[node] == font_size && context.families[node] == font_family)
     return;
+  KURA_ZONE_C("layout.set_text", kura::tracing::kColorLayout);
+  context.wrapped[node].valid = false;
   context.texts[node].assign(value.data(), value.size());
   context.sizes[node] = font_size;
   context.families[node].assign(font_family.data(), font_family.size());
@@ -528,6 +551,7 @@ void kura_rt_layout_set_text(const void* table, const uint64_t count, const uint
 
 void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t node, const KuraColor* color,
                        const uint64_t opacity_bits, const uint64_t align) {
+  KURA_ZONE_C("draw_text", kura::tracing::kColorText);
   auto& context = ContextFor(table, count);
   if (node >= count)
     return;
@@ -555,8 +579,18 @@ void kura_rt_draw_text(const void* table, const uint64_t count, const uint64_t n
   faded.a *= static_cast<float>(opacity);
 
   const auto& family = context.families[node];
+  // wrapped when the text or the room changed, and kept: the lines of a text that didn't change are the same ones
+  auto& wrapped = context.wrapped[node];
+  if (!wrapped.valid || wrapped.room != room) {
+    KURA_ZONE_C("text.wrap", kura::tracing::kColorText);
+    wrapped.lines = Wrap(text, context.sizes[node], family, room);
+    wrapped.room = room;
+    wrapped.valid = true;
+    KURA_PLOT("text.wrap_misses", ++Layout().wrap_misses);
+  }
+
   auto y = box.y + top;
-  for (const auto& line : Wrap(text, context.sizes[node], family, room)) {
+  for (const auto& line : wrapped.lines) {
     if (!line.text.empty()) {
       // each line is by itself in the room the text has: at its start, in the middle or at its end
       const auto slack = std::max(0.0f, room - 0.01f - line.width);
@@ -615,10 +649,19 @@ void kura_rt_layout_run(const void* table, const uint64_t count) {
   if (!context.dirty && viewport.width == context.viewport.width && viewport.height == context.viewport.height)
     return;
 
-  context.flat.Clear();
-  Flatten(&context, &context.flat);
-  context.flat.boxes.resize(context.flat.nodes.size());
-  context.engine.Run(context.flat.nodes, 0, viewport, context.flat.boxes, &Measure, &context.flat);
+  // only a layout that is really done is a zone: on most frames it isn't, and the trace shouldn't say it was
+  KURA_ZONE_C("layout.run", kura::tracing::kColorLayout);
+  {
+    KURA_ZONE_C("layout.flatten", kura::tracing::kColorLayout);
+    context.flat.Clear();
+    Flatten(&context, &context.flat);
+    context.flat.boxes.resize(context.flat.nodes.size());
+  }
+  KURA_PLOT("layout.nodes", context.flat.nodes.size());
+  {
+    KURA_ZONE_C("layout.engine", kura::tracing::kColorLayout);
+    context.engine.Run(context.flat.nodes, 0, viewport, context.flat.boxes, &Measure, &context.flat);
+  }
   ApplyScroll(&context, &context.flat);
   Scatter(&context, context.flat);
   context.viewport = viewport;
@@ -650,7 +693,7 @@ void kura_rt_layout_slot_instance(const void* table, const uint64_t count, const
     }
     Touch(&context);
   }
-  tl_bindings[instance] = target.instances[index].get();
+  Layout().bindings[instance] = target.instances[index].get();
 }
 
 void kura_rt_layout_slot_end(const void* table, const uint64_t count, const uint64_t slot) {
@@ -685,23 +728,23 @@ void kura_rt_register_event(const void* table, const uint64_t count, const uint6
   const auto& box = context.boxes[node];
   kura_rt_event_add(box.x, box.y, box.width, box.height, kind, tag, bits);
   if (kind == kura::rt::kEventScroll)
-    tl_scrollers.push_back(Scroller{&context, node, {box.x, box.y, box.width, box.height}, {tag, bits}});
+    Layout().scrollers.push_back(Scroller{&context, node, {box.x, box.y, box.width, box.height}, {tag, bits}});
 }
 
 void kura_rt_layout_reset() {
   kura::rt::input::Reset();
-  tl_scrollers.clear();
-  tl_bindings.clear();
-  tl_contexts.clear();
+  Layout().scrollers.clear();
+  Layout().bindings.clear();
+  Layout().contexts.clear();
 }
 
 void kura_rt_scrollers_clear() {
-  tl_scrollers.clear();
+  Layout().scrollers.clear();
 }
 
 int kura_rt_event_scroll(const double x, const double y, const double dx, const double dy, KuraValue* message) {
   // the last registered is the topmost, and the one inside is registered after the one it is in
-  for (auto it = tl_scrollers.rbegin(); it != tl_scrollers.rend(); ++it) {
+  for (auto it = Layout().scrollers.rbegin(); it != Layout().scrollers.rend(); ++it) {
     const auto& box = it->box;
     if (x < box.x || x >= box.x + box.width || y < box.y || y >= box.y + box.height)
       continue;

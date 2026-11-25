@@ -1,0 +1,11 @@
+fn div(a: Int, b: Int): Int => a / b
+
+test "div" {
+  assert(div(6, 3) == 2)
+}
+
+// `@should-panic` is stricter than `@should-fail`: a failed assertion doesn't count, only a panic does.
+@should-panic("division by zero")
+test "div by zero" {
+  assert(div(1, 0) == 0)
+}

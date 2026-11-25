@@ -1,14 +1,19 @@
+#include <algorithm>
 #include <cinttypes>
 #include <csetjmp>
 #include <cstdio>
 #include <cstring>
+#include <format>
 #include <rang.hpp>
+#include <string_view>
 #include <vector>
 
 #include "frontend/syntax/source.h"
 #include "heap/objects.h"
+#include "runtime/binary_op.h"
 #include "runtime_abi.h"
 #include "test_suite.h"
+#include "tracing/tracing.h"
 
 using kura::heap::StringObj;
 
@@ -260,6 +265,53 @@ static inline void Render(std::ostream& stream, const TestResult& rhs) {
 
 }  // namespace
 
+namespace {
+// The comparison an assertion made, as it is written, for the label under it.
+auto OpText(const uint64_t op) -> std::string_view {
+  switch (static_cast<kura::BinaryOp>(op)) {
+    case kura::BinaryOp::kEq:
+      return "==";
+    case kura::BinaryOp::kNeq:
+      return "!=";
+    case kura::BinaryOp::kGreaterThan:
+      return ">";
+    case kura::BinaryOp::kGreaterThanEqual:
+      return ">=";
+    case kura::BinaryOp::kLessThan:
+      return "<";
+    case kura::BinaryOp::kLessThanEqual:
+      return "<=";
+    default:
+      return "?";
+  }
+}
+
+// A failed assertion, recorded. The underline covers the assertion, `assert(` to `)`, and not the rest of its line:
+// a line with something after the assertion, or two of them, says which one failed.
+auto RecordFailure(const uint64_t line, const uint64_t col, const uint64_t length, void* msg) -> TestResult& {
+  const auto m = static_cast<StringObj*>(msg);
+
+  kura::Span span{0, 0};
+  if (source_ != nullptr && line > 0) {
+    kura::syntax::Position pos{
+        .line = static_cast<uint32_t>(line - 1),
+        .column = col > 0 ? static_cast<uint32_t>(col - 1) : 0,
+    };
+    const uint32_t begin = source_->GetOffset(pos);
+    const uint32_t line_end = source_->GetLineSpan(pos.line).end;
+    const uint32_t end = length > 0 ? std::min<uint32_t>(begin + static_cast<uint32_t>(length), line_end) : line_end;
+    span = kura::Span{begin, std::max(begin + 1, end)};
+  }
+
+  return suite_.failed.emplace_back(TestResult{
+      .status = TestResult::kFailed,
+      .message = std::string(StrView(m)),
+      .span = span,
+      .span_label = "assertion failed",
+  });
+}
+}  // namespace
+
 extern "C" {
 void kura_rt_set_source(const kura::syntax::SourceFile* source) {
   source_ = source;
@@ -281,37 +333,36 @@ bool kura_rt_test_matches(const char* name, const char* filter) {
   return name && std::strstr(name, filter) != nullptr;
 }
 
-void kura_rt_test_begin(const char* name, uint32_t flags) {
+void kura_rt_test_begin(const char* name, uint32_t flags, const char* expect) {
   suite_.name = name ? name : "<unnamed>";
   suite_.flags = flags;
+  suite_.expect = expect != nullptr ? expect : "";
   suite_.failed.clear();
+  suite_.zone_depth = kura_rt_tracy_depth();
+  suite_.view_depth = kura_rt_view_depth();
+  kura_rt_tracy_zone_begin_named(suite_.name.data(), suite_.name.size(), kura::tracing::kColorTest);
   suite_.start = std::chrono::high_resolution_clock::now();
 }
 
-void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, void* msg) {
-  const auto f = static_cast<StringObj*>(file);
-  const auto m = static_cast<StringObj*>(msg);
+void kura_rt_test_fail(void* file, uint64_t line, uint64_t col, uint64_t length, void* msg) {
+  (void)file;
+  RecordFailure(line, col, length, msg);
+}
 
-  kura::Span span{0, 0};
-  if (source_ != nullptr && line > 0) {
-    kura::syntax::Position pos{
-        .line = static_cast<uint32_t>(line - 1),
-        .column = col > 0 ? static_cast<uint32_t>(col - 1) : 0,
-    };
-    const uint32_t begin = source_->GetOffset(pos);
-    const uint32_t end = source_->GetLineSpan(pos.line).end;
-    span = kura::Span{begin, std::max(begin + 1, end)};
-  }
-
-  suite_.failed.push_back(TestResult{
-      .status = TestResult::kFailed,
-      .message = std::string(StrView(m)),
-      .span = span,
-      .span_label = "assertion failed",
-  });
+void kura_rt_test_fail_cmp(void* file, uint64_t line, uint64_t col, uint64_t length, void* msg, uint64_t op,
+                           uint64_t lt, uint64_t lb, uint64_t rt, uint64_t rb) {
+  (void)file;
+  auto& failure = RecordFailure(line, col, length, msg);
+  const auto left = kura::rt::Format(kura::rt::KuraValue{lt, lb});
+  const auto right = kura::rt::Format(kura::rt::KuraValue{rt, rb});
+  failure.span_label = std::format("expected left {} right", OpText(op));
+  failure.notes.push_back("left:  " + left);
+  failure.notes.push_back("right: " + right);
 }
 
 void kura_rt_test_end() {
+  // the test's zone, and any that a panic left open inside it
+  kura_rt_tracy_unwind(suite_.zone_depth);
   suite_.finish = std::chrono::high_resolution_clock::now();
   const auto duration = std::chrono::duration_cast<std::chrono::microseconds>((suite_.finish - suite_.start));
 
@@ -321,9 +372,41 @@ void kura_rt_test_end() {
     return;
   }
 
-  const bool had_failures = !suite_.failed.empty() || suite_.panicked;
-  const bool should_fail = (suite_.flags & kura::TestFlag::kShouldFail) == 0;
-  const bool passed = (had_failures != should_fail);
+  const bool expect_panic = (suite_.flags & kura::TestFlag::kShouldPanic) != 0;
+  const bool expect_failure = (suite_.flags & kura::TestFlag::kShouldFail) != 0;
+  const bool asserted = !suite_.failed.empty();
+  const bool panicked = suite_.panicked;
+
+  // What makes a test pass: a plain one, that nothing failed; @should-fail, that something did (an assertion or a
+  // panic); @should-panic, that it panicked (a failed assertion is not one, so it can't pass for the wrong reason).
+  // `why` is what is wrong when it didn't, for a test that went the way it wasn't supposed to.
+  bool passed = false;
+  std::string why{};
+  if (expect_panic) {
+    passed = panicked;
+    if (!passed)
+      why = asserted ? "expected the test to panic (@should-panic), but it only failed assertions"
+                     : "expected the test to panic (@should-panic), but it ran to the end";
+  } else if (expect_failure) {
+    passed = asserted || panicked;
+    if (!passed)
+      why = "expected the test to fail or panic (@should-fail), but it passed";
+  } else {
+    passed = !asserted && !panicked;
+  }
+
+  // `@should-fail("text")`: the failure has to say it
+  if (passed && (expect_panic || expect_failure) && !suite_.expect.empty()) {
+    bool found = panicked && suite_.panic_message.find(suite_.expect) != std::string::npos;
+    if (!expect_panic) {
+      for (const auto& f : suite_.failed)
+        found = found || f.message.find(suite_.expect) != std::string::npos;
+    }
+    if (!found) {
+      passed = false;
+      why = "it failed, but not the way it was expected to: nothing it said contains \"" + suite_.expect + "\"";
+    }
+  }
 
   if (passed) {
     suite_.passed++;
@@ -335,21 +418,25 @@ void kura_rt_test_end() {
   suite_.num_failed++;
   std::cout << "  " << suite_.name << " ... " << rang::style::bold << rang::fg::red << "failed" << rang::style::reset
             << " (" << duration << ")" << std::endl;
-  if (should_fail && !had_failures) {
-    std::printf("  expected test to fail or panic (@should-fail), but it succeeded\n");
+  std::cout << "\nfailures:\n";
+  if (!why.empty()) {
+    std::cout << "\n" << rang::fg::red << "Failed" << rang::fg::reset << ": " << rang::style::bold << suite_.name
+              << rang::style::reset << "\n  " << why << "\n";
+    // what it did say, so the difference between that and what was wanted is on the screen
+    for (const auto& f : suite_.failed)
+      std::cout << "  assertion: " << f.message << "\n";
+    if (panicked)
+      std::cout << "  panic: " << suite_.panic_message << "\n";
   } else {
-    std::cout << "\nfailures:\n";
     for (const auto& f : suite_.failed) {
       std::cout << "\n";
       Render(std::cout, f);
     }
 
-    if (suite_.panicked) {
+    if (panicked)
       std::printf("\n  panicked: %s\n", suite_.panic_message.c_str());
-    }
-
-    std::cout << "\n";
   }
+  std::cout << "\n";
 }
 
 // In kura_rt_test_suite_end():
@@ -382,6 +469,10 @@ void kura_rt_test_invoke(void (*test_fn)(void)) {
 
   if (setjmp(suite_.panic_jmp) == 0)
     test_fn();
+  else {
+    kura_rt_tracy_unwind(suite_.zone_depth + 1);  // keep the test's own zone: `kura_rt_test_end` closes it
+    kura_rt_view_unwind(suite_.view_depth);
+  }
 
   suite_.in_test = false;
 }

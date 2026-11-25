@@ -144,8 +144,19 @@ auto ExprBuilder::BuildArgs(const std::vector<Node*>& args) -> ExprList {
   return result;
 }
 
+auto ExprBuilder::ActiveSetRules() const -> SetEntries {
+  SetEntries rules{};
+  for (const auto& scope : set_scopes_)
+    rules.insert(rules.end(), scope.begin(), scope.end());
+  return rules;
+}
+
 auto ExprBuilder::BuildCall(Expr* target, ExprList args) -> Expr* {
-  return CallExpr::New(target, std::move(args));
+  const auto call = CallExpr::New(target, std::move(args));
+  // The rules in force here go with the call: if it is a helper that returns a node, they cascade into its elements.
+  if (auto rules = ActiveSetRules(); !rules.empty())
+    call->AsCall()->SetInheritedRules(std::move(rules));
+  return call;
 }
 
 // ╭──────────────╮
@@ -279,12 +290,26 @@ auto ExprBuilder::BuildModule() -> Module* {
     // the function's own `set` rules, written before its body, are in force in all of it
     SetScope func_rules(this);
     if (const auto* fn = decl->As<syntax::FnDecl>()) {
-      for (const auto* rule_node : fn->set_rules)
-        AddSetRule(rule_node->As<syntax::SetRule>());
+      for (const auto* rule_node : fn->set_rules) {
+        const auto* rule = rule_node->As<syntax::SetRule>();
+        if (name != "view")
+          RejectViewRules(rule, "a function that isn't `view`");
+        AddSetRule(rule);
+      }
     }
 
     LocalsScope body_scope(GetOwner());
-    func->SetBody(BuildSeq(body));
+    SeqExpr* function_body = BuildSeq(body);
+    if (name == "view") {
+      // The View is the root of every view, and it isn't written: what the rules give it is the properties of a
+      // View that holds the whole of the body, which is how the builder gets the root's.
+      if (auto properties = ViewRuleProperties(); !properties.empty()) {
+        const auto root = NodeExpr::New(NodeExpr::Kind::kView, std::move(properties))->AsNode();
+        root->Append(function_body);
+        function_body = SeqExpr::New(root);
+      }
+    }
+    func->SetBody(function_body);
     m->AddFunction(func);
   }
 
@@ -292,17 +317,34 @@ auto ExprBuilder::BuildModule() -> Module* {
     for (const auto* item : items) {
       if (const auto* test = item->As<syntax::TestDecl>()) {
         uint32_t flags = 0;
+        std::string expect{};
         for (const auto* dir_node : test->directives) {
           const auto* dir = dir_node->As<syntax::Directive>();
           if (dir->name.text == "fail-fast")
             flags |= TestFlag::kFailFast;
-          else if (dir->name.text == "should-fail")
-            flags |= TestFlag::kShouldFail;
-          else if (dir->name.text == "skip")
+          else if (dir->name.text == "should-fail" || dir->name.text == "should-panic") {
+            flags |= dir->name.text == "should-fail" ? TestFlag::kShouldFail : TestFlag::kShouldPanic;
+            // `@should-fail("text")`: the failure has to say that, so the test can't pass for a reason it didn't mean
+            if (!dir->args.empty()) {
+              const auto* arg = dir->args.size() == 1 ? dir->args[0]->As<syntax::Arg>() : nullptr;
+              const auto* text = arg != nullptr && arg->form == syntax::Arg::kPositional && arg->value != nullptr
+                                   ? arg->value->As<syntax::StringLit>()
+                                   : nullptr;
+              if (text == nullptr)
+                Error(dir,
+                      "@" + dir->name.text + " takes at most one argument: a string that the failure must contain");
+              else
+                expect = text->value;
+            }
+          } else if (dir->name.text == "skip")
             flags |= TestFlag::kSkip;
           else
             Error(dir, "unknown test directive @" + dir->name.text);
         }
+        if ((flags & TestFlag::kShouldFail) != 0 && (flags & TestFlag::kShouldPanic) != 0)
+          Error(test,
+                "a test can't be both @should-fail and @should-panic: @should-fail accepts a panic, so "
+                "@should-panic is the one that says it has to be one");
 
         in_test_ = true;
         active_test_flags_ = flags;
@@ -321,6 +363,7 @@ auto ExprBuilder::BuildModule() -> Module* {
             test->name,
             fn,
             flags,
+            expect,
         });
       }
     }
@@ -1787,6 +1830,7 @@ auto ExprBuilder::BuildBlock(const syntax::Block* block) -> SeqExpr* {
       for (const auto store : BuildBindings(binding))
         body.push_back(store);
     } else if (const auto* rule = stmt->As<syntax::SetRule>()) {
+      RejectViewRules(rule, "a block");
       AddSetRule(rule);
     } else if (const auto* assertion = stmt->As<syntax::Assert>()) {
       if (!in_test_)
@@ -1799,6 +1843,7 @@ auto ExprBuilder::BuildBlock(const syntax::Block* block) -> SeqExpr* {
       a->SetFile(tree_.GetSource().GetName());
       a->SetLine(pos.line + 1);
       a->SetColumn(pos.column);
+      a->SetLength(assertion->span.end - assertion->span.begin);
       a->SetFailFast(fail_fast);
       body.push_back(a);
     } else {
@@ -1979,6 +2024,29 @@ auto ExprBuilder::BuildSetRule(const syntax::SetRule* rule) -> SetEntries {
   return entries;
 }
 
+void ExprBuilder::RejectViewRules(const syntax::SetRule* rule, const std::string& where) {
+  if (rule->tag.text == "view")
+    Error(rule, "`set view` can't be written in " + where +
+                    ": the view is the same for all of `view`, so it is set at the top level of a file, or before "
+                    "the body of `view`");
+}
+
+auto ExprBuilder::ViewRuleProperties() -> NodeExpr::PropertyList {
+  NodeExpr::PropertyList properties{};
+  std::unordered_set<std::string> given{};
+  for (auto scope = set_scopes_.rbegin(); scope != set_scopes_.rend(); ++scope) {
+    for (auto entry = scope->rbegin(); entry != scope->rend(); ++entry) {
+      if (entry->kind != NodeExpr::Kind::kView || !given.insert(entry->property).second)
+        continue;
+      const auto property = Property::FindOrCreate(String::New(entry->property), Type::NoneType());
+      const auto store = StorePropertyExpr::New(property, entry->value);
+      store->SetFromSet();
+      properties.push_back(store);
+    }
+  }
+  return properties;
+}
+
 void ExprBuilder::AddSetRule(const syntax::SetRule* rule) {
   auto entries = BuildSetRule(rule);
   auto& scope = set_scopes_.back();
@@ -1990,6 +2058,10 @@ auto ExprBuilder::BuildUi(const syntax::UiElement* ctx) -> Expr* {
   const auto kind = ParseNodeExprKind(tag);
   if (!kind)
     Error(ctx, "unknown UI element '#" + tag + "'");
+  if (*kind == NodeExpr::Kind::kView)
+    Error(ctx,
+          "#view can't be written: the view is made by Kura, and is the root of every view. Style it with a "
+          "`set view(...)` rule at the top level of the file or before the body of `view`");
 
   NodeExpr::PropertyList properties{};
   for (const auto* arg_node : ctx->props) {
@@ -2049,6 +2121,7 @@ auto ExprBuilder::BuildUiChildren(NodeExpr* node, const syntax::UiElement* ctx) 
     } else if (child->Is<syntax::StringLit>() || child->Is<syntax::StringTemplate>()) {
       node->Append(BuildImplicitText(child));
     } else if (const auto* rule = child->As<syntax::SetRule>()) {
+      RejectViewRules(rule, "the children of an element");
       AddSetRule(rule);
     } else if (child->Is<syntax::Call>() || child->Is<syntax::IfExpr>() || child->Is<syntax::MatchExpr>() ||
                child->Is<syntax::ForExpr>() || child->Is<syntax::WhenExpr>()) {

@@ -19,10 +19,6 @@
 #include <map>
 #include <set>
 
-#ifdef KURA_TRACING_ENABLED
-#include <tracy/Tracy.hpp>
-#endif  // // KURA_TRACING_ENABLED
-
 #include <unordered_map>
 #include <vector>
 
@@ -389,7 +385,7 @@ class Generator {
       fn->setWillReturn();
       const std::string_view sv(name);
       if (sv == "kura_rt_destroy" || sv == "kura_rt_panic" || sv == "kura_rt_ffi_overflow" ||
-          sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail") {
+          sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail" || sv == "kura_rt_test_fail_cmp") {
         fn->addFnAttr(llvm::Attribute::Cold);
       } else if (sv == "kura_rt_len" || sv == "kura_rt_string_cmp" || sv == "kura_rt_record_count" ||
                  sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_closure_new") {
@@ -526,13 +522,29 @@ class Generator {
     b_.CreateCondBr(cond, pass_bb, fail_bb);
 
     b_.SetInsertPoint(fail_bb);
-    CallRt("kura_rt_test_fail", void_ty_,
-           {
-               StringLiteral(std::string(instr->GetFile())),
-               b_.getInt64(instr->GetLine()),
-               b_.getInt64(instr->GetColumn()),
-               As(instr->GetMessage(), CompileType::String()),
-           });
+    if (instr->HasOperands()) {
+      // a comparison: the runtime is given both sides, to say what they were
+      CallRt("kura_rt_test_fail_cmp", void_ty_,
+             {
+                 StringLiteral(std::string(instr->GetFile())),
+                 b_.getInt64(instr->GetLine()),
+                 b_.getInt64(instr->GetColumn()),
+                 b_.getInt64(instr->GetLength()),
+                 As(instr->GetMessage(), CompileType::String()),
+                 b_.getInt64(static_cast<uint64_t>(instr->GetOp())),
+                 As(instr->GetLeft(), CompileType::Any()),
+                 As(instr->GetRight(), CompileType::Any()),
+             });
+    } else {
+      CallRt("kura_rt_test_fail", void_ty_,
+             {
+                 StringLiteral(std::string(instr->GetFile())),
+                 b_.getInt64(instr->GetLine()),
+                 b_.getInt64(instr->GetColumn()),
+                 b_.getInt64(instr->GetLength()),
+                 As(instr->GetMessage(), CompileType::String()),
+             });
+    }
 
     if (instr->ShouldFailFast()) {
       b_.CreateRet(b_.getInt8(0));  // immediate early return from test function
@@ -1279,18 +1291,28 @@ class Generator {
            CompileType::Any());
   }
 
+  // A zone is a constant source location, laid out as Tracy's ___tracy_source_location_data (three strings, a line
+  // and a color), and a call that opens it. Whether anything is recorded is up to the runtime, so a program built
+  // with tracing runs the same, and slower only by those two calls, with or without a profiler.
   LOWER_FN(TracyBeginZone) {
     KASSERT(instr);
-#ifdef KURA_TRACING_ENABLED
-
-#endif  // KURA_TRACING_ENABLED
+    const auto& zone = instr->GetZone();
+    auto* i32 = llvm::Type::getInt32Ty(ctx_);
+    auto* location_ty = llvm::StructType::get(ctx_, {ptr_ty_, ptr_ty_, ptr_ty_, i32, i32});
+    auto* name = b_.CreateGlobalString(zone.name, "kura.zone.name");
+    auto* function = b_.CreateGlobalString(zone.function, "kura.zone.function");
+    auto* file = b_.CreateGlobalString(zone.file, "kura.zone.file");
+    auto* initializer = llvm::ConstantStruct::get(
+        location_ty,
+        {name, function, file, llvm::ConstantInt::get(i32, zone.line), llvm::ConstantInt::get(i32, zone.color)});
+    auto* location = new llvm::GlobalVariable(*module_, location_ty, true, llvm::GlobalValue::PrivateLinkage,
+                                              initializer, "kura.zone");
+    CallRt("kura_rt_tracy_zone_begin", void_ty_, {location});
   }
 
   LOWER_FN(TracyEndZone) {
     KASSERT(instr);
-#ifdef KURA_TRACING_ENABLED
-
-#endif  // KURA_TRACING_ENABLED
+    CallRt("kura_rt_tracy_zone_end", void_ty_, {});
   }
 
   LOWER_FN(DrawImage) {
@@ -1746,6 +1768,27 @@ class Generator {
     Define(call, CallC(graph, values, call), graph->GetReturnType());
   }
 
+  // `init`, `update` and `view` are run in a view, which they are given: as a hidden last parameter, after the ones
+  // that are written, so that what the graph says the parameters are is still where it was. Kura code can't name it
+  // and takes no parameter for it. The host's call gives it (the thunk, which runs the function in it), and a call
+  // from Kura code passes on the one it has, or none if it is code that wasn't given one, a test, which then stays in
+  // the view it is in.
+  auto HasThis(FlowGraph* graph) const -> bool {
+    if (graph == graphs_->GetInit() || graph->IsExtern())
+      return false;
+    const auto name = graph->GetName();
+    return name == "init" || name == "update" || name == "view";
+  }
+
+  void AppendThis(FlowGraph* callee, std::vector<llvm::Value*>* args) {
+    if (!HasThis(callee))
+      return;
+    if (fn_ != nullptr && HasThis(fn_->graph))
+      args->push_back(fn_->native->getArg(fn_->native->arg_size() - 1));
+    else
+      args->push_back(llvm::ConstantPointerNull::get(ptr_ty_));
+  }
+
   void EmitCall(CallInstr* call) {
     const auto& args = call->GetArgs();
     const auto target = call->GetTarget();
@@ -1762,6 +1805,7 @@ class Generator {
         std::vector<llvm::Value*> values{};
         for (size_t idx = 0; idx < args.size(); idx++)
           values.push_back(As(args[idx], params[idx]));
+        AppendThis(graph, &values);
         return Define(call, b_.CreateCall(native, values), graph->GetReturnType());
       }
     }
@@ -1893,6 +1937,9 @@ class Generator {
     if (const auto l = instr->AsLoadFunction()) {
       const auto graph = graphs_->GetGraphFor(l->GetFunction());
       const auto thunk = graph ? thunks_[graph] : nullptr;
+      // a closure's thunk is given the closure where an entry point's is given the view
+      if (graph && HasThis(graph))
+        return Fail("`" + graph->GetName() + "` is run by the host, in its view: it can't be used as a value");
       if (!thunk)
         return Fail("internal error: no code for function `" + std::string(l->GetFunction()->GetName()->GetData()) +
                     "`");
@@ -2517,6 +2564,7 @@ class Generator {
       const auto value = FromC(adapter->getArg(idx), callback.params[idx], kura, what + " callback argument");
       args.push_back(Convert(value, kura, target_params[idx]));
     }
+    AppendThis(target, &args);
     const auto result = b_.CreateCall(natives_[target], args);
     if (callback.result.kind == CType::kVoid) {
       b_.CreateRetVoid();
@@ -2687,6 +2735,7 @@ class Generator {
       args.push_back(Convert(FromCArgument(wrapper->getArg(idx), c.params[idx], what), c.params[idx].ToKuraType(),
                              kura_params[idx]));
     }
+    AppendThis(graph, &args);
     const auto result = b_.CreateCall(natives_[graph], args);
     const auto declared = c.result.ToKuraType();
     const auto converted = Convert(result, graph->GetReturnType(), declared);
@@ -2786,7 +2835,15 @@ class Generator {
       const auto captured = CallRt("kura_rt_closure_get_capture", value_ty_, {thunk->getArg(0), b_.getInt64(idx)});
       args.push_back(Convert(captured, CompileType::Any(), types[declared + idx]));
     }
+    // The host's call into the program: the first argument is the view the program runs in (where a closure's thunk
+    // is given the closure), and the function runs inside it.
+    if (HasThis(graph)) {
+      CallRt("kura_rt_view_enter", void_ty_, {thunk->getArg(0)});
+      args.push_back(thunk->getArg(0));
+    }
     const auto result = b_.CreateCall(native, args);
+    if (HasThis(graph))
+      CallRt("kura_rt_view_leave", void_ty_, {});
     b_.CreateRet(Convert(result, graph->GetReturnType(), CompileType::Any()));
   }
 
@@ -2798,6 +2855,8 @@ class Generator {
     std::vector<llvm::Type*> params{};
     for (const auto type : graph->GetParameterTypes())
       params.push_back(Lower(type));
+    if (HasThis(graph))
+      params.push_back(ptr_ty_);  // the view
     llvm::FunctionType* retType = nullptr;
     if (graph->GetName() == "view") {
       retType = llvm::FunctionType::get(void_ty_, params, false);
@@ -2891,7 +2950,10 @@ class Generator {
       b_.CreateCondBr(matches, run_bb, next_bb);
 
       b_.SetInsertPoint(run_bb);
-      CallRt("kura_rt_test_begin", void_ty_, {name_ptr, llvm::ConstantInt::get(i32_ty, test.flags)});
+      // what the failure has to contain, or no pointer when any failure will do
+      llvm::Value* expect_ptr = test.expect.empty() ? static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(ptr_ty_))
+                                                    : NameConstant(test.expect);
+      CallRt("kura_rt_test_begin", void_ty_, {name_ptr, llvm::ConstantInt::get(i32_ty, test.flags), expect_ptr});
 
       if ((test.flags & TestFlag::kSkip) == 0) {
         const auto graph = graphs_->GetGraphFor(test.fn);
