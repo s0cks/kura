@@ -6,8 +6,8 @@
 #include <variant>
 #include <vector>
 
-#include "config.h"
-#include "frontend/syntax/ast.h"
+#include "compiler/frontend/syntax/ast.h"
+#include "formatter/config.h"
 
 namespace kura::fmt {
 struct Node;

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <jansson.h>
 
-#include "config.h"
+#include "formatter/config.h"
 
 namespace kura::fmt {
 auto ParseConfigJson(const std::string_view data, Config& config) -> bool {

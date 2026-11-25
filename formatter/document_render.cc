@@ -1,4 +1,4 @@
-#include "document.h"
+#include "formatter/document.h"
 
 namespace kura::fmt {
 enum class Mode {

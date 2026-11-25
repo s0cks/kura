@@ -26,6 +26,7 @@ find_package(rang CONFIG REQUIRED)
 
 find_package(glm CONFIG REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
+pkg_check_modules(EDITORCONFIG REQUIRED IMPORTED_TARGET editorconfig)
 include(clang)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -49,6 +50,7 @@ add_subdirectory(text)
 add_subdirectory(compiler)
 add_subdirectory(cli)
 add_subdirectory(lint)
+add_subdirectory(formatter)
 
 add_subdirectory(renderer)
 
@@ -62,11 +64,6 @@ endif()
 option(KURA_BUILD_LSP "Build lsp (needs libuv)" ON)
 if(KURA_BUILD_LSP)
   add_subdirectory(lsp)
-endif()
-
-option(KURA_BUILD_FORMATTER "Build kurafmt" ON)
-if(KURA_BUILD_FORMATTER)
-  add_subdirectory(kurafmt)
 endif()
 
 option(KURA_BUILD_BENCHMARKS "Build benchmarks" ON)

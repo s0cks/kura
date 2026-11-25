@@ -1,4 +1,4 @@
-#include "config.h"
+#include "formatter/config.h"
 
 #include <filesystem>
 #include <fstream>

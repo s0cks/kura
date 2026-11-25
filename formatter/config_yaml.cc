@@ -1,7 +1,7 @@
 #include <iostream>
 #include <yaml.h>
 
-#include "config.h"
+#include "formatter/config.h"
 
 namespace kura::fmt {
 auto ParseConfigYaml(const std::string_view data, Config& config) -> bool {

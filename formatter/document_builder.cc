@@ -4,9 +4,9 @@
 #include <iostream>
 #include <rang.hpp>
 
-#include "config.h"
-#include "document.h"
-#include "frontend/syntax/ast.h"
+#include "compiler/frontend/syntax/ast.h"
+#include "formatter/config.h"
+#include "formatter/document.h"
 
 namespace kura::fmt {
 

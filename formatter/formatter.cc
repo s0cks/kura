@@ -1,9 +1,9 @@
-#include "formatter.h"
+#include "formatter/formatter.h"
 
+#include "compiler/frontend/parser.h"
 #include "compiler/frontend/syntax/parser.h"
-#include "config.h"
-#include "document.h"
-#include "frontend/parser.h"
+#include "formatter/config.h"
+#include "formatter/document.h"
 
 namespace kura::fmt {
 auto Formatter::Format(syntax::SyntaxTree* tree) -> bool {

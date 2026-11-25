@@ -28,6 +28,7 @@
 #include "c_import.h"
 #include "cli/format.h"
 #include "common.h"
+#include "formatter/formatter.h"
 #include "frontend/parser.h"
 #include "frontend/syntax/parser.h"
 #include "frontend/syntax/source.h"
@@ -66,6 +67,7 @@ struct CliOptions {
   bool is_lint = false;
   bool is_bench = false;
   bool is_run = false;
+  bool is_format = false;
   std::string filter{};
   bool fail_fast = false;
 
@@ -214,12 +216,17 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
     });
   // clang-format on
 
+  argparse::ArgumentParser fmt_cmd("fmt");
+  fmt_cmd.add_description("Format a file");
+  RegisterCommonArgs(fmt_cmd, opts);
+
   program.add_subparser(run_cmd);
   program.add_subparser(test_cmd);
   program.add_subparser(bench_cmd);
   program.add_subparser(build_cmd);
   program.add_subparser(check_cmd);
   program.add_subparser(lint_cmd);
+  program.add_subparser(fmt_cmd);
 
   try {
     program.parse_args(argc, argv);
@@ -234,6 +241,8 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
     opts.is_test = true;
   } else if (program.is_subcommand_used("bench")) {
     opts.is_bench = true;
+  } else if (program.is_subcommand_used("fmt")) {
+    opts.is_format = true;
   } else if (program.is_subcommand_used("build")) {
     if (!opts.emit_llvm && opts.emit_object.empty() && opts.emit_header.empty()) {
       std::cerr << "build requires at least one of --emit-llvm, --emit-obj, or --emit-header\n";
@@ -292,12 +301,32 @@ auto main(int argc, char** argv) -> int {
     const auto contents = Slurp(opts.filename);
     const auto tree = kura::syntax::ParseText(opts.filename, *contents);
     if (!tree) {
-      std::cerr << "failed to parse syntax tree";
+      std::cerr << "failed to parse syntax tree" << std::endl;
       return EXIT_FAILURE;
     }
 
     lint::Linter linter(opts.format);
     linter.Lint(*tree);
+    return EXIT_SUCCESS;
+  }
+
+  if (opts.is_format) {
+    fmt::Config config{};
+    fmt::ParseConfig(config);
+
+    const auto contents = Slurp(opts.filename);
+    const auto tree = kura::syntax::ParseText(opts.filename, *contents);
+    if (!tree) {
+      std::cerr << "failed to parse syntax tree" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    fmt::Formatter formatter(std::cout, std::move(config));
+    if (!formatter.Format(tree.get())) {
+      std::cerr << "failed to format " << opts.filename << std::endl;
+      return EXIT_FAILURE;
+    }
+
     return EXIT_SUCCESS;
   }
 

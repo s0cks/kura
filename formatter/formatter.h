@@ -1,8 +1,8 @@
 #ifndef KURA_FORMATTER_H
 #define KURA_FORMATTER_H
 
-#include "config.h"
-#include "frontend/syntax/parser.h"
+#include "compiler/frontend/syntax/parser.h"
+#include "formatter/config.h"
 
 namespace kura::fmt {
 
