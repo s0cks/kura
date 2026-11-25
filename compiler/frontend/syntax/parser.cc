@@ -10,6 +10,110 @@
 
 namespace kura::syntax {
 namespace {
+bool IsKebabCase(std::string_view str) {
+  if (str.empty()) {
+    return false;
+  }
+
+  if (str.front() == '-' || str.back() == '-') {
+    return false;
+  }
+
+  bool last_was_hyphen = false;
+
+  for (char ch : str) {
+    if (ch == '-') {
+      if (last_was_hyphen) {
+        return false;
+      }
+      last_was_hyphen = true;
+    } else if (std::islower(static_cast<unsigned char>(ch)) || std::isdigit(static_cast<unsigned char>(ch))) {
+      last_was_hyphen = false;
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static inline auto ToKebabCase(std::string_view str) -> std::string {
+  if (str.empty())
+    return "";
+
+  std::string result;
+  result.reserve(str.size() + 4);
+
+  result.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(str[0]))));
+
+  for (size_t i = 1; i < str.size(); ++i) {
+    char current = str[i];
+    if (std::isupper(static_cast<unsigned char>(current))) {
+      char prev = str[i - 1];
+      if (std::islower(static_cast<unsigned char>(prev)) || std::isdigit(static_cast<unsigned char>(prev))) {
+        result.push_back('-');
+      }
+      result.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(current))));
+    } else {
+      result.push_back(current);
+    }
+  }
+
+  return result;
+}
+
+static inline auto ToPascalCase(const std::string& rhs) -> std::string {
+  std::string result;
+  result.reserve(rhs.length());  // Prevent mid-loop reallocations
+
+  bool capitalizeNext = true;
+
+  for (size_t i = 0; i < rhs.length(); ++i) {
+    unsigned char ch = rhs[i];
+
+    if (ch == ' ' || ch == '_' || ch == '-') {
+      capitalizeNext = true;
+      continue;
+    }
+
+    if (i > 0 && std::islower(static_cast<unsigned char>(rhs[i - 1])) && std::isupper(ch)) {
+      capitalizeNext = true;
+    }
+
+    if (std::isalnum(ch)) {
+      if (capitalizeNext) {
+        result.push_back(static_cast<char>(std::toupper(ch)));
+        capitalizeNext = false;
+      } else {
+        result.push_back(static_cast<char>(std::tolower(ch)));
+      }
+    }
+  }
+
+  return result;
+}
+
+static inline auto IsPascalCase(const std::string& str) -> bool {
+  if (str.empty())
+    return false;
+
+  if (!std::isupper(static_cast<unsigned char>(str[0])))
+    return false;
+
+  for (size_t i = 1; i < str.length(); ++i) {
+    unsigned char ch = str[i];
+
+    if (!std::isalnum(ch))
+      return false;
+
+    if (std::isupper(ch) && std::isupper(static_cast<unsigned char>(str[i - 1]))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 using K = Token;
 
 const auto kExpressionStart = K::Set({
@@ -249,6 +353,30 @@ class TreeBuilder {
     if (K::IsKeyword(token.kind))
       return "the keyword `" + text + "`";
     return "`" + text + "`";
+  }
+
+  auto ReportStyleHere(const DiagnosticCode code, std::string message, std::string label = {},
+                       const bool anchor_to_previous = false) -> Diagnostic& {
+    if (last_error_index_ == static_cast<int64_t>(index_))
+      return scratch_ = Diagnostic{};
+    // The lexer has already said what is wrong with an invalid character, and
+    // with a string or backtick name it had to cut short; whatever the parser
+    // trips over right there is the same problem seen again.
+    if (Peek().kind == K::kInvalid || (index_ > 0 && tokens_[index_ - 1].malformed)) {
+      last_error_index_ = static_cast<int64_t>(index_);
+      return scratch_ = Diagnostic{};
+    }
+    last_error_index_ = static_cast<int64_t>(index_);
+    auto span = Peek().span;
+    if (AtEof() && span.begin > 0) {
+      // point at the last character rather than past the end of the file
+      span = Span(prev_end_ > 0 ? prev_end_ - 1 : 0, prev_end_);
+    } else if (anchor_to_previous && index_ > 0 && AtLineStart() && prev_end_ > 0) {
+      // Something is missing, and what comes next is on another line. The
+      // mistake is at the end of the line it was missing from, not down there.
+      span = Span(prev_end_ - 1, prev_end_);
+    }
+    return diagnostics_.Style(code, span, std::move(message), std::move(label));
   }
 
   // A diagnostic at the token under the cursor. Reporting twice without
@@ -2251,6 +2379,13 @@ class TreeBuilder {
     decl->directives = std::move(directives);
     const auto fn_token = Next();
     decl->name = ParseName("a function name");
+    if (!IsKebabCase(decl->name.text)) {
+      diagnostics_
+          .Style(DiagnosticCode::kFnNameNotKebabCase, decl->name.span,
+                 std::format("function name `{}` should be kebab-case", decl->name.text), "this function")
+          .WithHelp(std::format("did you mean `{}`?", ToKebabCase(decl->name.text)));
+    }
+
     if (Is(K::kLParen)) {
       const auto open = Next();
       ParseParams(decl->params, open.span, nullptr);
@@ -2261,8 +2396,16 @@ class TreeBuilder {
           .WithHelp("functions always have parentheses, even with no parameters: `fn " +
                     (decl->name.missing ? std::string("name") : decl->name.text) + "() => ...`");
     }
+
     if (Accept(K::kColon))
       decl->result = ParseTypeExpr();
+
+    if (!decl->result) {
+      Warn(DiagnosticCode::kFnMissingResultType, decl->name.span,
+           std::format("function `{}` is missing a return type", decl->name.text), "this function")
+          .WithHelp(std::format("add a return type to the function (e.g. fn {}(): String)", decl->name.text));
+    }
+
     if (!Expect(K::kFatArrow)) {
       decl->body = NewMissing();
     } else {

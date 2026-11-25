@@ -52,8 +52,11 @@ namespace kura::syntax {
   V(BadElementId,             33, "element id is malformed")                           \
   V(ButtonMissingOnClick,     34, "button element is missing on-click")                \
   V(TestWithoutName,          35, "test is missing name")                              \
-  V(BadAssert,                36, "malformed 'assert'")                                               \
-  V(AssertOutsideTest,        37, "'assert' outside 'test' block")
+  V(BadAssert,                36, "malformed 'assert'")                                \
+  V(AssertOutsideTest,        37, "'assert' outside 'test' block")                     \
+  V(FnNameNotKebabCase,       38, "function name is not kebabe-case")                  \
+  V(RecordNameNotPascalCase,  39, "record name is not PascalCase")                     \
+  V(FnMissingResultType,      40, "function is missing a return type")
 // clang-format on
 
 enum class Severity : uint8_t {
@@ -123,6 +126,17 @@ class DiagnosticList {
   auto Add(Diagnostic diagnostic) -> Diagnostic& {
     diagnostics_.push_back(std::move(diagnostic));
     return diagnostics_.back();
+  }
+
+  auto Style(const DiagnosticCode code, const Span& span, std::string message, std::string span_label = {})
+      -> Diagnostic& {
+    Diagnostic d{};
+    d.severity = Severity::kStyle;
+    d.code = static_cast<uint64_t>(code);
+    d.message = std::move(message);
+    d.span = span;
+    d.span_label = std::move(span_label);
+    return Add(std::move(d));
   }
 
   auto Warning(const DiagnosticCode code, const Span& span, std::string message, std::string span_label = {})

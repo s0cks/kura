@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <jansson.h>
 #include <ostream>
 
 namespace kura {

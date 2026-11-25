@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <jansson.h>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -31,6 +32,13 @@ struct Position {
     return stream << (rhs.line + 1) << ":" << (rhs.column + 1);
   }
 };
+
+[[nodiscard]] static inline auto ToJson(const Position& rhs) -> json_t* {
+  json_t* p = json_object();
+  json_object_set(p, "line", json_integer(rhs.line));
+  json_object_set(p, "character", json_integer(rhs.column));
+  return p;
+}
 
 // The text of one source file plus a table of where every line starts.
 // Spans in tokens, AST nodes and diagnostics all index into `GetText()`.
@@ -121,6 +129,20 @@ class SourceFile {
     return units;
   }
 };
+
+[[nodiscard]] static inline auto ToJson(const SourceFile& source, const Span& span) -> json_t* {
+  json_t* s = json_object();
+  json_object_set(s, "start", ToJson(source.GetPosition(span.begin)));
+  json_object_set(s, "end", ToJson(source.GetPosition(span.end)));
+  return s;
+}
+
+[[nodiscard]] static inline auto ToJson(const SourceFile& source, const Label& label) -> json_t* {
+  json_t* l = json_object();
+  json_object_set(l, "span", ToJson(source, label.span));
+  json_object_set(l, "message", json_string(label.message.c_str()));
+  return l;
+}
 }  // namespace kura::syntax
 
 #endif  // KURA_SYNTAX_SOURCE_H

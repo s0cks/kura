@@ -47,6 +47,8 @@ add_subdirectory(runtime)
 add_subdirectory(layout)
 add_subdirectory(text)
 add_subdirectory(compiler)
+add_subdirectory(cli)
+add_subdirectory(lint)
 
 add_subdirectory(renderer)
 
@@ -65,11 +67,6 @@ endif()
 option(KURA_BUILD_FORMATTER "Build kurafmt" ON)
 if(KURA_BUILD_FORMATTER)
   add_subdirectory(kurafmt)
-endif()
-
-option(KURA_BUILD_LINTER "Build kuralint" ON)
-if(KURA_BUILD_LINTER)
-  add_subdirectory(kuralint)
 endif()
 
 option(KURA_BUILD_BENCHMARKS "Build benchmarks" ON)

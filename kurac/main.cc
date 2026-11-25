@@ -26,12 +26,14 @@
 #include "backend/runtime_abi.h"
 #include "backend/type_analysis.h"
 #include "c_import.h"
+#include "cli/format.h"
 #include "common.h"
 #include "frontend/parser.h"
 #include "frontend/syntax/parser.h"
 #include "frontend/syntax/source.h"
 #include "heap/heap.h"
 #include "kura.h"
+#include "lint/linter.h"
 #include "module.h"
 
 #ifdef KURA_HAS_HEADLESS_RENDERER
@@ -61,6 +63,7 @@ struct CliOptions {
 
   // Mode flags
   bool is_test = false;
+  bool is_lint = false;
   bool is_bench = false;
   bool is_run = false;
   std::string filter{};
@@ -68,6 +71,8 @@ struct CliOptions {
 
   std::string function{};
   std::vector<std::string> args{};
+
+  cli::Format format = cli::Format::kPretty;
 };
 
 // What `--trace` means for the graphs: zones in the program, attributed to the file it was built from. A kurac built
@@ -194,11 +199,27 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
   RegisterCommonArgs(check_cmd, opts);
   check_cmd.add_argument("--dump-ir").help("Print Kura SSA IR after analysis passes").flag().store_into(opts.dump_ir);
 
+  argparse::ArgumentParser lint_cmd("lint");
+  lint_cmd.add_description("Lint a file");
+  RegisterCommonArgs(lint_cmd, opts);
+  auto& color_group = lint_cmd.add_mutually_exclusive_group();
+  // clang-format off
+  color_group.add_argument("-f", "--format")
+    .default_value("pretty")
+    .choices("plain", "pretty", "json", "jsonl")
+    .action([&opts](const std::string& value) {
+        const auto format = cli::ParseFormat(value);
+        if(format)
+          opts.format = format.value();
+    });
+  // clang-format on
+
   program.add_subparser(run_cmd);
   program.add_subparser(test_cmd);
   program.add_subparser(bench_cmd);
   program.add_subparser(build_cmd);
   program.add_subparser(check_cmd);
+  program.add_subparser(lint_cmd);
 
   try {
     program.parse_args(argc, argv);
@@ -220,6 +241,8 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
     }
   } else if (program.is_subcommand_used("check")) {
     // check mode
+  } else if (program.is_subcommand_used("lint")) {
+    opts.is_lint = true;
   } else {
     std::cerr << program;
     return false;
@@ -265,6 +288,19 @@ auto main(int argc, char** argv) -> int {
   heap::Heap::SetCurrent(heap);
   Type::Init();
 
+  if (opts.is_lint) {
+    const auto contents = Slurp(opts.filename);
+    const auto tree = kura::syntax::ParseText(opts.filename, *contents);
+    if (!tree) {
+      std::cerr << "failed to parse syntax tree";
+      return EXIT_FAILURE;
+    }
+
+    lint::Linter linter(opts.format);
+    linter.Lint(*tree);
+    return EXIT_SUCCESS;
+  }
+
   LocalScope* scope = LocalScope::New();
   Module* m = nullptr;
   Parser parser(scope);
@@ -277,7 +313,7 @@ auto main(int argc, char** argv) -> int {
   }
 
   // `kurac check` stops after IR analysis
-  if (!opts.is_run && !opts.is_test && !opts.is_bench && !opts.emit_llvm && opts.emit_object.empty() &&
+  if (!opts.is_run && !opts.is_test && !opts.is_bench && !opts.emit_llvm && !opts.is_lint && opts.emit_object.empty() &&
       opts.emit_header.empty()) {
     return RunCheck(m, opts) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
