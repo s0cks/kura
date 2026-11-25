@@ -697,7 +697,22 @@ LOWER_FN(UseDecl) {
 }
 
 LOWER_FN(NamedType) {
-  return FormatName(rhs.name);
+  if (rhs.args.empty())
+    return FormatName(rhs.name);
+
+  std::vector<NodePtr> type_params{};
+  for (const auto& type : rhs.args)
+    type_params.push_back(Lower(config, *type));
+
+  return NewGroup(NewConcat({
+      FormatName(rhs.name),
+      Enclose("<", ">",
+              Punctuate(NewConcat({
+                            NewText(","),
+                        }),
+                        type_params),
+              0, false),
+  }));
 }
 
 LOWER_FN(NoneType) {
