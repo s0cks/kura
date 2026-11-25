@@ -1,0 +1,22 @@
+# K0004: Invalid Escape
+
+An unrecognized escape sequence was found inside a string literal.
+
+Backslashes (`\`) inside strings introduce special character escapes. Any character following `\` that is not a valid escape code triggers this error.
+
+Example of erroneous code:
+
+```kura
+let path = "C:\users\kura\ui.kura";
+```
+
+Supported escape sequences in Kura strings:
+- `\n` (newline), `\r` (carriage return), `\t` (tab)
+- `\\` (literal backslash) and `\"` (literal double quote)
+- `\0` (null character)
+
+To represent a literal backslash, escape the backslash itself:
+
+```kura
+let path = "C:\\users\\kura\\ui.kura";
+```

@@ -1,6 +1,7 @@
 /build/
 /build-llvm20/
 /build-release/
+/env/
 *.tar.gz
 *.patch
 wiki/

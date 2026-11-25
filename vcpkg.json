@@ -12,6 +12,7 @@
     "rang",
     "benchmark",
     "freetype",
+    "zstd",
     {
       "name": "tracy",
       "features": ["on-demand"]

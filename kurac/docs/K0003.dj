@@ -1,0 +1,21 @@
+# K0003: Unterminated String
+
+A string literal was opened with [`"`]{.expected} but reached the end of the line or file without a closing [`"`]{.expected}.
+
+In Kura, double-quoted string literals cannot span across raw newlines without escaping.
+
+Example of erroneous code:
+
+```kura
+let greeting = "Hello, Kura!;
+```
+
+Close the string literal before the end of the line:
+
+```kura
+let greeting = "Hello, Kura!";
+```
+
+::: tip
+If you meant to include a literal double quote inside the string, escape it as `\"`.
+:::

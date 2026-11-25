@@ -28,6 +28,9 @@
 #include "c_import.h"
 #include "cli/format.h"
 #include "common.h"
+#include "docs/index.h"
+#include "docs/renderer.h"
+#include "docs/suggest.h"
 #include "formatter/formatter.h"
 #include "frontend/parser.h"
 #include "frontend/syntax/parser.h"
@@ -45,6 +48,7 @@ using namespace kura;
 
 namespace {
 struct CliOptions {
+  std::string error_code{};
   std::string filename{};
   std::vector<std::string> c_sources{};
   std::vector<std::string> include_dirs{};
@@ -68,8 +72,11 @@ struct CliOptions {
   bool is_bench = false;
   bool is_run = false;
   bool is_format = false;
+  bool is_explain = false;
+  bool is_explain_list = false;
   std::string filter{};
   bool fail_fast = false;
+  bool pager = true;
 
   std::string function{};
   std::vector<std::string> args{};
@@ -220,6 +227,20 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
   fmt_cmd.add_description("Format a file");
   RegisterCommonArgs(fmt_cmd, opts);
 
+  argparse::ArgumentParser explain_cmd("explain");
+  explain_cmd.add_description("Explain an error");
+  explain_cmd.add_argument("error_code").store_into(opts.error_code).nargs(0, 1);
+  explain_cmd.add_argument("-p", "--pager").flag().default_value(true).store_into(opts.pager);
+  explain_cmd.add_argument("-f", "--format")
+      .default_value("pretty")
+      .choices("plain", "pretty")
+      .action([&opts](const std::string& value) {
+        const auto format = cli::ParseFormat(value);
+        if (format)
+          opts.format = format.value();
+      });
+  explain_cmd.add_argument("-l", "--list").flag().default_value(false).store_into(opts.is_explain_list);
+
   program.add_subparser(run_cmd);
   program.add_subparser(test_cmd);
   program.add_subparser(bench_cmd);
@@ -227,6 +248,7 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
   program.add_subparser(check_cmd);
   program.add_subparser(lint_cmd);
   program.add_subparser(fmt_cmd);
+  program.add_subparser(explain_cmd);
 
   try {
     program.parse_args(argc, argv);
@@ -243,6 +265,8 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
     opts.is_bench = true;
   } else if (program.is_subcommand_used("fmt")) {
     opts.is_format = true;
+  } else if (program.is_subcommand_used("explain")) {
+    opts.is_explain = true;
   } else if (program.is_subcommand_used("build")) {
     if (!opts.emit_llvm && opts.emit_object.empty() && opts.emit_header.empty()) {
       std::cerr << "build requires at least one of --emit-llvm, --emit-obj, or --emit-header\n";
@@ -296,6 +320,39 @@ auto main(int argc, char** argv) -> int {
   KASSERT(heap);
   heap::Heap::SetCurrent(heap);
   Type::Init();
+
+  if (opts.is_explain) {
+    if (opts.is_explain_list) {
+      docs::list_error_codes();
+      return EXIT_SUCCESS;
+    }
+
+    std::transform(std::begin(opts.error_code), std::end(opts.error_code), std::begin(opts.error_code),
+                   [](const unsigned char c) {
+                     return std::toupper(c);
+                   });
+
+    const auto explanation = docs::load_explanation(opts.error_code);
+    if (!explanation) {
+      rang::setControlMode(opts.format == cli::Format::kPlain ? rang::control::Off : rang::control::Auto);
+
+      std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
+                << ": unknown error code: `" << opts.error_code << "`\n";
+
+      auto suggestions = docs::suggest_error_codes(opts.error_code);
+      kura::docs::print_suggestions(std::cerr, suggestions.span());
+      return 1;
+    }
+
+    if (opts.pager) {
+      docs::render_with_pager(explanation->text);
+    } else {
+      docs::TerminalRenderer renderer(std::cout);
+      renderer.render(explanation->text);
+    }
+
+    return EXIT_SUCCESS;
+  }
 
   if (opts.is_lint) {
     const auto contents = Slurp(opts.filename);

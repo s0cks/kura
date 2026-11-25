@@ -1,0 +1,19 @@
+# K0002: Unexpected Character
+
+The lexer encountered a character that is not valid in Kura source files.
+
+Common causes include:
+- Non-ASCII punctuation or smart quotes (e.g., `“` or `—`) pasted outside a string literal
+- Unsupported symbolic operators not defined in Kura's grammar
+
+Example of invalid source:
+
+```kura
+let count = 10 § 2;
+```
+
+Remove the unrecognized character or replace it with a valid Kura operator.
+
+::: note
+If you intended to use arbitrary Unicode text, place it inside double quotes (`"..."`). See the [EBNF](https://s0cks.github.io/kura) for valid lexical tokens.
+:::
