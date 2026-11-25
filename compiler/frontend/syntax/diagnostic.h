@@ -207,6 +207,7 @@ struct RenderOptions {
   // How many source lines of context to show around a span is always one: the
   // line the span starts on. Multi line spans are drawn on their first line.
   uint32_t tab_width = 4;
+  bool show_explain = true;
 };
 
 // Renders in the style of rustc, with Elm's habit of putting the advice in

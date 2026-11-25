@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <jansson.h>
 #include <ostream>
 #include <rang.hpp>
 #include <sstream>
@@ -63,18 +64,42 @@ class TerminalRenderer {
     out_(out),
     opts_(options) {}
 
-  void render(std::string_view djot) {
+  void render(std::string_view djot, json_t* saved_diag = nullptr) {
     rang::setControlMode(opts_.color);
-
-    // Always start with a leading newline
     out_ << '\n';
+    render_fragment(djot, saved_diag);
+    out_.flush();
+  }
+
+  void render_fragment(std::string_view djot, json_t* saved_diag = nullptr) {
+    rang::setControlMode(opts_.color);
+    saved_diag_ = saved_diag;
+    rendered_source_ = false;
     at_line_start_ = true;
     col_ = 0;
 
     DjotParserConfig handler{&TerminalRenderer::on_enter_cb, &TerminalRenderer::on_exit_cb,
                              &TerminalRenderer::on_text_cb};
     DjotParse(djot.data(), djot.size(), &handler, this);
-    out_.flush();
+
+    // Fallback: if this .dj file doesn't have `::: source`, still show the snippet
+    if (saved_diag_ && !rendered_source_) {
+      render_source_snippet();
+    }
+    saved_diag_ = nullptr;
+  }
+
+  void render_separator() {
+    write_spaces(opts_.base_indent);
+    const size_t rule_len =
+        (opts_.max_width > opts_.base_indent + 2) ? std::min<size_t>(opts_.max_width - opts_.base_indent - 2, 72) : 40;
+    out_ << rang::style::dim;
+    for (size_t i = 0; i < rule_len; ++i) {
+      out_ << "─";
+    }
+    out_ << rang::style::reset << "\n\n";
+    at_line_start_ = true;
+    col_ = 0;
   }
 
  private:
@@ -93,6 +118,9 @@ class TerminalRenderer {
     CodeBlock,
   };
 
+  json_t* saved_diag_ = nullptr;
+  bool in_source_div_ = false;
+  bool rendered_source_ = false;
   std::ostream& out_;
   RenderOptions opts_;
 
@@ -157,6 +185,102 @@ class TerminalRenderer {
         os << rang::fg::gray;
         break;
     }
+  }
+
+  void paint_severity(std::string_view severity, std::string_view text) {
+    if (severity == "WARNING") {
+      out_ << rang::style::bold << rang::fg::yellow << text << rang::style::reset << rang::fg::reset;
+    } else if (severity == "NOTE" || severity == "HELP") {
+      out_ << rang::style::bold << rang::fg::cyan << text << rang::style::reset << rang::fg::reset;
+    } else {
+      out_ << rang::style::bold << rang::fg::red << text << rang::style::reset << rang::fg::reset;
+    }
+  }
+
+  void render_source_snippet() {
+    rendered_source_ = true;
+    if (!saved_diag_)
+      return;
+
+    const char* sev_c = json_string_value(json_object_get(saved_diag_, "severity"));
+    const char* code = json_string_value(json_object_get(saved_diag_, "code"));
+    const char* file = json_string_value(json_object_get(saved_diag_, "filename"));
+    const char* message = json_string_value(json_object_get(saved_diag_, "message"));
+    const char* help = json_string_value(json_object_get(saved_diag_, "help"));
+    const auto header_line = json_integer_value(json_object_get(saved_diag_, "line"));
+    const auto header_col = json_integer_value(json_object_get(saved_diag_, "character"));
+    const size_t gutter_width = static_cast<size_t>(json_integer_value(json_object_get(saved_diag_, "gutter_width")));
+
+    const std::string_view severity = sev_c ? sev_c : "ERROR";
+    const std::string gutter(gutter_width, ' ');
+
+    // Header: WARNING[K0034] #button is missing on-click
+    write_spaces(opts_.base_indent);
+    paint_severity(severity, std::string(severity) + "[" + (code ? code : "") + "]");
+    out_ << ' ' << rang::style::bold << (message ? message : "") << rang::style::reset << '\n';
+
+    // Location: --> examples/counter.kui:89:9
+    write_spaces(opts_.base_indent);
+    if (gutter_width >= 2)
+      write_spaces(gutter_width - 2);
+    out_ << rang::fg::magenta << "--> " << rang::fg::reset << (file ? file : "<unknown>") << ':' << header_line << ':'
+         << header_col << '\n';
+
+    write_spaces(opts_.base_indent);
+    out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset << '\n';
+
+    // Pre-sorted marks & carets
+    size_t idx = 0;
+    json_t* j_mark = nullptr;
+    json_array_foreach(json_object_get(saved_diag_, "marks"), idx, j_mark) {
+      if (json_is_true(json_object_get(j_mark, "has_gap"))) {
+        write_spaces(opts_.base_indent);
+        out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset
+             << (json_is_true(json_object_get(j_mark, "skipped_lines")) ? " ..." : "") << '\n';
+      }
+
+      if (!json_is_true(json_object_get(j_mark, "same_line"))) {
+        const std::string number = json_string_value(json_object_get(j_mark, "number"));
+        const char* line_text = json_string_value(json_object_get(j_mark, "line_text"));
+        write_spaces(opts_.base_indent);
+        write_spaces(gutter.size() - number.size());
+        out_ << rang::fg::magenta << number << " |" << rang::fg::reset << ' ' << (line_text ? line_text : "") << '\n';
+      }
+
+      const size_t from = static_cast<size_t>(json_integer_value(json_object_get(j_mark, "from")));
+      const char* marker = json_string_value(json_object_get(j_mark, "marker"));
+      const char* text = json_string_value(json_object_get(j_mark, "text"));
+      const bool primary = json_is_true(json_object_get(j_mark, "primary"));
+
+      write_spaces(opts_.base_indent);
+      out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset << ' ' << std::string(from, ' ');
+
+      if (primary) {
+        paint_severity(severity, marker ? marker : "^");
+      } else {
+        out_ << rang::fg::magenta << (marker ? marker : "-") << rang::fg::reset;
+      }
+
+      if (text && text[0] != '\0') {
+        out_ << ' ';
+        if (primary) {
+          paint_severity(severity, text);
+        } else {
+          out_ << rang::fg::magenta << text << rang::fg::reset;
+        }
+      }
+      out_ << '\n';
+    }
+
+    if (help && help[0] != '\0') {
+      write_spaces(opts_.base_indent);
+      out_ << gutter << rang::fg::magenta << " = " << rang::fg::reset << rang::style::bold << "help"
+           << rang::style::reset << ": " << help << '\n';
+    }
+
+    out_ << '\n';
+    at_line_start_ = true;
+    col_ = 0;
   }
 
   static void emit_reset(std::ostream& os) {
@@ -289,15 +413,23 @@ class TerminalRenderer {
       case kDjotEmphasis:
         apply_style(ActiveStyle::Emphasis);
         break;
-      case kDjotDiv:
+      case kDjotDiv: {
+        std::string_view div_cls(ev->arg, ev->arg_len);
+        if (div_cls == "source") {
+          in_source_div_ = true;
+          render_source_snippet();
+          break;
+        }
+
         in_div_ = true;
         if (ev->arg_len > 0) {
           write_spaces(opts_.base_indent + opts_.tab_width);
-          out_ << rang::style::bold << rang::fg::yellow << "│ " << std::string_view(ev->arg, ev->arg_len) << ':'
-               << rang::style::reset << rang::fg::reset << '\n';
+          out_ << rang::style::bold << rang::fg::yellow << "│ " << div_cls << ':' << rang::style::reset
+               << rang::fg::reset << '\n';
         }
         at_line_start_ = true;
         break;
+      }
       case kDjotList:
         in_list_ = true;
         break;
@@ -344,11 +476,11 @@ class TerminalRenderer {
       case kDjotLink:
         reset_style();
         if (!link_url_.empty()) {
-          on_text(" (", 2);
+          on_text(" ( ", 3);
           apply_style(ActiveStyle::LinkUrl);
           on_text(link_url_.data(), link_url_.size());
           reset_style();
-          on_text(")", 1);
+          on_text(" )", 2);
           link_url_.clear();
         }
         break;
@@ -361,6 +493,11 @@ class TerminalRenderer {
         reset_style();
         break;
       case kDjotDiv:
+        if (in_source_div_) {
+          in_source_div_ = false;
+          break;
+        }
+
         in_div_ = false;
         out_ << '\n';
         at_line_start_ = true;
@@ -450,39 +587,28 @@ inline bool stdout_is_tty() {
   return isatty(fileno(stdout)) != 0;
 }
 
-inline void render_with_pager(std::string_view djot, RenderOptions opts = {}) {
+inline void render_with_pager(std::string_view rendered, RenderOptions opts = {}) {
   const bool is_tty = stdout_is_tty();
-
-  if (opts.color == rang::control::Auto)
-    opts.color = is_tty ? rang::control::Force : rang::control::Off;
-
-  std::ostringstream buf;
-  TerminalRenderer renderer(buf, opts);
-  renderer.render(djot);
-
-  const std::string rendered = buf.str();
   const size_t line_count = static_cast<size_t>(std::count(rendered.begin(), rendered.end(), '\n'));
   const size_t term_height = detect_terminal_height();
 
   if (!is_tty || line_count + 2 < term_height) {
-    std::cout << rendered;
-    std::cout.flush();
+    std::fwrite(rendered.data(), 1, rendered.size(), stdout);
+    std::fflush(stdout);
     return;
   }
 
   const char* pager_env = std::getenv("PAGER");
   if (pager_env && pager_env[0] == '\0') {
-    std::cout << rendered;
-    std::cout.flush();
+    std::fwrite(rendered.data(), 1, rendered.size(), stdout);
+    std::fflush(stdout);
     return;
   }
 
 #if defined(_WIN32)
   std::string pager_cmd = pager_env ? pager_env : "more";
 #else
-  // -F: quit if one screen, -R: pass raw ANSI colors, -X: don't clear screen on exit
   std::string pager_cmd = pager_env ? pager_env : "less -FRX";
-  // Ensure `less` receives raw ANSI escapes if user set PAGER=less without -R
   if (pager_env && std::string_view(pager_env) == "less" && !std::getenv("LESS")) {
     pager_cmd = "less -FRX";
   }
@@ -490,8 +616,8 @@ inline void render_with_pager(std::string_view djot, RenderOptions opts = {}) {
 
   FILE* pipe = popen(pager_cmd.c_str(), "w");
   if (!pipe) {
-    std::cout << rendered;
-    std::cout.flush();
+    std::fwrite(rendered.data(), 1, rendered.size(), stdout);
+    std::fflush(stdout);
     return;
   }
 

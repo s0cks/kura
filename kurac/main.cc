@@ -47,6 +47,27 @@
 using namespace kura;
 
 namespace {
+static inline auto GetLastErrorCodePath() -> std::filesystem::path {
+  namespace fs = std::filesystem;
+
+  const auto current_workdir = fs::weakly_canonical(fs::current_path());
+  const auto hash = std::hash<std::string>{}(current_workdir.string());
+
+  fs::path cache_dir;
+  if (const char* xdg = std::getenv("XDG_CACHE_HOME"); xdg && *xdg) {
+    cache_dir = fs::path(xdg) / "kura";
+  } else if (const char* home = std::getenv("HOME"); home && *home) {
+    cache_dir = fs::path(home) / ".cache" / "kura";
+  } else {
+    cache_dir = fs::temp_directory_path() / "kura";
+  }
+
+  std::error_code ec;
+  fs::create_directories(cache_dir, ec);
+
+  return cache_dir / std::format("last_{:016x}.txt", hash);
+}
+
 struct CliOptions {
   std::string error_code{};
   std::string filename{};
@@ -74,6 +95,7 @@ struct CliOptions {
   bool is_format = false;
   bool is_explain = false;
   bool is_explain_list = false;
+  bool explain_last = false;
   std::string filter{};
   bool fail_fast = false;
   bool pager = true;
@@ -229,8 +251,16 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
 
   argparse::ArgumentParser explain_cmd("explain");
   explain_cmd.add_description("Explain an error");
-  explain_cmd.add_argument("error_code").store_into(opts.error_code).nargs(0, 1);
-  explain_cmd.add_argument("-p", "--pager").flag().default_value(true).store_into(opts.pager);
+  explain_cmd.add_argument("error_code").store_into(opts.error_code).nargs(argparse::nargs_pattern::optional);
+
+  auto& pager_group = explain_cmd.add_mutually_exclusive_group();
+  pager_group.add_argument("-p", "--pager").help("use pager for output (default)").flag().action([&opts](const auto&) {
+    opts.pager = true;
+  });
+  pager_group.add_argument("--no-pager").help("disable pager for output").flag().action([&opts](const auto&) {
+    opts.pager = false;
+  });
+
   explain_cmd.add_argument("-f", "--format")
       .default_value("pretty")
       .choices("plain", "pretty")
@@ -239,7 +269,8 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
         if (format)
           opts.format = format.value();
       });
-  explain_cmd.add_argument("-l", "--list").flag().default_value(false).store_into(opts.is_explain_list);
+  explain_cmd.add_argument("--list").flag().default_value(false).store_into(opts.is_explain_list);
+  explain_cmd.add_argument("--last").flag().default_value(false).implicit_value(true).store_into(opts.explain_last);
 
   program.add_subparser(run_cmd);
   program.add_subparser(test_cmd);
@@ -322,32 +353,127 @@ auto main(int argc, char** argv) -> int {
   Type::Init();
 
   if (opts.is_explain) {
+    const auto color_mode = (opts.format == cli::Format::kPlain) ? rang::control::Off : rang::control::Auto;
+    rang::setControlMode(color_mode);
+
+    docs::RenderOptions render_opts{
+        .color = color_mode,
+        .tab_width = 2,
+        .base_indent = 1,
+    };
+
     if (opts.is_explain_list) {
-      docs::list_error_codes();
+      docs::list_error_codes(render_opts);
       return EXIT_SUCCESS;
     }
 
-    std::transform(std::begin(opts.error_code), std::end(opts.error_code), std::begin(opts.error_code),
-                   [](const unsigned char c) {
-                     return std::toupper(c);
-                   });
+    if (opts.explain_last || opts.error_code.empty()) {
+      const auto filename = GetLastErrorCodePath();
+      std::ifstream file(filename);
+      if (!file.is_open()) {
+        std::cerr << rang::style::bold << rang::fg::cyan << "note: " << rang::style::reset << rang::fg::reset
+                  << "no diagnostics recorded from the last run (everything compiled cleanly)\n";
+        return EXIT_SUCCESS;
+      }
+
+      docs::RenderOptions buf_opts = render_opts;
+      if (buf_opts.color == rang::control::Auto) {
+        buf_opts.color = docs::stdout_is_tty() ? rang::control::Force : rang::control::Off;
+      }
+
+      std::ostringstream combined_out{};
+      docs::TerminalRenderer renderer(combined_out, buf_opts);
+
+      std::vector<std::string> missing{};
+      std::string json_line{};
+      size_t rendered_count = 0;
+
+      while (std::getline(file, json_line)) {
+        if (!json_line.empty() && json_line.back() == '\r')
+          json_line.pop_back();
+        if (json_line.empty())
+          continue;
+
+        json_error_t jerr{};
+        json_t* root = json_loads(json_line.c_str(), 0, &jerr);
+        if (!root) {
+          std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
+                    << ": corrupted diagnostic entry in `" << filename.string() << "`\n";
+          continue;
+        }
+
+        const char* raw_code = json_string_value(json_object_get(root, "code"));
+        std::string code = raw_code ? raw_code : "";
+        std::ranges::transform(code, code.begin(), [](unsigned char c) {
+          return static_cast<char>(std::toupper(c));
+        });
+
+        const auto explanation = docs::load_explanation(code);
+        if (!explanation) {
+          if (!code.empty())
+            missing.push_back(std::move(code));
+          json_decref(root);
+          continue;
+        }
+
+        if (rendered_count == 0) {
+          combined_out << '\n';
+        } else {
+          renderer.render_separator();
+        }
+
+        // Renders the Djot doc and substitutes `::: source` with `root`'s saved snippet
+        renderer.render_fragment(explanation->text, root);
+        rendered_count++;
+        json_decref(root);
+      }
+
+      // File existed but had 0 valid records (clean build truncated the file)
+      if (rendered_count == 0 && missing.empty()) {
+        std::cerr << rang::style::bold << rang::fg::cyan << "note: " << rang::style::reset << rang::fg::reset
+                  << "no diagnostics recorded from the last run (everything compiled cleanly)\n";
+        return EXIT_SUCCESS;
+      }
+
+      if (rendered_count > 0) {
+        if (opts.pager) {
+          docs::render_with_pager(combined_out.str());
+        } else {
+          std::cout << combined_out.str();
+          std::cout.flush();
+        }
+      }
+
+      for (const auto& m : missing) {
+        std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
+                  << ": unknown error code: `" << m << "`\n";
+
+        auto suggestions = docs::suggest_error_codes(m);
+        kura::docs::print_suggestions(std::cerr, suggestions.span());
+      }
+
+      return missing.empty() ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    // Explicit error code path: `kurac explain K0034`
+    std::ranges::transform(opts.error_code, opts.error_code.begin(), [](unsigned char c) {
+      return static_cast<char>(std::toupper(c));
+    });
 
     const auto explanation = docs::load_explanation(opts.error_code);
     if (!explanation) {
-      rang::setControlMode(opts.format == cli::Format::kPlain ? rang::control::Off : rang::control::Auto);
-
       std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
                 << ": unknown error code: `" << opts.error_code << "`\n";
 
       auto suggestions = docs::suggest_error_codes(opts.error_code);
       kura::docs::print_suggestions(std::cerr, suggestions.span());
-      return 1;
+      return EXIT_FAILURE;
     }
 
     if (opts.pager) {
-      docs::render_with_pager(explanation->text);
+      docs::render_with_pager(explanation->text, render_opts);
     } else {
-      docs::TerminalRenderer renderer(std::cout);
+      docs::TerminalRenderer renderer(std::cout, render_opts);
       renderer.render(explanation->text);
     }
 

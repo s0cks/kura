@@ -1,0 +1,26 @@
+# K0034: `#button` is missing `on-click`
+
+Interactive `#button` elements require an [`on-click`]{.expected} property specifying the message dispatched when the button is activated.
+
+::: source
+:::
+
+Example of erroneous code:
+
+```kura
+#button(:my-button, fill: blue) {
+  #text("Click Me")
+}
+```
+
+Add an [`on-click`]{.expected} property referencing a message variant from your model's `update` handler:
+
+```kura
+#button(:my-button, fill: blue, on-click: MyMessage) {
+  #text("Click Me")
+}
+```
+
+::: tip
+If the button is temporarily inactive, keep the [`on-click`]{.expected} handler attached and set `disabled: true` rather than omitting `on-click`.
+:::

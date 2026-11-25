@@ -203,8 +203,12 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
         in_div = true;
         const char* cls = line + 3;
         size_t cls_len = len - 3;
-        while (cls_len > 0 && *cls == ' ') {
+        while (cls_len > 0 && (*cls == ' ' || *cls == '\t')) {
           cls++;
+          cls_len--;
+        }
+
+        while (cls_len > 0 && (cls[cls_len - 1] == ' ' || cls[cls_len - 1] == '\t')) {
           cls_len--;
         }
 

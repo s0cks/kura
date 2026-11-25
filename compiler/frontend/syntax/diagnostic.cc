@@ -7,16 +7,14 @@
 #include <sstream>
 
 namespace kura::syntax {
-auto ToString(const DiagnosticCode code) -> std::string {
+static inline auto CodeToString(const uint64_t code) -> std::string {
   char buffer[8];
   std::snprintf(buffer, sizeof(buffer), "K%04lu", code);
   return buffer;
 }
 
-static inline auto CodeToString(const uint64_t code) -> std::string {
-  char buffer[8];
-  std::snprintf(buffer, sizeof(buffer), "K%04lu", code);
-  return buffer;
+auto ToString(const DiagnosticCode code) -> std::string {
+  return CodeToString(code);
 }
 
 auto GetSummary(const DiagnosticCode code) -> std::string_view {
@@ -242,6 +240,13 @@ class DiagnosticRenderer {
       magenta(" = ");
       bold("help: ");
       stream() << d.help << "\n";
+    }
+
+    if (opts_.show_explain) {
+      stream() << gutter;
+      magenta(" = ");
+      bold("note: ");
+      stream() << "run `kura explain " << CodeToString(d.code) << "` or `kura explain --last` for more details" << "\n";
     }
 
     for (const auto& note : d.notes) {

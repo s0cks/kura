@@ -1,0 +1,25 @@
+# K0040: Function is missing a return type
+
+Function declarations in Kura require an explicit return type annotation before the [`=>`]{.expected} arrow.
+
+Example of erroneous code:
+
+```kura
+fn counter-buttons() =>
+  #row() {
+    #button(:inc, on-click: Increment) { #text("+") }
+  }
+```
+
+Add `: ReturnType` after the parameter list (for example, `Element` for UI view functions or `()` when returning nothing):
+
+```kura
+fn counter-buttons(): Node =>
+  #row() {
+    #button(:inc, on-click: Increment) { #text("+") }
+  }
+```
+
+::: note
+Explicit return types allow the Kura compiler to verify layout and reactivity contracts ahead of time without whole-program type inference.
+:::
