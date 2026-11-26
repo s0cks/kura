@@ -102,6 +102,19 @@ class TerminalRenderer {
     col_ = 0;
   }
 
+  void render_sub_separator() {
+    write_spaces(opts_.base_indent);
+    const size_t rule_len =
+        (opts_.max_width > opts_.base_indent + 2) ? std::min<size_t>(opts_.max_width - opts_.base_indent - 2, 72) : 40;
+    out_ << rang::style::dim;
+    for (size_t i = 0; i < rule_len; ++i) {
+      out_ << "┄";
+    }
+    out_ << rang::style::reset << "\n\n";
+    at_line_start_ = true;
+    col_ = 0;
+  }
+
  private:
   enum class ActiveStyle {
     None,
@@ -121,10 +134,14 @@ class TerminalRenderer {
   json_t* saved_diag_ = nullptr;
   bool in_source_div_ = false;
   bool rendered_source_ = false;
+  bool rendered_fix_ = false;
   std::ostream& out_;
   RenderOptions opts_;
+  std::string code_lang_{};
+  std::string code_line_{};
 
   bool in_div_ = false;
+  bool in_callout_ = false;
   bool in_list_ = false;
   bool in_item_ = false;
   bool in_span_ = false;
@@ -145,6 +162,105 @@ class TerminalRenderer {
     if (cls == ".hint" || cls == ".note")
       return ActiveStyle::SpanHint;
     return ActiveStyle::SpanDefault;
+  }
+
+  static bool is_kura_keyword(std::string_view word) {
+    static constexpr std::string_view kKeywords[] = {
+        "fn",   "let",   "type", "use", "extern", "set", "test", "assert", "static-assert", "if",  "else",
+        "when", "match", "for",  "in",  "fold",   "is",  "as",   "true",   "false",         "none"};
+    for (auto kw : kKeywords) {
+      if (word == kw)
+        return true;
+    }
+    return false;
+  }
+
+  static bool is_ident_char(char c) {
+    unsigned char uc = static_cast<unsigned char>(c);
+    return std::isalnum(uc) || c == '_' || c == '-';
+  }
+
+  void write_highlighted_kura_line(std::string_view line) {
+    size_t i = 0;
+    const size_t n = line.size();
+
+    while (i < n) {
+      // 1. Line comment: // ...
+      if (line[i] == '/' && i + 1 < n && line[i + 1] == '/') {
+        out_ << rang::style::dim << rang::fg::gray << line.substr(i) << rang::style::reset << rang::fg::reset;
+        break;
+      }
+
+      // 2. String literal: "..."
+      if (line[i] == '"') {
+        size_t start = i++;
+        while (i < n) {
+          if (line[i] == '\\' && i + 1 < n) {
+            i += 2;
+          } else if (line[i] == '"') {
+            i++;
+            break;
+          } else {
+            i++;
+          }
+        }
+        out_ << rang::fg::green << line.substr(start, i - start) << rang::fg::reset;
+        continue;
+      }
+
+      // 3. UI Element tag: #button, #text
+      if (line[i] == '#' && i + 1 < n && std::isalpha(static_cast<unsigned char>(line[i + 1]))) {
+        size_t start = i++;
+        while (i < n && is_ident_char(line[i]))
+          i++;
+        out_ << rang::style::bold << rang::fg::blue << line.substr(start, i - start) << rang::style::reset
+             << rang::fg::reset;
+        continue;
+      }
+
+      // 4. UI Element ID: :my-button (not preceded by an identifier char like `fill:`)
+      if (line[i] == ':' && (i == 0 || !is_ident_char(line[i - 1])) && i + 1 < n &&
+          std::isalpha(static_cast<unsigned char>(line[i + 1]))) {
+        size_t start = i++;
+        while (i < n && is_ident_char(line[i]))
+          i++;
+        out_ << rang::fg::yellow << line.substr(start, i - start) << rang::fg::reset;
+        continue;
+      }
+
+      // 5. Numbers & unit literals: 0, 10px, 50%, 1fr
+      if (std::isdigit(static_cast<unsigned char>(line[i]))) {
+        size_t start = i++;
+        while (i < n && (std::isalnum(static_cast<unsigned char>(line[i])) || line[i] == '.' || line[i] == '%')) {
+          i++;
+        }
+        out_ << rang::fg::yellow << line.substr(start, i - start) << rang::fg::reset;
+        continue;
+      }
+
+      // 6. Identifiers, Keywords, Property keys (`name:`), and PascalCase Types
+      if (std::isalpha(static_cast<unsigned char>(line[i])) || line[i] == '_') {
+        size_t start = i++;
+        while (i < n && is_ident_char(line[i]))
+          i++;
+        std::string_view word = line.substr(start, i - start);
+
+        if (i < n && line[i] == ':') {
+          // Property key (e.g. `on-click:`)
+          out_ << rang::fgB::gray << word << rang::fg::reset;
+        } else if (is_kura_keyword(word)) {
+          out_ << rang::fg::magenta << word << rang::fg::reset;
+        } else if (std::isupper(static_cast<unsigned char>(word[i]))) {
+          // PascalCase type or variant (e.g. `MyMessage`, `String`)
+          out_ << rang::fg::cyan << word << rang::fg::reset;
+        } else {
+          out_ << word;
+        }
+        continue;
+      }
+
+      out_ << line[i++];
+    }
   }
 
   static void emit_style(std::ostream& os, ActiveStyle style) {
@@ -197,6 +313,83 @@ class TerminalRenderer {
     }
   }
 
+  void write_callout_rail() {
+    write_spaces(opts_.base_indent);
+    out_ << rang::style::dim << "│ " << rang::style::reset;
+  }
+
+  void render_callout_top(std::string_view title = "Your Code") {
+    write_spaces(opts_.base_indent);
+    const size_t total_w =
+        (opts_.max_width > opts_.base_indent + 2) ? std::min<size_t>(opts_.max_width - opts_.base_indent - 2, 72) : 40;
+    // "╭─ " (3) + title + " " (1)
+    const size_t used = 4 + title.size();
+    const size_t fill = (total_w > used) ? (total_w - used) : 4;
+
+    out_ << rang::style::dim << "╭─ " << rang::style::reset << rang::style::bold << title << rang::style::reset
+         << rang::style::dim << ' ';
+    for (size_t i = 0; i < fill; ++i)
+      out_ << "─";
+    out_ << rang::style::reset << '\n';
+  }
+
+  void render_callout_bottom() {
+    write_spaces(opts_.base_indent);
+    const size_t total_w =
+        (opts_.max_width > opts_.base_indent + 2) ? std::min<size_t>(opts_.max_width - opts_.base_indent - 2, 72) : 40;
+
+    out_ << rang::style::dim << "╰";
+    for (size_t i = 1; i < total_w; ++i)
+      out_ << "─";
+    out_ << rang::style::reset << "\n\n";
+    at_line_start_ = true;
+    col_ = 0;
+  }
+
+  void write_snippet_indent() {
+    if (in_callout_) {
+      write_callout_rail();
+    } else {
+      write_spaces(opts_.base_indent);
+    }
+  }
+
+  void render_fix_snippet() {
+    rendered_fix_ = true;
+    if (!saved_diag_)
+      return;
+
+    json_t* j_fix_lines = json_object_get(saved_diag_, "fix_lines");
+    if (!j_fix_lines || !json_is_array(j_fix_lines) || json_array_size(j_fix_lines) == 0)
+      return;
+
+    const size_t gutter_width = static_cast<size_t>(json_integer_value(json_object_get(saved_diag_, "gutter_width")));
+    const std::string gutter(gutter_width, ' ');
+
+    write_snippet_indent();
+    out_ << rang::style::bold << rang::fg::green << "Fix:" << rang::style::reset << rang::fg::reset << '\n';
+    write_snippet_indent();
+    out_ << '\n';
+
+    size_t idx = 0;
+    json_t* j_fline = nullptr;
+    json_array_foreach(j_fix_lines, idx, j_fline) {
+      const std::string number = json_string_value(json_object_get(j_fline, "number"));
+      const char* text = json_string_value(json_object_get(j_fline, "text"));
+
+      write_snippet_indent();
+      write_spaces(gutter.size() - number.size());
+      out_ << rang::fg::green << number << " +" << rang::fg::reset << ' ';
+      if (text) {
+        write_highlighted_kura_line(text);
+      }
+      out_ << '\n';
+    }
+
+    at_line_start_ = true;
+    col_ = 0;
+  }
+
   void render_source_snippet() {
     rendered_source_ = true;
     if (!saved_diag_)
@@ -214,19 +407,18 @@ class TerminalRenderer {
     const std::string_view severity = sev_c ? sev_c : "ERROR";
     const std::string gutter(gutter_width, ' ');
 
-    // Header: WARNING[K0034] #button is missing on-click
-    write_spaces(opts_.base_indent);
+    write_snippet_indent();
     paint_severity(severity, std::string(severity) + "[" + (code ? code : "") + "]");
     out_ << ' ' << rang::style::bold << (message ? message : "") << rang::style::reset << '\n';
 
     // Location: --> examples/counter.kui:89:9
-    write_spaces(opts_.base_indent);
+    write_snippet_indent();
     if (gutter_width >= 2)
       write_spaces(gutter_width - 2);
     out_ << rang::fg::magenta << "--> " << rang::fg::reset << (file ? file : "<unknown>") << ':' << header_line << ':'
          << header_col << '\n';
 
-    write_spaces(opts_.base_indent);
+    write_snippet_indent();
     out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset << '\n';
 
     // Pre-sorted marks & carets
@@ -234,7 +426,7 @@ class TerminalRenderer {
     json_t* j_mark = nullptr;
     json_array_foreach(json_object_get(saved_diag_, "marks"), idx, j_mark) {
       if (json_is_true(json_object_get(j_mark, "has_gap"))) {
-        write_spaces(opts_.base_indent);
+        write_snippet_indent();
         out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset
              << (json_is_true(json_object_get(j_mark, "skipped_lines")) ? " ..." : "") << '\n';
       }
@@ -242,9 +434,13 @@ class TerminalRenderer {
       if (!json_is_true(json_object_get(j_mark, "same_line"))) {
         const std::string number = json_string_value(json_object_get(j_mark, "number"));
         const char* line_text = json_string_value(json_object_get(j_mark, "line_text"));
-        write_spaces(opts_.base_indent);
+        write_snippet_indent();
         write_spaces(gutter.size() - number.size());
-        out_ << rang::fg::magenta << number << " |" << rang::fg::reset << ' ' << (line_text ? line_text : "") << '\n';
+        out_ << rang::fg::magenta << number << " |" << rang::fg::reset << ' ';
+        if (line_text) {
+          write_highlighted_kura_line(line_text);
+        }
+        out_ << '\n';
       }
 
       const size_t from = static_cast<size_t>(json_integer_value(json_object_get(j_mark, "from")));
@@ -252,7 +448,7 @@ class TerminalRenderer {
       const char* text = json_string_value(json_object_get(j_mark, "text"));
       const bool primary = json_is_true(json_object_get(j_mark, "primary"));
 
-      write_spaces(opts_.base_indent);
+      write_snippet_indent();
       out_ << gutter << rang::fg::magenta << " |" << rang::fg::reset << ' ' << std::string(from, ' ');
 
       if (primary) {
@@ -273,11 +469,12 @@ class TerminalRenderer {
     }
 
     if (help && help[0] != '\0') {
-      write_spaces(opts_.base_indent);
+      write_snippet_indent();
       out_ << gutter << rang::fg::magenta << " = " << rang::fg::reset << rang::style::bold << "help"
            << rang::style::reset << ": " << help << '\n';
     }
 
+    write_snippet_indent();
     out_ << '\n';
     at_line_start_ = true;
     col_ = 0;
@@ -395,6 +592,9 @@ class TerminalRenderer {
       case kDjotHeading:
         apply_style(ActiveStyle::Heading);
         break;
+      case kDjotBreak:
+        render_sub_separator();
+        break;
       case kDjotSpan:
         in_span_ = true;
         apply_style(map_span_style({ev->arg, ev->arg_len}));
@@ -415,9 +615,21 @@ class TerminalRenderer {
         break;
       case kDjotDiv: {
         std::string_view div_cls(ev->arg, ev->arg_len);
+        if (div_cls == "callout") {
+          in_callout_ = true;
+          if (saved_diag_) {
+            render_callout_top();
+          }
+          break;
+        }
         if (div_cls == "source") {
           in_source_div_ = true;
           render_source_snippet();
+          break;
+        }
+        if (div_cls == "fix") {
+          in_source_div_ = true;
+          render_fix_snippet();
           break;
         }
 
@@ -438,6 +650,8 @@ class TerminalRenderer {
         write_line_prefix(true);
         break;
       case kDjotCodeBlock:
+        code_lang_.assign(ev->arg, ev->arg_len);
+        code_line_.clear();
         in_code_block_ = true;
         apply_style(ActiveStyle::CodeBlock);
         at_line_start_ = true;
@@ -497,6 +711,13 @@ class TerminalRenderer {
           in_source_div_ = false;
           break;
         }
+        if (in_callout_) {
+          in_callout_ = false;
+          if (saved_diag_) {
+            render_callout_bottom();
+          }
+          break;
+        }
 
         in_div_ = false;
         out_ << '\n';
@@ -505,6 +726,7 @@ class TerminalRenderer {
       case kDjotCodeBlock:
         in_code_block_ = false;
         reset_style();
+        code_lang_.clear();
         out_ << '\n';
         at_line_start_ = true;
         col_ = 0;
@@ -517,19 +739,24 @@ class TerminalRenderer {
   void on_text(const char* text, size_t len) {
     if (in_code_block_) {
       for (size_t i = 0; i < len; ++i) {
-        if (at_line_start_) {
-          write_line_prefix(false);
-          if (active_style_ != ActiveStyle::None) {
-            emit_style(out_, active_style_);
-          }
-        }
         if (text[i] == '\t') {
-          write_spaces(opts_.tab_width);
-        } else {
-          out_ << text[i];
-        }
-        if (text[i] == '\n') {
+          code_line_.append(opts_.tab_width, ' ');
+        } else if (text[i] == '\n') {
+          write_line_prefix(false);
+          if (code_lang_ == "kura") {
+            write_highlighted_kura_line(code_line_);
+          } else {
+            if (active_style_ != ActiveStyle::None) {
+              emit_style(out_, active_style_);
+            }
+            out_ << code_line_;
+            emit_reset(out_);
+          }
+          out_ << '\n';
+          code_line_.clear();
           at_line_start_ = true;
+        } else {
+          code_line_ += text[i];
         }
       }
       return;

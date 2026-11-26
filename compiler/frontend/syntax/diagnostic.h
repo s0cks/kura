@@ -81,6 +81,11 @@ auto ToString(DiagnosticCode code) -> std::string;
 auto GetSummary(DiagnosticCode code) -> std::string_view;
 auto ToString(Severity severity) -> std::string_view;
 
+struct TextEdit {
+  Span span;                // Byte range [begin, end) in SourceFile to replace
+  std::string replacement;  // Text to insert (empty = deletion, begin == end = insertion)
+};
+
 struct Diagnostic {
   Severity severity = Severity::kError;
   uint64_t code = 0;
@@ -94,6 +99,7 @@ struct Diagnostic {
   std::string help;
   // Extra context ("note: ...").
   std::vector<std::string> notes{};
+  std::vector<TextEdit> suggestions{};  // Machine-applicable edits (empty if manual fix only)
 
   auto WithLabel(const Span& s, std::string text) -> Diagnostic& {
     labels.push_back({s, std::move(text)});
@@ -112,6 +118,11 @@ struct Diagnostic {
 
   auto IsError() const -> bool {
     return severity == Severity::kError;
+  }
+
+  auto WithSuggestion(const TextEdit rhs) -> Diagnostic& {
+    suggestions.push_back(rhs);
+    return *this;
   }
 };
 

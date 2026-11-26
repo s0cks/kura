@@ -12,6 +12,7 @@ extern "C" {
 #define FOR_EACH_DJOT_EVENT(V) \
   V(Document)                  \
   V(Heading)                   \
+  V(Break)                     \
   V(Paragraph)                 \
   V(List)                      \
   V(ListItem)                  \

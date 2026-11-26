@@ -1957,6 +1957,9 @@ class TreeBuilder {
       return element;
     }
     bool seen_on_click = false;
+    std::optional<Span> lparen_span{};
+    std::optional<Span> rparen_span{};
+    std::optional<uint32_t> first_positional{};
     if (Is(K::kIdent)) {
       const auto tag = Next();
       element->tag = MakeName(tag.span, Text(tag.span));
@@ -1964,8 +1967,10 @@ class TreeBuilder {
       ExpectedHere("an element name after `#`");
       element->tag = MissingName();
     }
+
     if (Is(K::kLParen)) {
       const auto open = Next();
+      lparen_span = open.span;
       element->has_props = true;
       ParseDelimited(K::kRParen, open.span, [&] {
         // `#button(:my-button, fill: red)`: the id is first, and there is one
@@ -1975,6 +1980,10 @@ class TreeBuilder {
         }
         element->props.push_back(ParseUiArg());
       });
+
+      if (prev_end_ > open.span.end && source_.GetText(Span(prev_end_ - 1, prev_end_)) == ")")
+        rparen_span = Span(prev_end_ - 1, prev_end_);
+
       // positional arguments come last, like in Typst
       auto seen_positional = false;
       for (const auto* prop : element->props) {
@@ -1982,6 +1991,8 @@ class TreeBuilder {
         if (arg->name.text == "on-click") {
           seen_on_click = true;
         } else if (arg->form == Arg::kPositional) {
+          if (!first_positional)
+            first_positional = arg->span.begin;
           seen_positional = true;
         } else if (seen_positional) {
           Report(DiagnosticCode::kPositionalNotLast, arg->span, "this argument comes after a positional one",
@@ -2000,9 +2011,39 @@ class TreeBuilder {
     element->span = SpanFrom(begin);
 
     if (element->tag.text == "button" && !seen_on_click) {
-      Warn(DiagnosticCode::kButtonMissingOnClick, element->span, "#button is missing on-click",
-           "add an on-click property")
-          .WithHelp("#button elements should have an on-click property, like: #button(on-click: MyMessage)");
+      auto& diag =
+          Warn(DiagnosticCode::kButtonMissingOnClick, element->span, "#button is missing on-click",
+               "add an on-click property")
+              .WithHelp("#button elements should have an on-click property, like: #button(on-click: MyMessage)");
+      if (lparen_span && rparen_span) {
+        const bool has_any_arg = element->has_id || !element->props.empty();
+        if (!has_any_arg) {
+          diag.WithSuggestion({
+              Span{rparen_span->begin, rparen_span->begin},
+              "on-click: MyMessage",
+          });
+        } else if (first_positional) {
+          diag.WithSuggestion({Span{
+                                   *first_positional,
+                                   *first_positional,
+                               },
+                               "on-click: MyMessage, "});
+        } else {
+          diag.WithSuggestion({Span{
+                                   rparen_span->begin,
+                                   rparen_span->begin,
+                               },
+                               ", on-click: MyMessage"});
+        }
+      } else if (!lparen_span) {
+        diag.WithSuggestion({
+            Span{
+                element->tag.span.end,
+                element->tag.span.end,
+            },
+            "(on-click: MyMessage)",
+        });
+      }
     }
 
     return element;

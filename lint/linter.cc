@@ -214,6 +214,42 @@ static inline void WriteDiagnosticsToLast(const std::filesystem::path& p, const 
         json_array_append_new(j_marks, j_mark);
       }
 
+      if (!d.suggestions.empty()) {
+        // Group edits by 0-indexed line number
+        std::map<uint32_t, std::vector<TextEdit>> edits_by_line;
+        for (const auto& edit : d.suggestions) {
+          const auto pos = source.GetPosition(edit.span.begin);
+          edits_by_line[pos.line].push_back(edit);
+        }
+
+        json_t* j_fix_lines = json_array();
+        for (auto& [line_idx, edits] : edits_by_line) {
+          const auto line_span = source.GetLineSpan(line_idx);
+          std::string patched(source.GetText(line_span));
+
+          // Apply edits on this line in reverse offset order
+          std::sort(edits.begin(), edits.end(), [](const TextEdit& a, const TextEdit& b) {
+            return a.span.begin > b.span.begin;
+          });
+
+          for (const auto& edit : edits) {
+            if (edit.span.begin >= line_span.begin && edit.span.end <= line_span.end) {
+              const size_t rel_begin = edit.span.begin - line_span.begin;
+              const size_t rel_len = edit.span.end - edit.span.begin;
+              patched.replace(rel_begin, rel_len, edit.replacement);
+            }
+          }
+
+          const auto expanded = ExpandLine(patched, 2);
+          json_t* j_fline = json_object();
+          json_object_set_new(j_fline, "number", json_string(std::to_string(line_idx + 1).c_str()));
+          json_object_set_new(j_fline, "text", json_string(expanded.text.c_str()));
+          json_array_append_new(j_fix_lines, j_fline);
+        }
+
+        json_object_set_new(doc, "fix_lines", j_fix_lines);
+      }
+
       json_object_set_new(doc, "gutter_width", json_integer(std::to_string(max_line + 1).size() + 1));
       json_object_set_new(doc, "marks", j_marks);
       json_object_set(doc, "filename", json_string(source.GetName().c_str()));

@@ -3,6 +3,28 @@
 
 #include "djot.h"
 
+static inline bool djot_is_thematic_break(const char* line, size_t len) {
+  char marker = 0;
+  size_t count = 0;
+  for (size_t i = 0; i < len; ++i) {
+    char c = line[i];
+    if (c == ' ' || c == '\t') {
+      continue;
+    }
+    if (c == '-' || c == '*' || c == '_') {
+      if (marker == 0) {
+        marker = c;
+      } else if (c != marker) {
+        return false;
+      }
+      count++;
+    } else {
+      return false;
+    }
+  }
+  return count >= 3;
+}
+
 static inline void djot_emit_text(const DjotParserConfig* h, const char* s, size_t len, void* data) {
   if (len > 0 && h->on_text) {
     h->on_text(s, len, data);
@@ -150,7 +172,8 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
     h->on_enter(&doc_ev, data);
 
   bool in_code = false;
-  bool in_div = false;
+  size_t div_colons[8] = {0};
+  size_t div_depth = 0;
   bool in_para = false;
   bool in_list = false;
   bool in_item = false;
@@ -196,30 +219,37 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
       continue;
     }
 
-    // 2. Div Block (::: note)
+    // 2. Div Block (::: note / :::: callout)
     if (len >= 3 && strncmp(line, ":::", 3) == 0) {
       djot_close_inline_blocks(h, &in_para, &in_item, &in_list, data);
-      if (!in_div) {
-        in_div = true;
-        const char* cls = line + 3;
-        size_t cls_len = len - 3;
-        while (cls_len > 0 && (*cls == ' ' || *cls == '\t')) {
-          cls++;
-          cls_len--;
-        }
 
-        while (cls_len > 0 && (cls[cls_len - 1] == ' ' || cls[cls_len - 1] == '\t')) {
-          cls_len--;
-        }
+      size_t colons = 0;
+      while (colons < len && line[colons] == ':')
+        colons++;
 
+      const char* cls = line + colons;
+      size_t cls_len = len - colons;
+      while (cls_len > 0 && (*cls == ' ' || *cls == '\t')) {
+        cls++;
+        cls_len--;
+      }
+      while (cls_len > 0 && (cls[cls_len - 1] == ' ' || cls[cls_len - 1] == '\t')) {
+        cls_len--;
+      }
+
+      // Closing fence: no class label and matches (or exceeds) the top open div's colon count
+      if (cls_len == 0 && div_depth > 0 && colons >= div_colons[div_depth - 1]) {
+        div_depth--;
+        div_ev.arg = NULL;
+        div_ev.arg_len = 0;
+        if (h->on_exit)
+          h->on_exit(&div_ev, data);
+      } else if (div_depth < 8) {
+        div_colons[div_depth++] = colons;
         div_ev.arg = cls;
         div_ev.arg_len = cls_len;
         if (h->on_enter)
           h->on_enter(&div_ev, data);
-      } else {
-        in_div = false;
-        if (h->on_exit)
-          h->on_exit(&div_ev, data);
       }
 
       continue;
@@ -228,6 +258,17 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
     // 3. Blank line closes active paragraph / list
     if (len == 0) {
       djot_close_inline_blocks(h, &in_para, &in_item, &in_list, data);
+      continue;
+    }
+
+    // 3b. Thematic Break (---, ***, ___)
+    if (djot_is_thematic_break(line, len)) {
+      djot_close_inline_blocks(h, &in_para, &in_item, &in_list, data);
+      DjotEvent hr_ev = {.kind = kDjotBreak};
+      if (h->on_enter)
+        h->on_enter(&hr_ev, data);
+      if (h->on_exit)
+        h->on_exit(&hr_ev, data);
       continue;
     }
 
@@ -304,8 +345,11 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
   if (in_code && h->on_exit)
     h->on_exit(&code_ev, data);
 
-  if (in_div && h->on_exit)
-    h->on_exit(&div_ev, data);
+  while (div_depth > 0) {
+    div_depth--;
+    if (h->on_exit)
+      h->on_exit(&div_ev, data);
+  }
 
   if (h->on_exit)
     h->on_exit(&doc_ev, data);

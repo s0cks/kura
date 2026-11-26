@@ -2,8 +2,14 @@
 
 Interactive `#button` elements require an [`on-click`]{.expected} property specifying the message dispatched when the button is activated.
 
+
+:::: callout
 ::: source
 :::
+
+::: fix
+:::
+::::
 
 Example of erroneous code:
 
