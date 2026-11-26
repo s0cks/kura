@@ -1,29 +1,31 @@
 ---
 code: K0004
 title: Invalid Escape
+description: "Unrecognized escape sequence inside a double-quoted string literal"
 severity: ERROR
 since: 0.1.0
 category: parse
-deprecated: false
+tags: [parse, lexer, string, escape]
+deprecated: False
 ---
 
-An unrecognized escape sequence was found inside a string literal.
+An unrecognized escape sequence was found inside a double-quoted string literal.
 
-Backslashes (`\`) inside strings introduce special character escapes. Any character following `\` that is not a valid escape code triggers this error.
+Backslashes (`\`) inside strings introduce character escapes, and any character following `\` that is not one of Kura's supported escape codes triggers this error.
+
+Supported escape sequences in Kura strings:
+- [`\n`]{.expected} (newline) and [`\t`]{.expected} (tab)
+- [`\\`]{.expected} (literal backslash) and [`\"`]{.expected} (literal double quote)
+- [`\{`]{.expected} and [`\}`]{.expected} (literal curly braces, preventing string interpolation)
 
 Example of erroneous code:
 
 ```kura
-let path = "C:\users\kura\ui.kura";
+let path = "C:\users\kura\ui.kura"
 ```
 
-Supported escape sequences in Kura strings:
-- `\n` (newline), `\r` (carriage return), `\t` (tab)
-- `\\` (literal backslash) and `\"` (literal double quote)
-- `\0` (null character)
-
-To represent a literal backslash, escape the backslash itself:
+To represent a literal backslash, escape the backslash itself with [`\\`]{.expected}:
 
 ```kura
-let path = "C:\\users\\kura\\ui.kura";
+let path = "C:\\users\\kura\\ui.kura"
 ```

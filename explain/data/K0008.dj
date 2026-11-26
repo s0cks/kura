@@ -1,0 +1,56 @@
+---
+code: K0008
+title: If Without Else
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [ parse, syntax, control-flow, expression ]
+description: "'if' expression is missing a required 'else' branch"
+---
+
+In Kura, `if` is an expression that always evaluates to a value, so every `if` branch must have a matching `else` branch.
+
+## Example
+
+This error occurs when an `if` expression is written without a fallback `else` clause:
+
+```kura
+let label = if is_active {
+  "Active"
+}
+```
+
+It also occurs inside view blocks when conditional rendering omits the `else` branch:
+
+```kura
+view {
+  if show_banner {
+    Text("Welcome!")
+  }
+}
+```
+
+## Solution
+
+Provide an `else` branch that evaluates to a compatible type:
+
+```kura
+let label = if is_active {
+  "Active"
+} else {
+  "Inactive"
+}
+```
+
+Inside UI view blocks where nothing should be rendered when the condition is false, return an empty block or `none` in the `else` branch:
+
+```kura
+view {
+  if show_banner {
+    Text("Welcome!")
+  } else {
+    none
+  }
+}
+```

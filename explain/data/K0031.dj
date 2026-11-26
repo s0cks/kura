@@ -1,0 +1,32 @@
+---
+code: K0031
+title: Bad Static Assert
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, static-assert, compile-time]
+description: "'static-assert' arguments are missing or malformed"
+---
+
+A `static-assert` statement must be written as `static-assert(condition)` or `static-assert(condition, "message")`, where the first argument is a boolean expression and the optional second argument is a plain string literal.
+
+## Example
+
+This error occurs when `static-assert` omits its parentheses, has no condition expression, passes a non-string message, or supplies extra arguments:
+
+```kura
+static-assert
+
+static-assert(1 == 1, 42)
+```
+
+## Solution
+
+Provide a valid condition expression inside parentheses, optionally followed by a plain string diagnostic message:
+
+```kura
+static-assert(1 == 1)
+
+static-assert(max-items > 0, "max-items must be positive")
+```

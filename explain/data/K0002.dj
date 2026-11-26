@@ -1,27 +1,28 @@
 ---
 code: K0002
 title: Unexpected Character
+description: "Encountered an invalid or unrecognized character during lexing"
 severity: ERROR
 since: 0.1.0
 category: parse
-tags: [ token ]
-deprecated: false
+tags: [parse, lexer, token]
+deprecated: False
 ---
 
-The lexer encountered a character that is not valid in Kura source files.
+The lexer encountered a character that is not valid in Kura source code outside of a string literal or comment—such as non-ASCII punctuation, smart quotes (`“` or `”`), or unsupported symbolic operators.
 
-Common causes include:
-- Non-ASCII punctuation or smart quotes (e.g., `“` or `—`) pasted outside a string literal
-- Unsupported symbolic operators not defined in Kura's grammar
-
-Example of invalid source:
+## Example
 
 ```kura
-let count = 10 § 2;
+let count = 10 § 2
 ```
 
-Remove the unrecognized character or replace it with a valid Kura operator.
+Remove the unrecognized character or replace it with a valid Kura operator (such as [`*`]{.expected}, [`+`]{.expected}, [`/`]{.expected}, or [`%`]{.expected}):
+
+```kura
+let count = 10 * 2
+```
 
 ::: note
-If you intended to use arbitrary Unicode text, place it inside double quotes (`"..."`). See the [EBNF](https://s0cks.github.io/kura) for valid lexical tokens.
+If you intended to include arbitrary Unicode characters as text, place them inside double quotes (`"..."`). See the [EBNF](https://s0cks.github.io/kura) for valid lexical tokens.
 :::

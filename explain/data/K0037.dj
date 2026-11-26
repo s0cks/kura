@@ -1,0 +1,42 @@
+---
+code: K0037
+title: Assert Outside Test
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, assert, test, unit-testing, scope]
+description: "'assert' is only allowed directly inside a 'test' block"
+---
+
+The `assert` statement is only valid directly inside the top-level body of a `test "..." { ... }` block. It cannot appear at the top level of a file, inside regular functions, or nested inside inner `if`, `match`, or `for` blocks.
+
+## Example
+
+This error occurs when `assert` is used inside a regular `fn` or nested inside a control-flow block within a `test`:
+
+```kura
+fn check(x: Int): Int => {
+  assert(x > 0)
+  x
+}
+
+test "nested assert" {
+  if true {
+    assert(1 == 1)
+  } else {
+    None
+  }
+}
+```
+
+## Solution
+
+Move `assert` calls directly into a `test` block body (using `static-assert` if you need a compile-time invariant outside tests):
+
+```kura
+test "positive check" {
+  let x = 5
+  assert(x > 0)
+}
+```

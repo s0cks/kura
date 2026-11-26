@@ -18,6 +18,7 @@ struct DocIndexEntry {
   std::string_view since{};
   std::string_view category{};
   std::string_view hash{};
+  std::string_view desc{};
   std::vector<std::string_view> tags{};
   bool deprecated = false;
   uint32_t offset = 0;

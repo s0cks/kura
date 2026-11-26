@@ -1,0 +1,35 @@
+---
+code: K0036
+title: Bad Assert
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, assert, test, unit-testing]
+description: "'assert' statement arguments are missing or malformed"
+---
+
+An `assert` statement inside a `test` block must follow the form `assert(condition)` or `assert(condition, "message")`. The optional second argument must be a string literal (plain or interpolated), and no trailing comma is permitted after the message.
+
+## Example
+
+This error occurs when `assert` is missing its condition, passes a non-string failure message, or includes a trailing comma after the message string:
+
+```kura
+test "math" {
+  assert()
+  assert(2 + 2 == 4, 123)
+  assert(2 + 2 == 4, "math broke",)
+}
+```
+
+## Solution
+
+Pass a boolean condition expression and, optionally, a string failure message without a trailing comma:
+
+```kura
+test "math" {
+  assert(2 + 2 == 4)
+  assert(2 + 2 == 4, "expected 2 + 2 to equal 4")
+}
+```

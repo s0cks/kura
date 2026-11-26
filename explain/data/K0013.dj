@@ -1,0 +1,43 @@
+---
+code: K0013
+title: Toplevel Expression
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, top-level, expression, declaration]
+description: "Bare expression is not allowed at the top level of a file"
+---
+
+The top level of a Kura source file only permits declarations and top-level rules—specifically `let` bindings (and redefinitions), `type` declarations, `fn` definitions, `test` blocks, `extern` declarations, `use` imports, `set` rules, and `static-assert` statements. Bare expressions (such as function calls, UI elements, arithmetic, or control-flow blocks) cannot appear directly at the top level.
+
+## Example
+
+This error occurs when an expression or UI element is placed directly at the root of a file instead of inside a function, binding, or `test` block:
+
+```kura
+#text("Hello, world!")
+
+compute(10, 20)
+
+if ready {
+  start()
+} else {
+  stop()
+}
+```
+
+## Solution
+
+Wrap the expression in a `fn` declaration (such as a view or helper function), bind its result with `let`, or place it inside a `test` block:
+
+```kura
+fn main() => #text("Hello, world!")
+
+let result = compute(10, 20)
+
+test "startup check" {
+  let state = if ready { start() } else { stop() }
+  assert(state == true)
+}
+```

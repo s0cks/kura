@@ -1,0 +1,33 @@
+---
+code: K0033
+title: Bad Element Id
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, ui-element, id]
+description: "UI element ':id' must be a valid kebab-case identifier"
+---
+
+A UI element ID—passed as the first argument to an element using a leading colon (`:id`)—must be a valid lowercase/kebab-case identifier (`:my-button`). Missing names, uppercase names, keywords, or non-identifier tokens after `:` are invalid.
+
+## Example
+
+This error occurs when `:` in the first element argument position is not followed by a valid identifier:
+
+```kura
+fn header() =>
+  #text(:123, "Title")
+
+fn footer() =>
+  #text(:, "Footer")
+```
+
+## Solution
+
+Follow `:` with a valid kebab-case identifier as the first argument to the UI element:
+
+```kura
+fn header() =>
+  #text(:page-title, "Title")
+```

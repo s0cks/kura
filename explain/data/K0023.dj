@@ -1,0 +1,29 @@
+---
+code: K0023
+title: Too Much Nesting
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, recursion, limits]
+description: "Expression exceeds the maximum recursive nesting depth"
+---
+
+The expression exceeds the parser's maximum recursive nesting depth (such as deeply chained parentheses, binary operators, blocks, or nested string interpolations).
+
+## Example
+
+This error occurs when expressions are nested beyond the compiler's recursion limit:
+
+```kura
+let value = ((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))
+```
+
+## Solution
+
+Break deeply nested expressions into intermediate `let` bindings or smaller helper functions:
+
+```kura
+fn step-a(x: Int): Int => x + 1
+fn step-b(x: Int): Int => step-a(x) * 2
+```

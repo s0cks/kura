@@ -1,15 +1,28 @@
 ---
 code: K0001
 title: Unexpected Token
+description: "Encountered a token that is invalid in the current grammatical position"
 severity: ERROR
 since: 0.1.0
 category: parse
-tags: [ token ]
+tags: [parse, syntax, token]
 deprecated: False
 ---
 
-A token was unexpected during parsing
+The parser encountered a token that cannot legally appear at the current position in the grammar—for example, a missing separator, a stray delimiter, or an operator where a type or expression was expected.
+
+## Example
+
+```kura
+fn add(a: Int b: Int): Int => a + b
+```
+
+Provide the expected syntax token (such as a [`,`]{.expected} between parameters, a [`:`]{.expected} before a type annotation, or a matching closing delimiter):
+
+```kura
+fn add(a: Int, b: Int): Int => a + b
+```
 
 ::: note
-See the [EBNF](https://s0cks.github.io/kura) for more
+See the [EBNF](https://s0cks.github.io/kura) for the complete Kura grammar specification.
 :::

@@ -1,0 +1,42 @@
+---
+code: K0021
+title: Duplicate Else
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, control-flow, if, else]
+description: "'else' clause has no matching 'if' or duplicates an existing 'else'"
+---
+
+An `else` keyword appeared without a preceding `if` expression, or an `if ... else` expression already has an `else` branch. Each `if` expression accepts at most one `else` clause (or chained `else if ... else`).
+
+## Example
+
+This error occurs when a stray `else` appears on its own or when a second `else` is attached to an `if` expression:
+
+```kura
+fn label(flag: Bool): String =>
+  if flag {
+    "yes"
+  } else {
+    "no"
+  } else {
+    "maybe"
+  }
+```
+
+## Solution
+
+Remove the extra `else` branch, or chain additional conditions using `else if`:
+
+```kura
+fn label(flag: Bool, other: Bool): String =>
+  if flag {
+    "yes"
+  } else if other {
+    "maybe"
+  } else {
+    "no"
+  }
+```

@@ -1,0 +1,47 @@
+---
+code: K0006
+title: Bad Directive
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [ parse, syntax, directive ]
+description: "'@' directive token is not followed by a valid directive name"
+---
+
+The `@` character introduces a directive, so it must be immediately followed by a valid directive identifier (such as `@state`, `@view`, `@update`, or `@use`).
+
+## Example
+
+This error occurs when `@` is followed by whitespace, punctuation, a number, or the end of the file:
+
+```kura
+@ state {
+  count: Int = 0
+}
+```
+
+It also occurs if `@` is used on its own without a name:
+
+```kura
+@
+view {
+  Text("Hello")
+}
+```
+
+## Solution
+
+Remove any whitespace between `@` and the directive name, and ensure the name is a valid identifier:
+
+```kura
+@state {
+  count: Int = 0
+}
+```
+
+If you intended to include a literal `@` character inside text content, place it inside a string literal instead:
+
+```kura
+Text("contact@example.com")
+```

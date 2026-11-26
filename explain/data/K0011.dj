@@ -1,0 +1,44 @@
+---
+code: K0011
+title: Keyword As Name
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, keyword, identifier]
+description: "Reserved keyword cannot be used as an identifier name"
+---
+
+Reserved keywords (such as `let`, `fn`, `type`, `if`, `else`, `match`, `for`, `in`, `fold`, `use`, `as`, `extern`, `when`, `is`, `static-assert`, `true`, `false`, `None`, `test`, and `assert`) cannot be used as variable, parameter, or function names.
+
+Note that `test` and `assert` are reserved words and cannot be used as function or binding names, though keywords and colors remain legal as member names after `.` (such as `x.test`). Similarly, `set` is only treated as a keyword when starting a `set` rule (`set name(...)`), so it remains usable as an ordinary identifier elsewhere.
+
+## Example
+
+This error occurs when a reserved keyword is used in a `let` binding, function declaration, or parameter list:
+
+```kura
+let match = 42
+
+fn test() => None
+
+fn scale(in: Float): Float => in * 2.0
+```
+
+## Solution
+
+Rename the identifier using a non-reserved word or kebab-case name:
+
+```kura
+let match-count = 42
+
+fn run-check() => None
+
+fn scale(input: Float): Float => input * 2.0
+```
+
+If you are declaring an `extern` C function whose symbol name clashes with a Kura keyword, wrap the symbol name in backticks as a raw identifier:
+
+```kura
+extern fn `type`(ptr: c.void): c.int
+```

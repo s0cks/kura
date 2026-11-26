@@ -96,6 +96,7 @@ class Entry:
         self.category = meta.get("category")
         self.tags = meta.get("tags", [])
         self.deprecated = meta.get("deprecated", False)
+        self.description = meta.get("description")
 
     def get_formatted_title(self) -> str:
         return f"# {self.code}: {self.title}"
@@ -116,11 +117,18 @@ class Entry:
         return buffer.getvalue()
 
     def __repr__(self) -> str:
-        return f"Entry(code={self.code!r}, title={self.title!r}, severity={self.severity!r}, since={self.since!r}, category={self.category!r}, tags={self.tags!r}, deprecated={self.deprecated!r})"
+        return f"Entry(code={self.code!r}, title={self.title!r}, description={self.description!r}, severity={self.severity!r}, since={self.since!r}, category={self.category!r}, tags={self.tags!r}, deprecated={self.deprecated!r})"
 
 
 def format(entry, body) -> str:
-    return f"{entry.get_formatted_title()}\n\n{body}\n\n{entry.get_formatted_footer()}"
+    callout = io.StringIO()
+    callout.write(":::: callout\n")
+    callout.write("::: source\n")
+    callout.write(":::\n")
+    callout.write("::: fix\n")
+    callout.write(":::\n")
+    callout.write("::::\n")
+    return f"{entry.get_formatted_title()}\n\n{body}\n\n{callout.getvalue()}\n{entry.get_formatted_footer()}"
 
 
 def sha256(data: bytes) -> bytes:
@@ -196,7 +204,7 @@ def main():
         for entry, hash, offset, length in entries:
             f.write(
                 f'    DocIndexEntry{{"{cpp_escape(entry.code)}", "{cpp_escape(entry.title)}", '
-                f'"{cpp_escape(entry.severity)}", "{cpp_escape(entry.since)}", "{cpp_escape(entry.category)}", "{cpp_escape(hash)}", '
+                f'"{cpp_escape(entry.severity)}", "{cpp_escape(entry.since)}", "{cpp_escape(entry.category)}", "{cpp_escape(hash)}", "{cpp_escape(entry.description)}", '
             )
             f.write("{")
             for tag in entry.tags:

@@ -1,22 +1,15 @@
 ---
 code: K0034
-title: `#button` is missing `on-click`
+title: #button is missing on-click
 severity: WARNING
 since: 0.1.0
 category: parse
 deprecated: False
 tags: [ test, ui ]
+description: "Interactive '#button' element is missing an 'on-click' handler"
 ---
 
 Interactive `#button` elements require an [`on-click`]{.expected} property specifying the message dispatched when the button is activated.
-
-:::: callout
-::: source
-:::
-
-::: fix
-:::
-::::
 
 Example of erroneous code:
 

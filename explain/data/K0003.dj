@@ -1,28 +1,30 @@
 ---
 code: K0003
 title: Unterminated String
+description: "Double-quoted string literal reached the end of the line or file without a closing quote"
 severity: ERROR
 since: 0.1.0
 category: parse
-deprecated: false
+tags: [parse, lexer, string]
+deprecated: False
 ---
 
-A string literal was opened with [`"`]{.expected} but reached the end of the line or file without a closing [`"`]{.expected}.
+A string literal was opened with [`"`]{.expected} but reached the end of the line (`CR`/`LF`) or end of the file without a matching closing [`"`]{.expected}.
 
-In Kura, double-quoted string literals cannot span across raw newlines without escaping.
+In Kura, double-quoted string literals are single-line only and cannot span across raw line breaks.
 
 Example of erroneous code:
 
 ```kura
-let greeting = "Hello, Kura!;
+let greeting = "Hello, Kura!
 ```
 
-Close the string literal before the end of the line:
+Close the string literal with [`"`]{.expected} before the end of the line (using `\n` if you need an embedded newline):
 
 ```kura
-let greeting = "Hello, Kura!";
+let greeting = "Hello, Kura!\n"
 ```
 
 ::: tip
-If you meant to include a literal double quote inside the string, escape it as `\"`.
+If you meant to include a literal double quote inside the string, escape it as `\"` so it does not terminate the string early.
 :::

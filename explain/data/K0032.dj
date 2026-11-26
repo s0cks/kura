@@ -1,0 +1,37 @@
+---
+code: K0032
+title: Style Error
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, style, set-rule, ui-element]
+description: "'set' style rule is malformed or placed in an invalid scope"
+---
+
+A `set` style rule (`set target(prop: value, ...)`) is malformed or placed in an invalid position. Each `set` rule must target a valid element name followed by parenthesized style arguments, and `set view(...)` may only appear at the top level of a file or directly before the body of a `view` function.
+
+## Example
+
+This error occurs when a `set` rule is missing its target name or argument list, or when `set view(...)` is placed inside a nested block or non-view helper:
+
+```kura
+set (fill: black)
+
+fn helper() => {
+  set view(fill: white)
+  #text("Invalid placement")
+}
+```
+
+## Solution
+
+Specify a valid element name and parenthesized property arguments, and place `set view(...)` only at the top level or immediately before a `view` body:
+
+```kura
+set button(fill: black)
+
+fn view() =>
+  set view(fill: white)
+  #button("Click me")
+```

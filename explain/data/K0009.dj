@@ -1,0 +1,44 @@
+---
+code: K0009
+title: Function Without Parenthesis
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [ parse, syntax, function, declaration ]
+description: "Function declaration is missing a parameter list '()'"
+---
+
+A function declaration requires a parameter list enclosed in parentheses `()` after the function name, even when the function accepts no parameters.
+
+## Example
+
+This error occurs when a function body or return type immediately follows the function name without `()`:
+
+```kura
+fn greet {
+  Text("Hello")
+}
+```
+
+It also occurs when a return type annotation is provided without an explicit parameter list:
+
+```kura
+fn default_padding -> Float {
+  8.0
+}
+```
+
+## Solution
+
+Add empty parentheses `()` after the function name:
+
+```kura
+fn greet() {
+  Text("Hello")
+}
+
+fn default_padding() -> Float {
+  8.0
+}
+```

@@ -1,0 +1,30 @@
+---
+code: K0028
+title: Bad Record Update
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, record-update]
+description: "Record update entry after '|' is empty or malformed"
+---
+
+A record update expression (`{ target | path: value, ... }`) must list at least one field update entry after `|`, where each entry is a field path followed by `:`, `+=`, `-=`, `*=`, `/=`, or `%=` and a value expression.
+
+## Example
+
+This error occurs when the update list after `|` is empty, uses `=`, or omits a field path:
+
+```kura
+let empty-update = { user | }
+
+let bad-op = { user | name = "Tazz" }
+```
+
+## Solution
+
+Provide at least one valid `path: value` or compound update (`+=`, `-=`, `*=`, `/=`, `%=`) entry after `|`:
+
+```kura
+let updated-user = { user | name: "Tazz", login-count += 1 }
+```

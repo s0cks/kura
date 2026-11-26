@@ -1,0 +1,38 @@
+---
+code: K0039
+title: Record Name Not PascalCase
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, naming-convention, pascal-case, type, record]
+description: "Type or variant name must be formatted in PascalCase"
+---
+
+Type and variant names in Kura must use `PascalCase`, starting with an uppercase letter (`A–Z`) with no hyphens (such as `Point`, `UserProfile`, or `ClickEvent`). Lowercase or `kebab-case` type names are not permitted.
+
+## Example
+
+This error occurs when a `type` declaration or variant constructor begins with a lowercase letter or contains hyphens:
+
+```kura
+type user-profile = {
+  name: String,
+  age: Int,
+}
+
+type status = active | inactive
+```
+
+## Solution
+
+Capitalize the type and variant names using `PascalCase`:
+
+```kura
+type UserProfile = {
+  name: String,
+  age: Int,
+}
+
+type Status = Active | Inactive
+```

@@ -1,0 +1,35 @@
+---
+code: K0015
+title: Bad Record Entry
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, record, spread, punning]
+description: "Record entry must be 'name: value', 'name:', or '...spread'"
+---
+
+Every entry inside a record literal `{ ... }` must be a field assignment (`name: value`), a punned field (`name:`), or a record spread (`...other`).
+
+## Example
+
+This error occurs when a record literal contains a bare identifier without a trailing `:`, a non-identifier key, or an arbitrary expression:
+
+```kura
+let width = 100px
+let box = { width, height: 50px }
+
+let bad = { "key": 123 }
+```
+
+## Solution
+
+Provide a `: value` pair for each field, add a trailing `:` when punning an existing variable, or prefix a record expression with `...` to spread its fields:
+
+```kura
+let width = 100px
+let defaults = { opacity: 1.0 }
+let box = { width:, height: 50px, ...defaults }
+```
+
+If you intended to write a block expression rather than a record literal, ensure the first statement inside `{ ... }` is not `name:` (for example, `{ compute(x) }`).

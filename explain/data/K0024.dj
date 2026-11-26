@@ -1,0 +1,32 @@
+---
+code: K0024
+title: Bad Interpolation
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, string, interpolation]
+description: "String interpolation '{...}' is empty or malformed"
+---
+
+A `{...}` interpolation inside a string literal must contain exactly one valid expression. Empty braces `{}`, multiple unseparated expressions (`{ a b }`), format specifiers (`{x:.2}`), or unclosed `{` braces are syntax errors.
+
+## Example
+
+This error occurs when string interpolation braces are empty, contain format specifiers, or hold more than one expression:
+
+```kura
+let empty = "value: {}"
+let formatted = "price: {amount:.2}"
+let multi = "coords: {x y}"
+```
+
+## Solution
+
+Place a single valid expression inside `{...}`, format numbers explicitly before interpolating, or escape literal braces with `\{` and `\}`:
+
+```kura
+let literal = "value: \{}"
+let formatted = "price: {format-fixed(amount, 2)}"
+let coords = "coords: {x}, {y}"
+```

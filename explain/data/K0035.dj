@@ -1,0 +1,37 @@
+---
+code: K0035
+title: Test Without Name
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, test, unit-testing]
+description: "'test' declaration is missing a plain string name"
+---
+
+A `test` declaration must be immediately followed by a plain, double-quoted string literal naming the test (`test "name" { ... }`). Unquoted identifiers, missing names, or strings containing `{...}` interpolations are not allowed.
+
+## Example
+
+This error occurs when `test` is followed directly by `{`, an identifier, or an interpolated string:
+
+```kura
+test {
+  assert(1 + 1 == 2)
+}
+
+let label = "addition"
+test "{label}" {
+  assert(1 + 1 == 2)
+}
+```
+
+## Solution
+
+Provide a plain string literal name between `test` and the `{ ... }` test body:
+
+```kura
+test "addition" {
+  assert(1 + 1 == 2)
+}
+```

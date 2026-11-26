@@ -1,0 +1,30 @@
+---
+code: K0027
+title: Positional Not Last
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, ui-element, arguments]
+description: "Positional element argument must appear after all named and spread arguments"
+---
+
+In UI element arguments (`#element(...)`), any positional argument (such as text content on `#text`) must appear after all named arguments (`name: value`), punned arguments (`name:`), and record spreads (`...props`).
+
+## Example
+
+This error occurs when a positional argument is followed by a named property, pun, or spread:
+
+```kura
+fn greeting() =>
+  #text("Hello, world!", fill: red)
+```
+
+## Solution
+
+Move the positional argument to the end of the argument list after all named and spread arguments:
+
+```kura
+fn greeting() =>
+  #text(fill: red, "Hello, world!")
+```

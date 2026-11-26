@@ -934,8 +934,10 @@ static inline void list_error_codes(RenderOptions opts = {},
   }
 
   size_t max_code_len = 0;
+  size_t max_title_len = 0;
   for (const auto& entry : index) {
     max_code_len = std::max(max_code_len, entry.code.size());
+    max_title_len = std::max(max_title_len, entry.title.size());
   }
 
   std::ostringstream buf{};
@@ -946,15 +948,27 @@ static inline void list_error_codes(RenderOptions opts = {},
       buf << ' ';
     }
 
-    buf << rang::style::bold << rang::fg::cyan << entry.code << rang::style::reset << rang::fg::reset;
+    buf << rang::style::bold << rang::fg::magenta << entry.code << rang::style::reset << rang::fg::reset;
 
-    // Pad column to align titles
-    const size_t pad = (max_code_len - entry.code.size()) + opts.tab_width;
-    for (size_t i = 0; i < pad; ++i) {
-      buf << ' ';
+    {
+      // Pad column to align titles
+      const size_t pad = (max_code_len - entry.code.size()) + opts.tab_width;
+      for (size_t i = 0; i < pad; ++i) {
+        buf << ' ';
+      }
     }
 
-    buf << entry.title << '\n';
+    buf << rang::style::bold << entry.title << rang::style::reset << rang::fg::reset;
+
+    {
+      // Pad column to align titles
+      const size_t pad = (max_title_len - entry.title.size()) + opts.tab_width;
+      for (size_t i = 0; i < pad; ++i) {
+        buf << ' ';
+      }
+    }
+
+    buf << rang::fg::gray << entry.desc << rang::fg::reset << '\n';
   }
 
   buf << '\n';

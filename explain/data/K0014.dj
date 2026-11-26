@@ -1,0 +1,41 @@
+---
+code: K0014
+title: Assign To Property
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, assignment, record-update, immutability]
+description: "Direct assignment to a record or object property is not allowed"
+---
+
+Direct property assignment (`obj.field = value`) is not supported in Kura. Values and records are immutable, so fields cannot be mutated in place with `=`.
+
+## Example
+
+This error occurs when attempting to assign directly to a member path on a record or object:
+
+```kura
+fn move-right(pos: Point): Point => {
+  pos.x = 10
+  pos
+}
+```
+
+## Solution
+
+Use a record update expression (`{ record | field: value }`) to produce a new record with the updated field, or rebind the variable name:
+
+```kura
+fn move-right(pos: Point): Point => {
+  { pos | x: 10 }
+}
+```
+
+If you are updating a field relative to its existing value, Kura supports compound update operators inside record updates (such as `+=`, `-=`, `*=`, `/=`, and `%=`):
+
+```kura
+fn advance(pos: Point): Point => {
+  { pos | x += 10 }
+}
+```

@@ -1,0 +1,43 @@
+---
+code: K0029
+title: When With Else
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, control-flow, when, if, else]
+description: "'when' expression cannot have an 'else' branch"
+---
+
+A `when` expression evaluates its block when the condition is `true` and implicitly evaluates to `None` when the condition is `false`. Because its fallback is always `None`, `when` does not accept an `else` branch.
+
+## Example
+
+This error occurs when an `else` clause is attached to a `when` expression:
+
+```kura
+fn badge(unread: Int) =>
+  when unread > 0 {
+    #text("{unread}")
+  } else {
+    #text("0")
+  }
+```
+
+## Solution
+
+Use `if ... else` when you need an explicit fallback branch, or remove the `else` block if `None` is the desired fallback:
+
+```kura
+fn badge(unread: Int) =>
+  if unread > 0 {
+    #text("{unread}")
+  } else {
+    #text("0")
+  }
+
+fn optional-badge(unread: Int) =>
+  when unread > 0 {
+    #text("{unread}")
+  }
+```

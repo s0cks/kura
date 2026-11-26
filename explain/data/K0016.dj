@@ -1,0 +1,33 @@
+---
+code: K0016
+title: Pipe Target Not Call
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, pipe, operator, call]
+description: "Right-hand side of '|>' must be a call or contain a '_' placeholder"
+---
+
+The right-hand stage of a forward pipe (`|>`) must either be a function or variant call (`f(y)` or `Variant()`)—into which the piped value is inserted as the first argument—or an expression containing a `_` placeholder. Bare function names, operators without `_`, or literals are not valid pipe targets.
+
+## Example
+
+This error occurs when piping into a bare function identifier without parentheses or into an expression that lacks a `_` placeholder:
+
+```kura
+let a = 10 |> increment
+
+let b = 10 |> 1 + 2
+```
+
+## Solution
+
+Call the target function with `()`, or use `_` to mark where the piped value should be substituted:
+
+```kura
+let a = 10 |> increment()
+
+let b = 10 |> add(_, 20)
+let c = 10 |> _ + 2
+```

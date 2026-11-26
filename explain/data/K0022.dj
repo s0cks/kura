@@ -1,0 +1,33 @@
+---
+code: K0022
+title: Empty Match
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, pattern-matching, match]
+description: "'match' expression must contain at least one pattern arm"
+---
+
+A `match` expression must contain at least one pattern arm (`pattern => expression`). Empty `match target {}` blocks are not permitted.
+
+## Example
+
+This error occurs when a `match` block has no arms inside its braces:
+
+```kura
+fn describe(x: Int): String =>
+  match x {}
+```
+
+## Solution
+
+Add one or more `pattern => expression` arms (including a catch-all `_` arm if needed):
+
+```kura
+fn describe(x: Int): String =>
+  match x {
+    0 => "zero"
+    _ => "non-zero"
+  }
+```

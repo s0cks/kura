@@ -1,0 +1,34 @@
+---
+code: K0010
+title: Extern Without Return Type
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, extern, ffi, function, return-type]
+description: "'extern' function declaration is missing a return type"
+---
+
+An `extern` function declaration requires an explicit return type annotation so the compiler knows the foreign function's calling convention and ABI signature.
+
+## Example
+
+This error occurs when an `extern` function is declared without a return type:
+
+```kura
+extern fn log_message(msg: String)
+```
+
+It also occurs when an `extern` function has no parameters and omits the return type:
+
+```kura
+extern fn flush_frame()
+```
+
+## Solution
+
+Add an explicit return type annotation (such as `Int` or `String` for functions that do not return a value):
+
+```kura
+extern fn get_timestamp(): Int
+```

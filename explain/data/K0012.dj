@@ -1,0 +1,46 @@
+---
+code: K0012
+title: Wildcard As Name
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, wildcard, identifier]
+description: "Wildcard '_' cannot be used as a declared identifier name"
+---
+
+The standalone `_` token is a wildcard, not a bindable identifier. While `_` is valid in patterns, loop headers, pipe stages, and partial function applications to ignore or substitute values, it cannot be used as a declared name in bindings, function definitions, parameters, or member accesses.
+
+Note that identifiers starting with an underscore followed by additional word characters (such as `_unused` or `_x`) are valid names.
+
+## Example
+
+This error occurs when `_` is used where a binding or declaration name is expected:
+
+```kura
+let _ = compute()
+
+fn _(x: Int): Int => x + 1
+
+fn add(_: Int, y: Int): Int => y
+```
+
+## Solution
+
+Give the declaration a valid identifier name, or prefix it with an underscore if the parameter or variable is intentionally unused:
+
+```kura
+let _result = compute()
+
+fn identity(x: Int): Int => x + 1
+
+fn add(_x: Int, y: Int): Int => y
+```
+
+If you are destructuring a record, matching a variant, or iterating in a `for` loop and want to discard a value, use `_` in a pattern position instead of a bare `let _` binding:
+
+```kura
+let { status, ..._ } = response
+
+for _, item in items => #text(item)
+```

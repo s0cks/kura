@@ -1,0 +1,30 @@
+---
+code: K0026
+title: Mixed Pipes
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, pipe, operator, precedence]
+description: "'|>' and '<|' pipes cannot be mixed without parentheses"
+---
+
+Forward pipes (`|>`, left-associative) and backward pipes (`<|`, right-associative) cannot be mixed in the same expression without explicit parentheses.
+
+## Example
+
+This error occurs when `|>` and `<|` appear at the same grouping level:
+
+```kura
+let result = x |> transform <| input
+```
+
+## Solution
+
+Add parentheses to make the evaluation order explicit, or rewrite the pipeline using a single pipe direction:
+
+```kura
+let result = (x |> transform()) <| input
+
+let consistent = input |> transform(x, _)
+```

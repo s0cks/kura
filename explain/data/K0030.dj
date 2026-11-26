@@ -1,0 +1,36 @@
+---
+code: K0030
+title: Bad For Binding
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, loop, for, pattern]
+description: "'for' loop header must bind one index or an 'index, element' pair"
+---
+
+A `for` loop header accepts either one binding (`for i in xs`, which binds the index) or two bindings (`for i, x in xs`, where the first is an index name or `_` and the second is an element pattern). Binding three or more variables, using a destructuring pattern for the index, or omitting `in` is invalid.
+
+## Example
+
+This error occurs when a `for` loop specifies three bindings or uses a non-identifier pattern in the index slot:
+
+```kura
+fn render(items: Seq<Item>) =>
+  for i, item, extra in items => #text(item.name)
+
+fn bad-index(points: Seq<Point>) =>
+  for { x, y }, pt in points => #text("{x}")
+```
+
+## Solution
+
+Use either a single index binding (`for i in xs`) or an `index, element` pair (`for i, x in xs` or `for _, x in xs`), placing any destructuring pattern in the second position:
+
+```kura
+fn render(items: Seq<Item>) =>
+  for _, item in items => #text(item.name)
+
+fn render-points(points: Seq<Point>) =>
+  for i, { x, y } in points => #text("{i}: {x}, {y}")
+```

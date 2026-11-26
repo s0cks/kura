@@ -1,0 +1,33 @@
+---
+code: K0019
+title: Expected Item
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, declaration, top-level]
+description: "Expected a valid top-level declaration or rule"
+---
+
+The parser expected a valid top-level declaration or rule (`let`, `type`, `fn`, `test`, `extern`, `use`, `set`, or `static-assert`), or a directive (`@name`) preceding a declaration, but encountered an unexpected token.
+
+## Example
+
+This error occurs when stray punctuation, an invalid keyword, or a directive attached to a `set` or `static-assert` rule appears at the top level:
+
+```kura
+@deprecated
+set button(fill: red)
+
+pub fn helper(): Int => 1
+```
+
+## Solution
+
+Ensure every top-level item starts with a supported declaration keyword, and remove directives from `set` rules and `static-assert` statements:
+
+```kura
+set button(fill: red)
+
+fn helper(): Int => 1
+```

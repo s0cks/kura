@@ -1,0 +1,32 @@
+---
+code: K0038
+title: Function Name Not Kebab-Case
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, naming-convention, kebab-case, function]
+description: "Function name must be formatted in kebab-case"
+---
+
+Function names in Kura must use `kebab-case` (lowercase letters, digits, and single `-` separators, such as `render-header` or `compute-offset`). Uppercase characters (`camelCase` or `PascalCase`) and `snake_case` underscores are rejected.
+
+## Example
+
+This error occurs when a function is declared with uppercase letters or underscores:
+
+```kura
+fn renderHeader() => #text("Welcome")
+
+fn compute_offset(x: Int): Int => x + 4
+```
+
+## Solution
+
+Rename the function using lowercase `kebab-case`:
+
+```kura
+fn render-header() => #text("Welcome")
+
+fn compute-offset(x: Int): Int => x + 4
+```

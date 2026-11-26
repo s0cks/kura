@@ -1,0 +1,44 @@
+---
+code: K0007
+title: Binary Minus Spacing
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [ parse, syntax, operator, whitespace ]
+description: "Binary '-' operator requires whitespace on both sides"
+---
+
+The binary subtraction operator `-` requires whitespace on both sides to distinguish it from unary negation and negative numeric or unit literals (such as `-10` or `-4px`).
+
+## Example
+
+This error occurs when `-` is placed immediately adjacent to one or both operands in a binary expression:
+
+```kura
+let width = 100px-20px
+```
+
+It also occurs when whitespace is present on only one side of `-`:
+
+```kura
+let offset = x -10
+let total = a- b
+```
+
+## Solution
+
+Add whitespace on both sides of `-` when performing subtraction:
+
+```kura
+let width = 100px - 20px
+let offset = x - 10
+let total = a - b
+```
+
+If you intended to negate a value or pass a negative argument rather than subtract, ensure `-` is only attached to the right-hand operand with whitespace before it (or wrapped in parentheses):
+
+```kura
+let negative = -10px
+let result = compute(-10)
+```

@@ -1,0 +1,39 @@
+---
+code: K0017
+title: For Without Arrow
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, loop, for, arrow]
+description: "'for' loop header is missing '=>' before its body expression"
+---
+
+A `for` loop expression requires `=>` separating the loop header (and optional `fold` accumulator) from the loop body expression.
+
+## Example
+
+This error occurs when a block or expression immediately follows `for ... in ...` without `=>`:
+
+```kura
+fn render-list(items: Seq<String>) => {
+  for _, item in items {
+    #text(item)
+  }
+}
+```
+
+## Solution
+
+Insert `=>` between the `for` header (or `fold` clause) and the body expression:
+
+```kura
+fn render-list(items: Seq<String>) => {
+  for _, item in items => #text(item)
+}
+
+fn sum(xs: Seq<Int>): Int =>
+  for _, x in xs fold acc = 0 => acc + x
+```
+
+Note that list comprehensions (`[ expr for x in xs ]`) use `[ ... ]` brackets and do not take `=>` or `fold`.

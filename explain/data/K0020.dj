@@ -1,0 +1,36 @@
+---
+code: K0020
+title: Missing Closing Delimiter
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, delimiter, grouping]
+description: "Opening delimiter is missing its matching closing delimiter"
+---
+
+An opening delimiter—such as `(`, `{`, `[`, or `<` in generic type parameters—was not matched with a corresponding closing delimiter (`)`, `}`, `]`, or `>`) before the end of the enclosing construct or file.
+
+## Example
+
+This error occurs when a block, argument list, sequence, record, or generic type argument list is left unclosed:
+
+```kura
+fn compute(x: Int, y: Int: Int => {
+  let items = [1, 2, 3
+  x + y
+}
+```
+
+## Solution
+
+Match every opening delimiter with its closing counterpart:
+
+```kura
+fn compute(x: Int, y: Int): Int => {
+  let items = [1, 2, 3]
+  x + y
+}
+```
+
+If you are nesting generic types such as `Seq<Seq<Px>>`, note that the lexer tokenizes `>>` as two separate `>` tokens so both type argument lists close cleanly without needing a space between them.

@@ -1,0 +1,32 @@
+---
+code: K0018
+title: Use Without Header
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: False
+tags: [parse, syntax, use, import, ffi, header]
+description: "'use' declaration requires a plain header path string"
+---
+
+A `use` declaration must be followed by a plain string literal specifying the C header path to import (optionally followed by `as` and an alias). Bare identifiers or interpolated strings are not permitted.
+
+## Example
+
+This error occurs when `use` is followed by an unquoted identifier or an interpolated string:
+
+```kura
+use stdio.h
+
+let dir = "include"
+use "{dir}/math.h" as math
+```
+
+## Solution
+
+Provide a plain, double-quoted string literal for the header path:
+
+```kura
+use "stdio.h" as c
+use "include/math.h" as math
+```
