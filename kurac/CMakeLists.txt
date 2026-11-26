@@ -1,6 +1,8 @@
 find_package(jansson CONFIG REQUIRED)
 find_package(argparse CONFIG REQUIRED)
 
+pkg_check_modules(EDITORCONFIG QUIET IMPORTED_TARGET editorconfig)
+
 add_executable(kurac
   main.cc)
 target_include_directories(kurac
@@ -10,6 +12,18 @@ target_link_libraries(kurac
          kura-explain
          argparse::argparse
          jansson::jansson)
+
+if(EDITORCONFIG_FOUND)
+  message(STATUS "building with editorconfig support")
+  target_compile_definitions(kurac
+    PUBLIC KURA_HAS_EDITORCONFIG)
+  target_link_libraries(kurac
+    PRIVATE PkgConfig::EDITORCONFIG)
+  target_sources(kurac
+    PRIVATE editorconfig_wrapper.cc)
+else()
+  message(STATUS "editorconfig not found")
+endif()
 
 if(TARGET kura-renderer-headless)
   target_link_libraries(kurac

@@ -28,6 +28,7 @@
 #include "c_import.h"
 #include "cli/format.h"
 #include "common.h"
+#include "editorconfig_wrapper.h"
 #include "explain/index.h"
 #include "explain/renderer.h"
 #include "explain/suggest.h"
@@ -81,6 +82,11 @@ struct CliOptions {
   bool dump_ir = false;
   bool dump_dom = false;
   bool dump_draw = false;
+
+#ifdef KURA_HAS_EDITORCONFIG
+  bool editorconfig = true;
+#endif  // KURA_HAS_EDITORCONFIG
+
   // compile Tracy zones into the program (see TraceOptions)
   bool trace = false;
   bool emit_llvm = false;
@@ -149,6 +155,30 @@ static inline auto ParseTree(const std::string filename) -> std::unique_ptr<kura
 
   return kura::syntax::ParseText(filename, *contents);
 }
+
+static inline void RegisterPagerArgs(argparse::ArgumentParser& cmd, CliOptions& opts) {
+  auto& pager_group = cmd.add_mutually_exclusive_group();
+  pager_group.add_argument("-p", "--pager").help("use pager for output (default)").flag().action([&opts](const auto&) {
+    opts.pager = true;
+  });
+  pager_group.add_argument("--no-pager").help("disable pager for output").flag().action([&opts](const auto&) {
+    opts.pager = false;
+  });
+}
+
+#ifdef KURA_HAS_EDITORCONFIG
+
+static inline void RegisterEditorconfigArgs(argparse::ArgumentParser& cmd, CliOptions& opts) {
+  auto& group = cmd.add_mutually_exclusive_group();
+  group.add_argument("--editorconfig").help("use .editorconfig (default)").flag().action([&opts](const auto&) {
+    opts.editorconfig = true;
+  });
+  group.add_argument("--no-editorconfig").help("disable editorconfig support").flag().action([&opts](const auto&) {
+    opts.editorconfig = false;
+  });
+}
+
+#endif  // KURA_HAS_EDITORCONFIG
 
 void RegisterCommonArgs(argparse::ArgumentParser& cmd, CliOptions& opts) {
   cmd.add_argument("file").help("Kura source file (.kui)").store_into(opts.filename);
@@ -233,6 +263,9 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
   argparse::ArgumentParser lint_cmd("lint");
   lint_cmd.add_description("Lint a file");
   RegisterCommonArgs(lint_cmd, opts);
+#ifdef KURA_HAS_EDITORCONFIG
+  RegisterEditorconfigArgs(lint_cmd, opts);
+#endif  // KURA_HAS_EDITORCONFIG
   auto& color_group = lint_cmd.add_mutually_exclusive_group();
   // clang-format off
   color_group.add_argument("-f", "--format")
@@ -248,19 +281,17 @@ auto ParseCli(int argc, char** argv, CliOptions& opts) -> bool {
   argparse::ArgumentParser fmt_cmd("fmt");
   fmt_cmd.add_description("Format a file");
   RegisterCommonArgs(fmt_cmd, opts);
+#ifdef KURA_HAS_EDITORCONFIG
+  RegisterEditorconfigArgs(fmt_cmd, opts);
+#endif  // KURA_HAS_EDITORCONFIG
 
   argparse::ArgumentParser explain_cmd("explain");
+#ifdef KURA_HAS_EDITORCONFIG
+  RegisterEditorconfigArgs(explain_cmd, opts);
+#endif  // KURA_HAS_EDITORCONFIG
+  RegisterPagerArgs(explain_cmd, opts);
   explain_cmd.add_description("Explain an error");
   explain_cmd.add_argument("error_code").store_into(opts.error_code).nargs(argparse::nargs_pattern::optional);
-
-  auto& pager_group = explain_cmd.add_mutually_exclusive_group();
-  pager_group.add_argument("-p", "--pager").help("use pager for output (default)").flag().action([&opts](const auto&) {
-    opts.pager = true;
-  });
-  pager_group.add_argument("--no-pager").help("disable pager for output").flag().action([&opts](const auto&) {
-    opts.pager = false;
-  });
-
   explain_cmd.add_argument("-f", "--format")
       .default_value("pretty")
       .choices("plain", "pretty")
@@ -361,6 +392,24 @@ auto main(int argc, char** argv) -> int {
         .tab_width = 2,
         .base_indent = 1,
     };
+
+#ifdef KURA_HAS_EDITORCONFIG
+    if (opts.editorconfig) {
+      try {
+        auto props = parse_editorconfig("explain.kui");
+        if (auto it = props.find("indent_size"); it != props.end()) {
+          long long parsed_indent = 0;
+          const auto& val = it->second;
+          auto [ptr, ec] = std::from_chars(val.data(), val.data() + val.size(), parsed_indent);
+          if (ec == std::errc{} && ptr == val.data() + val.size() && parsed_indent >= 0)
+            render_opts.tab_width = static_cast<decltype(render_opts.tab_width)>(parsed_indent);
+        }
+      } catch (const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        return 1;
+      }
+    }
+#endif  // KURA_HAS_EDITORCONFIG
 
     if (opts.is_explain_list) {
       explain::list_error_codes(render_opts);
