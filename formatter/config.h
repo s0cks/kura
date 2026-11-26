@@ -5,8 +5,14 @@
 #include <string>
 
 namespace kura::fmt {
+// TODO(@s0cks): add
+//  - charset support
+//  - indent style
 struct Config {
-  bool types_first;
+  int max_width = 80;
+  int indent_size = 2;
+  bool types_first = true;
+  bool insert_final_newline = true;
 
   friend auto operator<<(std::ostream& stream, const Config& rhs) -> std::ostream& {
     stream << "Config{";

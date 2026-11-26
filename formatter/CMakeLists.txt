@@ -6,7 +6,6 @@ target_sources(kura-compiler
           config_yaml.cc
           document.cc
           document_builder.cc
-          document_render.cc
           formatter.cc)
 target_link_libraries(kura-compiler
   PRIVATE PkgConfig::YAML)

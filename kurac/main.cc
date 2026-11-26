@@ -552,6 +552,25 @@ auto main(int argc, char** argv) -> int {
 
   if (opts.is_format) {
     fmt::Config config{};
+
+#ifdef KURA_HAS_EDITORCONFIG
+    if (opts.editorconfig) {
+      try {
+        auto props = parse_editorconfig("explain.kui");
+        if (auto it = props.find("indent_size"); it != props.end()) {
+          long long parsed_indent = 0;
+          const auto& val = it->second;
+          auto [ptr, ec] = std::from_chars(val.data(), val.data() + val.size(), parsed_indent);
+          if (ec == std::errc{} && ptr == val.data() + val.size() && parsed_indent >= 0)
+            config.indent_size = static_cast<decltype(config.indent_size)>(parsed_indent);
+        }
+      } catch (const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        return 1;
+      }
+    }
+#endif  // KURA_HAS_EDITORCONFIG
+
     fmt::ParseConfig(config);
 
     const auto contents = Slurp(opts.filename);
@@ -561,12 +580,7 @@ auto main(int argc, char** argv) -> int {
       return EXIT_FAILURE;
     }
 
-    fmt::Formatter formatter(std::cout, std::move(config));
-    if (!formatter.Format(tree.get())) {
-      std::cerr << "failed to format " << opts.filename << std::endl;
-      return EXIT_FAILURE;
-    }
-
+    fmt::Formatter::Format(std::cout, (*tree), std::move(config));
     return EXIT_SUCCESS;
   }
 
