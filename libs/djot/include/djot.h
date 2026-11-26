@@ -19,6 +19,8 @@ extern "C" {
   V(CodeBlock)                 \
   V(CodeInline)                \
   V(Div)                       \
+  V(SoftBreak)                 \
+  V(HardBreak)                 \
   V(Span)                      \
   V(Link)                      \
   V(Strong)                    \

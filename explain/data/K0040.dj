@@ -1,4 +1,11 @@
-# K0040: Function is missing a return type
+---
+code: K0040
+title: Function is missing return type
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: false
+---
 
 Function declarations in Kura require an explicit return type annotation before the [`=>`]{.expected} arrow.
 

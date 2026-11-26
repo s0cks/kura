@@ -1,5 +1,5 @@
-#ifndef KURA_DOCS_RENDERER_H
-#define KURA_DOCS_RENDERER_H
+#ifndef KURA_EXPLAIN_RENDERER_H
+#define KURA_EXPLAIN_RENDERER_H
 
 #include <algorithm>
 #include <cstdio>
@@ -25,9 +25,9 @@
 #endif
 
 #include "djot.h"
-#include "docs/index.h"
+#include "explain/index.h"
 
-namespace kura::docs {
+namespace kura::explain {
 
 inline size_t detect_terminal_width() {
   if (const char* cols = std::getenv("COLUMNS")) {
@@ -122,7 +122,9 @@ class TerminalRenderer {
     SpanExpected,
     SpanFound,
     SpanHint,
+    SpanNote,
     SpanDefault,
+    SpanNotice,
     Link,
     LinkUrl,
     CodeInline,
@@ -142,6 +144,7 @@ class TerminalRenderer {
 
   bool in_div_ = false;
   bool in_callout_ = false;
+  bool in_note_ = false;
   bool in_list_ = false;
   bool in_item_ = false;
   bool in_span_ = false;
@@ -154,13 +157,24 @@ class TerminalRenderer {
   std::ostringstream word_buf_;
   size_t word_visible_len_ = 0;
 
+  void write_line_break() {
+    flush_word(false);
+    out_ << '\n';
+    at_line_start_ = true;
+    col_ = 0;
+  }
+
   static ActiveStyle map_span_style(std::string_view cls) {
     if (cls == ".expected" || cls == ".ok")
       return ActiveStyle::SpanExpected;
     if (cls == ".found" || cls == ".err")
       return ActiveStyle::SpanFound;
-    if (cls == ".hint" || cls == ".note")
+    if (cls == ".hint")
       return ActiveStyle::SpanHint;
+    if (cls == ".note")
+      return ActiveStyle::SpanNote;
+    if (cls == ".notice")
+      return ActiveStyle::SpanNotice;
     return ActiveStyle::SpanDefault;
   }
 
@@ -279,6 +293,12 @@ class TerminalRenderer {
       case ActiveStyle::SpanHint:
         os << rang::style::bold << rang::fg::yellow;
         break;
+      case ActiveStyle::SpanNote:
+        os << rang::style::bold << rang::fg::cyan;
+        break;
+      case ActiveStyle::SpanNotice:
+        os << rang::style::bold << rang::fg::yellow;
+        break;
       case ActiveStyle::SpanDefault:
         os << rang::fg::cyan;
         break;
@@ -316,6 +336,14 @@ class TerminalRenderer {
   void write_callout_rail() {
     write_spaces(opts_.base_indent);
     out_ << rang::style::dim << "│ " << rang::style::reset;
+  }
+
+  void render_note(std::string_view title = "note") {
+    write_spaces(opts_.base_indent + opts_.tab_width);
+    out_ << rang::style::bold << rang::fg::cyan << "│ " << title << ':' << rang::style::reset << rang::fg::reset
+         << '\n';
+    at_line_start_ = true;
+    col_ = 0;
   }
 
   void render_callout_top(std::string_view title = "Your Code") {
@@ -526,9 +554,13 @@ class TerminalRenderer {
     write_spaces(opts_.base_indent);
     size_t prefix_cols = opts_.base_indent;
 
-    if (in_div_) {
+    if (in_note_) {
       write_spaces(opts_.tab_width);
-      out_ << rang::style::bold << rang::fg::yellow << "│" << rang::style::reset << rang::fg::reset << ' ';
+      out_ << rang::style::bold << rang::fg::cyan << "│" << rang::style::reset << rang::fg::reset << ' ';
+      prefix_cols += opts_.tab_width + 2;
+    } else if (in_div_) {
+      write_spaces(opts_.tab_width);
+      out_ << rang::style::bold << rang::fg::gray << "│" << rang::style::reset << rang::fg::reset << ' ';
       prefix_cols += opts_.tab_width + 2;
     }
 
@@ -592,6 +624,16 @@ class TerminalRenderer {
       case kDjotHeading:
         apply_style(ActiveStyle::Heading);
         break;
+      case kDjotHardBreak:
+        write_line_break();
+        break;
+      case kDjotSoftBreak:
+        if (in_div_ || in_note_) {
+          write_line_break();
+        } else {
+          flush_word(true);
+        }
+        break;
       case kDjotBreak:
         render_sub_separator();
         break;
@@ -622,11 +664,19 @@ class TerminalRenderer {
           }
           break;
         }
+
+        if (div_cls == "note") {
+          in_note_ = true;
+          render_note();
+          break;
+        }
+
         if (div_cls == "source") {
           in_source_div_ = true;
           render_source_snippet();
           break;
         }
+
         if (div_cls == "fix") {
           in_source_div_ = true;
           render_fix_snippet();
@@ -636,8 +686,8 @@ class TerminalRenderer {
         in_div_ = true;
         if (ev->arg_len > 0) {
           write_spaces(opts_.base_indent + opts_.tab_width);
-          out_ << rang::style::bold << rang::fg::yellow << "│ " << div_cls << ':' << rang::style::reset
-               << rang::fg::reset << '\n';
+          out_ << rang::style::bold << rang::fg::gray << "│ " << div_cls << ':' << rang::style::reset << rang::fg::reset
+               << '\n';
         }
         at_line_start_ = true;
         break;
@@ -667,7 +717,10 @@ class TerminalRenderer {
       case kDjotParagraph:
         flush_word(false);
         reset_style();
-        out_ << "\n\n";
+        out_ << '\n';
+        if (in_div_)
+          write_line_prefix(false);  // keeps the `│` rail on blank lines between paragraphs!
+        out_ << '\n';
         at_line_start_ = true;
         col_ = 0;
         break;
@@ -711,11 +764,20 @@ class TerminalRenderer {
           in_source_div_ = false;
           break;
         }
+
         if (in_callout_) {
           in_callout_ = false;
           if (saved_diag_) {
             render_callout_bottom();
           }
+          break;
+        }
+
+        if (in_note_) {
+          in_note_ = false;
+          out_ << "\n";
+          at_line_start_ = true;
+          col_ = 0;
           break;
         }
 
@@ -764,7 +826,14 @@ class TerminalRenderer {
 
     for (size_t i = 0; i < len; ++i) {
       char ch = text[i];
-      if (ch == ' ' || ch == '\t') {
+      if (ch == '\r') {
+        continue;
+      } else if (ch == '\n') {
+        write_line_break();
+        flush_word(false);
+        out_ << '\n';
+        at_line_start_ = true;
+      } else if (ch == ' ' || ch == '\t') {
         flush_word(true);
       } else {
         word_buf_ << ch;
@@ -927,6 +996,6 @@ static inline void list_error_codes(RenderOptions opts = {},
   pclose(pipe);
 }
 
-}  // namespace kura::docs
+}  // namespace kura::explain
 
-#endif  // KURA_DOCS_RENDERER_H
+#endif  // KURA_EXPLAIN_RENDERER_H

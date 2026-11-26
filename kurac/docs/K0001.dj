@@ -1,7 +1,0 @@
-# K0001: Unexpected Token
-
-A token was unexpected during parsing
-
-::: note
-See the [EBNF](https://s0cks.github.io/kura) for more
-:::

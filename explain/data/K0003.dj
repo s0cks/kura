@@ -1,4 +1,11 @@
-# K0003: Unterminated String
+---
+code: K0003
+title: Unterminated String
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: false
+---
 
 A string literal was opened with [`"`]{.expected} but reached the end of the line or file without a closing [`"`]{.expected}.
 

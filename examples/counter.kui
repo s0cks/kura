@@ -36,7 +36,7 @@ fn update(msg: Message, state: State): State =>
     _ => state
   }
 
-fn counter-buttons() =>
+fn counter-buttons(): Node =>
   set text(size: 24px, 
            text-align: "center")
   set button(justify: "center", padding: 16px, fill: rgb(255, 252, 240), radius: 16px)
@@ -52,7 +52,7 @@ fn counter-buttons() =>
   }
 
 
-fn row(label: String) =>
+fn row(label: String): Node =>
   set text(size: 24px)
 
   #block(width: 100%, direction: "row", justify: "center", padding: 4px){

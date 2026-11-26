@@ -1,4 +1,11 @@
-# K0004: Invalid Escape
+---
+code: K0004
+title: Invalid Escape
+severity: ERROR
+since: 0.1.0
+category: parse
+deprecated: false
+---
 
 An unrecognized escape sequence was found inside a string literal.
 

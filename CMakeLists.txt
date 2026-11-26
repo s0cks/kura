@@ -51,6 +51,7 @@ add_subdirectory(compiler)
 add_subdirectory(cli)
 add_subdirectory(lint)
 add_subdirectory(formatter)
+add_subdirectory(explain)
 
 add_subdirectory(renderer)
 

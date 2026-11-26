@@ -1,4 +1,12 @@
-# K0002: Unexpected Character
+---
+code: K0002
+title: Unexpected Character
+severity: ERROR
+since: 0.1.0
+category: parse
+tags: [ token ]
+deprecated: false
+---
 
 The lexer encountered a character that is not valid in Kura source files.
 

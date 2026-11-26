@@ -1,5 +1,5 @@
-#ifndef KURA_DOCS_SUGGEST_H
-#define KURA_DOCS_SUGGEST_H
+#ifndef KURA_EXPLAIN_SUGGEST_H
+#define KURA_EXPLAIN_SUGGEST_H
 
 #include <algorithm>
 #include <array>
@@ -10,9 +10,9 @@
 #include <span>
 #include <string_view>
 
-#include "docs/index.h"
+#include "explain/index.h"
 
-namespace kura::docs {
+namespace kura::explain {
 
 inline char ascii_lower(char c) {
   return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -123,6 +123,6 @@ inline void print_suggestions(std::ostream& err, std::span<const std::string_vie
   err << "?\n";
 }
 
-}  // namespace kura::docs
+}  // namespace kura::explain
 
-#endif  // KURA_DOCS_SUGGEST_H
+#endif  // KURA_EXPLAIN_SUGGEST_H

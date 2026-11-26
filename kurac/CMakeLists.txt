@@ -7,6 +7,7 @@ target_include_directories(kurac
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(kurac
   PUBLIC kura-compiler
+         kura-explain
          argparse::argparse
          jansson::jansson)
 
@@ -16,5 +17,3 @@ if(TARGET kura-renderer-headless)
   target_compile_definitions(kurac
     PRIVATE KURA_HAS_HEADLESS_RENDERER)
 endif()
-
-add_subdirectory(docs)

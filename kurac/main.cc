@@ -28,9 +28,9 @@
 #include "c_import.h"
 #include "cli/format.h"
 #include "common.h"
-#include "docs/index.h"
-#include "docs/renderer.h"
-#include "docs/suggest.h"
+#include "explain/index.h"
+#include "explain/renderer.h"
+#include "explain/suggest.h"
 #include "formatter/formatter.h"
 #include "frontend/parser.h"
 #include "frontend/syntax/parser.h"
@@ -356,14 +356,14 @@ auto main(int argc, char** argv) -> int {
     const auto color_mode = (opts.format == cli::Format::kPlain) ? rang::control::Off : rang::control::Auto;
     rang::setControlMode(color_mode);
 
-    docs::RenderOptions render_opts{
+    explain::RenderOptions render_opts{
         .color = color_mode,
         .tab_width = 2,
         .base_indent = 1,
     };
 
     if (opts.is_explain_list) {
-      docs::list_error_codes(render_opts);
+      explain::list_error_codes(render_opts);
       return EXIT_SUCCESS;
     }
 
@@ -376,13 +376,13 @@ auto main(int argc, char** argv) -> int {
         return EXIT_SUCCESS;
       }
 
-      docs::RenderOptions buf_opts = render_opts;
+      explain::RenderOptions buf_opts = render_opts;
       if (buf_opts.color == rang::control::Auto) {
-        buf_opts.color = docs::stdout_is_tty() ? rang::control::Force : rang::control::Off;
+        buf_opts.color = explain::stdout_is_tty() ? rang::control::Force : rang::control::Off;
       }
 
       std::ostringstream combined_out{};
-      docs::TerminalRenderer renderer(combined_out, buf_opts);
+      explain::TerminalRenderer renderer(combined_out, buf_opts);
 
       std::vector<std::string> missing{};
       std::string json_line{};
@@ -408,7 +408,7 @@ auto main(int argc, char** argv) -> int {
           return static_cast<char>(std::toupper(c));
         });
 
-        const auto explanation = docs::load_explanation(code);
+        const auto explanation = explain::load_explanation(code);
         if (!explanation) {
           if (!code.empty())
             missing.push_back(std::move(code));
@@ -422,7 +422,6 @@ auto main(int argc, char** argv) -> int {
           renderer.render_separator();
         }
 
-        // Renders the Djot doc and substitutes `::: source` with `root`'s saved snippet
         renderer.render_fragment(explanation->text, root);
         rendered_count++;
         json_decref(root);
@@ -437,7 +436,7 @@ auto main(int argc, char** argv) -> int {
 
       if (rendered_count > 0) {
         if (opts.pager) {
-          docs::render_with_pager(combined_out.str());
+          explain::render_with_pager(combined_out.str());
         } else {
           std::cout << combined_out.str();
           std::cout.flush();
@@ -448,8 +447,8 @@ auto main(int argc, char** argv) -> int {
         std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
                   << ": unknown error code: `" << m << "`\n";
 
-        auto suggestions = docs::suggest_error_codes(m);
-        kura::docs::print_suggestions(std::cerr, suggestions.span());
+        auto suggestions = explain::suggest_error_codes(m);
+        explain::print_suggestions(std::cerr, suggestions.span());
       }
 
       return missing.empty() ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -460,20 +459,29 @@ auto main(int argc, char** argv) -> int {
       return static_cast<char>(std::toupper(c));
     });
 
-    const auto explanation = docs::load_explanation(opts.error_code);
+    const auto explanation = explain::load_explanation(opts.error_code);
     if (!explanation) {
       std::cerr << rang::style::bold << rang::fg::red << "error" << rang::style::reset << rang::fg::reset
                 << ": unknown error code: `" << opts.error_code << "`\n";
 
-      auto suggestions = docs::suggest_error_codes(opts.error_code);
-      kura::docs::print_suggestions(std::cerr, suggestions.span());
+      auto suggestions = explain::suggest_error_codes(opts.error_code);
+      explain::print_suggestions(std::cerr, suggestions.span());
       return EXIT_FAILURE;
     }
 
     if (opts.pager) {
-      docs::render_with_pager(explanation->text, render_opts);
+      explain::RenderOptions buf_opts = render_opts;
+      if (buf_opts.color == rang::control::Auto) {
+        buf_opts.color = explain::stdout_is_tty() ? rang::control::Force : rang::control::Off;
+      }
+
+      std::ostringstream buf{};
+      explain::TerminalRenderer renderer(buf, buf_opts);
+      renderer.render(explanation->text);
+
+      explain::render_with_pager(buf.str(), buf_opts);
     } else {
-      docs::TerminalRenderer renderer(std::cout, render_opts);
+      explain::TerminalRenderer renderer(std::cout, render_opts);
       renderer.render(explanation->text);
     }
 

@@ -335,10 +335,36 @@ bool DjotParse(const char* doc, const size_t doc_len, const DjotParserConfig* h,
       if (h->on_enter)
         h->on_enter(&para_ev, data);
     } else {
-      djot_emit_text(h, " ", 1, data);
+      DjotEvent sb_ev = {.kind = kDjotSoftBreak};
+      if (h->on_enter)
+        h->on_enter(&sb_ev, data);
+      if (h->on_exit)
+        h->on_exit(&sb_ev, data);
+    }
+
+    // Check for trailing backslash (hard break) at the end of the line
+    bool has_hard_break = false;
+    if (len > 0 && line[len - 1] == '\\') {
+      // Make sure the backslash itself isn't escaped (e.g. `\\`)
+      size_t slashes = 0;
+      while (slashes < len && line[len - 1 - slashes] == '\\') {
+        slashes++;
+      }
+      if (slashes % 2 == 1) {
+        has_hard_break = true;
+        len--;  // Strip the trailing `\` before parsing inline content
+      }
     }
 
     djot_parse_inline(h, line, len, data);
+
+    if (has_hard_break) {
+      DjotEvent hb_ev = {.kind = kDjotHardBreak};
+      if (h->on_enter)
+        h->on_enter(&hb_ev, data);
+      if (h->on_exit)
+        h->on_exit(&hb_ev, data);
+    }
   }
 
   djot_close_inline_blocks(h, &in_para, &in_item, &in_list, data);
