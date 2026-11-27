@@ -83,7 +83,7 @@ wildcard      = '_' ;
 operator      = '|>' | '<|' | '||' | '&&' | '??' | '==' | '!=' | '<=' | '>=' | '<' | '>'
               | '!' | '+' | '-' | '*' | '/' | '%' | '=>' | '=' | '...' | '..' | '..='
               | '.' | '?.' | ',' | ':' | '?' | '#' | '|' | '(' | ')' | '{' | '}' | '[' | ']'
-              | '+=' | '-=' | '*=' | '/=' | '%=' ;
+              | '+=' | '-=' | '*=' | '/=' | '%='  | '???';
 
 (* '-' is BIN_MINUS when whitespace is on BOTH sides (`a - b`), otherwise unary MINUS.
    '>>' and '<<' are TWO tokens each ('>' '>' / '<' '<', nothing between them) so that
@@ -108,7 +108,7 @@ binding       = 'let' ( name | recordPattern ) [ ':' type ] '=' expression
 
 typeDecl      = 'type' Name [ '<' Name { ',' Name } '>' ] '=' type ;
 
-fnDecl        = 'fn' name '(' [ params ] ')' [ ':' type ] '=>' { setRule } expression ;
+fnDecl        = 'fn' name '(' [ params ] ')' [ ':' type ] '=>' ( { setRule } expression | '???' );
                 (* parentheses are required; `set` rules before the body need no braces;
                    a `let` in a body needs braces:  => { let a = 1 ... } *)
 

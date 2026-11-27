@@ -7,6 +7,21 @@
 #include "local_scope.h"
 
 namespace kura {
+auto EffectVisitor::CoerceToBool(Value* val) -> Value* {
+  auto* def = val->GetDefinition();
+  if (def->IsConstant() && def->AsConstant()->IsConstantBool() ||
+      (def->HasCompileType() && def->GetCompileType()->IsBool()))
+    return val;
+
+  TypeId from = BuiltinTypes::kNoneType;
+  if (const auto* c = def->AsConstant(); c && c->GetValue())
+    from = c->GetValue()->GetType();
+
+  auto* cast = CastInstr::New(from, kBoolType, val);
+  cast->SetCompileType(CompileType::Bool());
+  return Bind(cast);
+}
+
 void EffectVisitor::ReturnDefinition(Definition* defn) {
   if (WantsValue()) {
     ReturnValue(Bind(defn));
@@ -57,7 +72,7 @@ auto EffectVisitor::VisitAssert(expr::AssertExpr* expr) -> VisitResult {
   if (!msg)
     return false;
 
-  const auto a = AssertInstr::New(cond, msg);
+  const auto a = AssertInstr::New(CoerceToBool(cond), msg);
   if (left != nullptr)
     a->SetOperands(op, left, right);
   a->SetFile(expr->GetFile());
@@ -134,7 +149,16 @@ auto EffectVisitor::VisitUnary(expr::UnaryExpr* expr) -> VisitResult {
   if (!value)
     return false;
 
-  ReturnDefinition(UnaryOpInstr::New(expr->GetOp(), value));
+  const auto op = expr->GetOp();
+  switch (op) {
+    case UnaryOp::kBang:
+      ReturnDefinition(UnaryOpInstr::New(op, CoerceToBool(value)));
+      break;
+    default:
+      ReturnDefinition(UnaryOpInstr::New(op, value));
+      break;
+  }
+
   return true;
 }
 
@@ -146,7 +170,7 @@ auto EffectVisitor::LowerShortCircuit(expr::BinaryExpr* expr) -> VisitResult {
   const auto then_block = owner_->NewTarget("sc.then");
   const auto else_block = owner_->NewTarget("sc.else");
   const auto join = owner_->NewJoin("sc.join");
-  owner_->Terminate(BranchInstr::New(left, then_block, else_block, join));
+  owner_->Terminate(BranchInstr::New(CoerceToBool(left), then_block, else_block, join));
 
   const auto is_and = expr->IsBinaryAnd();
   Value* then_value = nullptr;
@@ -197,7 +221,19 @@ auto EffectVisitor::VisitBinary(expr::BinaryExpr* expr) -> VisitResult {
   if (!right)
     return false;
 
-  ReturnDefinition(BinaryOpInstr::New(expr->GetOp(), left, right));
+  const auto op = expr->GetOp();
+  switch (expr->GetOp()) {
+    case BinaryOp::kBinaryAnd:
+      ReturnDefinition(BinaryOpInstr::New(op, CoerceToBool(left), CoerceToBool(right)));
+      break;
+    case BinaryOp::kBinaryOr:
+      ReturnDefinition(BinaryOpInstr::New(op, CoerceToBool(left), CoerceToBool(right)));
+      break;
+    default:
+      ReturnDefinition(BinaryOpInstr::New(op, left, right));
+      break;
+  }
+
   return true;
 }
 
@@ -245,7 +281,7 @@ auto EffectVisitor::VisitIf(expr::IfExpr* expr) -> VisitResult {
   const auto then_block = owner_->NewTarget("if.then");
   const auto else_block = (has_else || WantsValue()) ? owner_->NewTarget("if.else") : nullptr;
   const auto join = owner_->NewJoin("if.join");
-  owner_->Terminate(BranchInstr::New(condition, then_block, else_block, join));
+  owner_->Terminate(BranchInstr::New(CoerceToBool(condition), then_block, else_block, join));
 
   owner_->Enter(then_block);
   Value* then_value = nullptr;
@@ -408,7 +444,7 @@ auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {
         return false;
 
       const auto keep = owner_->NewTarget("guard.keep");
-      owner_->Terminate(BranchInstr::New(condition, keep, fail, nullptr));
+      owner_->Terminate(BranchInstr::New(CoerceToBool(condition), keep, fail, nullptr));
       owner_->Enter(keep);
       irrefutable = false;
     }
@@ -592,7 +628,7 @@ auto EffectVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) ->
     const auto keep = owner_->NewTarget("guard.keep");
     const auto skip = owner_->NewTarget("guard.skip");
     const auto latch = owner_->NewJoin("guard.latch");
-    owner_->Terminate(BranchInstr::New(condition, keep, skip, latch));
+    owner_->Terminate(BranchInstr::New(CoerceToBool(condition), keep, skip, latch));
     owner_->Enter(keep);
     if (!append())
       return false;
@@ -845,6 +881,16 @@ auto EffectVisitor::VisitVariant(expr::VariantExpr* expr) -> VisitResult {
 }
 
 auto EffectVisitor::VisitCall(expr::CallExpr* expr) -> VisitResult {
+  if (const auto load = expr->GetTarget()->AsLoadLocal(); load && load->GetLocal()->GetName()->GetData() == "panic") {
+    ValueList args{};
+    if (!EvalList(expr->GetArgs(), &args))
+      return false;
+
+    Emit(new PanicInstr(args[0]));
+    ReturnDefinition(ConstantInstr::New(None::Get()));
+    return true;
+  }
+
   const auto target = Eval(expr->GetTarget());
   if (!target)
     return false;

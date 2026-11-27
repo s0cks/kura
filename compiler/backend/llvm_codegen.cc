@@ -18,7 +18,6 @@
 #include <llvm/TargetParser/Host.h>
 #include <map>
 #include <set>
-
 #include <unordered_map>
 #include <vector>
 
@@ -382,14 +381,20 @@ class Generator {
     auto callee = module_->getOrInsertFunction(name, llvm::FunctionType::get(ret, types, false));
     if (auto* fn = llvm::dyn_cast<llvm::Function>(callee.getCallee())) {
       fn->setDoesNotThrow();
-      fn->setWillReturn();
       const std::string_view sv(name);
-      if (sv == "kura_rt_destroy" || sv == "kura_rt_panic" || sv == "kura_rt_ffi_overflow" ||
-          sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail" || sv == "kura_rt_test_fail_cmp") {
+
+      if (sv == "kura_rt_panic") {
+        fn->setDoesNotReturn();
         fn->addFnAttr(llvm::Attribute::Cold);
-      } else if (sv == "kura_rt_len" || sv == "kura_rt_string_cmp" || sv == "kura_rt_record_count" ||
-                 sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_closure_new") {
-        fn->setOnlyReadsMemory();
+      } else {
+        fn->setWillReturn();
+        if (sv == "kura_rt_destroy" || sv == "kura_rt_panic" || sv == "kura_rt_ffi_overflow" ||
+            sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail" || sv == "kura_rt_test_fail_cmp") {
+          fn->addFnAttr(llvm::Attribute::Cold);
+        } else if (sv == "kura_rt_len" || sv == "kura_rt_string_cmp" || sv == "kura_rt_record_count" ||
+                   sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_closure_new") {
+          fn->setOnlyReadsMemory();
+        }
       }
     }
     return b_.CreateCall(callee, flat);
@@ -483,7 +488,11 @@ class Generator {
   auto Val(Value* value) -> llvm::Value* {
     const auto it = fn_->values.find(value->GetDefinition());
     if (it == fn_->values.end()) {
-      Fail("internal error: %" + std::to_string(value->GetDefinition()->GetId()) + " is used before it is defined");
+      std::string defined;
+      for (const auto& [def, _] : fn_->values)
+        defined += " %" + std::to_string(def->GetId());
+      Fail("internal error in `" + fn_->graph->GetName() + "`: %" + std::to_string(value->GetDefinition()->GetId()) +
+           " (" + value->GetDefinition()->ToString() + ") is used before it is defined (defined:" + defined + ")");
       return llvm::PoisonValue::get(i8_);
     }
     return it->second;
@@ -511,6 +520,42 @@ class Generator {
     return CallRt("kura_rt_binop", value_ty_,
                   {b_.getInt64(static_cast<uint64_t>(op)), Convert(a, ta, CompileType::Any()),
                    Convert(b, tb, CompileType::Any())});
+  }
+
+  LOWER_FN(Cast) {
+    Value* src = instr->GetValue();
+    CompileType* src_ty = Type(src);
+    llvm::Value* val = Val(src);
+    const TypeId to = instr->GetToType();
+
+    if (to == kBoolType) {
+      if (src_ty->IsBool())
+        return Define(instr, val, CompileType::Bool());
+
+      if (src_ty->IsNone() || src_ty->IsNever())
+        return Define(instr, b_.getInt1(false), CompileType::Bool());
+
+      if (RepOf(src_ty) == Rep::kTagged) {
+        llvm::Value* is_some = b_.CreateICmpNE(TagOfValue(val), b_.getInt64(rt::kTagNone), "cast.not_none");
+        return Define(instr, is_some, CompileType::Bool());
+      }
+
+      return Define(instr, b_.getInt1(true), CompileType::Bool());
+    }
+
+    CompileType* dst_ty = instr->GetCompileType() ? instr->GetCompileType() : CompileType::Any();
+    Define(instr, Convert(val, src_ty, dst_ty), dst_ty);
+  }
+
+  LOWER_FN(Panic) {
+    llvm::Value* msg_cstr = nullptr;
+    if (const auto c_msg = instr->GetMessage()->GetDefinition()->AsConstant();
+        c_msg && c_msg->GetValue()->GetType() == kStringType) {
+      msg_cstr = NameConstant(static_cast<String*>(c_msg->GetValue())->GetValue());
+    } else {
+      msg_cstr = CallRt("kura_rt_string_cstr", ptr_ty_, {As(instr->GetMessage(), CompileType::String())});
+    }
+    CallRt("kura_rt_panic", void_ty_, {msg_cstr});
   }
 
   LOWER_FN(Assert) {
@@ -1793,6 +1838,26 @@ class Generator {
     const auto& args = call->GetArgs();
     const auto target = call->GetTarget();
 
+    if (const auto c_target = target->GetDefinition()->AsConstant();
+        c_target && c_target->GetValue()->GetType() == kStringType &&
+        static_cast<String*>(c_target->GetValue())->GetValue() == "panic") {
+      llvm::Value* msg_cstr = nullptr;
+      if (!args.empty()) {
+        if (const auto c_msg = args[0]->GetDefinition()->AsConstant();
+            c_msg && c_msg->GetValue()->GetType() == kStringType) {
+          msg_cstr = NameConstant(static_cast<String*>(c_msg->GetValue())->GetValue());
+        } else {
+          msg_cstr = CallRt("kura_rt_string_cstr", ptr_ty_, {As(args[0], CompileType::String())});
+        }
+      } else {
+        msg_cstr = NameConstant("panic");
+      }
+
+      CallRt("kura_rt_panic", void_ty_, {msg_cstr});
+      b_.CreateUnreachable();
+      return;
+    }
+
     // a module function called by name is a direct call in its own signature
     if (const auto load = target->GetDefinition()->AsLoadFunction()) {
       const auto graph = graphs_->GetGraphFor(load->GetFunction());
@@ -1831,12 +1896,12 @@ class Generator {
   // ── instructions ─────────────────────────────────────────────────────────
   void EmitConstant(ConstantInstr* instr) {
     const auto value = instr->GetValue();
-    switch (value->GetType()) {
-      case kIntType:
-        return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
+    const auto type = value->GetType();
+    if (type == BuiltinTypes::kIntType)
+      return Define(instr, b_.getInt64(static_cast<Int*>(value)->GetValue()), CompileType::Int());
 
 #define DEFINE_COLOR_CONST(Name)                                                                                    \
-  case k##Name##Type: {                                                                                             \
+  if (type == BuiltinTypes::k##Name##Type) {                                                                        \
     const auto* c = static_cast<Name*>(value);                                                                      \
     const auto& s = c->GetStorage();                                                                                \
     return Define(                                                                                                  \
@@ -1845,40 +1910,38 @@ class Generator {
                                                                static_cast<float>(s.c2), static_cast<float>(s.a)}), \
         CompileType::Name());                                                                                       \
   }
-
-        FOR_EACH_COLOR_MODEL(DEFINE_COLOR_CONST)
+    FOR_EACH_COLOR_MODEL(DEFINE_COLOR_CONST)
 #undef DEFINE_COLOR_CONST
-      case kVec2Type: {
-        const auto& v = static_cast<Vec2*>(value)->GetValue();
-        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y}), CompileType::Vec2());
-      }
-      case kVec3Type: {
-        const auto& v = static_cast<Vec3*>(value)->GetValue();
-        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y, v.z}),
-                      CompileType::Vec3());
-      }
-      case kRectType: {
-        const auto& r = static_cast<Rect*>(value)->GetValue();
-        return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{r.x, r.y, r.width, r.height}),
-                      CompileType::Rect());
-      }
-      case kFloatType:
-        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()), CompileType::Float());
-      case kPxType:
-        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Px*>(value)->GetValue()), CompileType::Px());
-      case kPctType:
-        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Pct*>(value)->GetValue()), CompileType::Pct());
-      case kFrType:
-        return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Fr*>(value)->GetValue()), CompileType::Fr());
-      case kBoolType:
-        return Define(instr, b_.getInt1(static_cast<Bool*>(value)->GetValue()), CompileType::Bool());
-      case kNoneType:
-        return Define(instr, b_.getInt8(0), CompileType::None());
-      case kStringType:
-        return Define(instr, StringLiteral(static_cast<String*>(value)->GetValue()), CompileType::String());
-      default:
-        Fail("internal error: can't generate a constant of " + value->ToString());
+
+    if (type == BuiltinTypes::kVec2Type) {
+      const auto& v = static_cast<Vec2*>(value)->GetValue();
+      return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y}), CompileType::Vec2());
     }
+    if (type == BuiltinTypes::kVec3Type) {
+      const auto& v = static_cast<Vec3*>(value)->GetValue();
+      return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{v.x, v.y, v.z}), CompileType::Vec3());
+    }
+    if (type == BuiltinTypes::kRectType) {
+      const auto& r = static_cast<Rect*>(value)->GetValue();
+      return Define(instr, llvm::ConstantDataVector::get(ctx_, std::vector<float>{r.x, r.y, r.width, r.height}),
+                    CompileType::Rect());
+    }
+    if (type == BuiltinTypes::kFloatType)
+      return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Float*>(value)->GetValue()), CompileType::Float());
+    if (type == BuiltinTypes::kPxType)
+      return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Px*>(value)->GetValue()), CompileType::Px());
+    if (type == BuiltinTypes::kPctType)
+      return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Pct*>(value)->GetValue()), CompileType::Pct());
+    if (type == BuiltinTypes::kFrType)
+      return Define(instr, llvm::ConstantFP::get(f64_, static_cast<Fr*>(value)->GetValue()), CompileType::Fr());
+    if (type == BuiltinTypes::kBoolType)
+      return Define(instr, b_.getInt1(static_cast<Bool*>(value)->GetValue()), CompileType::Bool());
+    if (type == BuiltinTypes::kNoneType)
+      return Define(instr, b_.getInt8(0), CompileType::None());
+    if (type == BuiltinTypes::kStringType)
+      return Define(instr, StringLiteral(static_cast<String*>(value)->GetValue()), CompileType::String());
+
+    Fail("internal error: can't generate a constant of " + value->ToString());
   }
 
   void EmitInstruction(Instruction* instr) {
@@ -1893,6 +1956,8 @@ class Generator {
     CHECK(BinaryOp);
     CHECK(UnaryOp);
     CHECK(Call);
+    CHECK(Panic);
+    CHECK(Cast);
     CHECK(DrawRect);
     CHECK(FillRect);
     CHECK(PaintBox);
@@ -2245,7 +2310,7 @@ class Generator {
   void EmitBlock(EntryInstr* block) {
     const auto bb = fn_->blocks[block];
     b_.SetInsertPoint(bb);
-    if (fn_->graph->IsDead(block)) {
+    if (fn_->graph->IsDead(block) && block != fn_->graph->GetEntry()->GetTarget()) {
       b_.CreateUnreachable();
       fn_->ends[block] = bb;
       return;
@@ -2781,6 +2846,7 @@ class Generator {
         label = std::string(block->GetLabel()->GetData());
       state.blocks[block] = llvm::BasicBlock::Create(ctx_, label, state.native);
     }
+
     for (const auto block : graph->GetReversePostorder()) {
       if (!block->IsGraphEntry())
         EmitBlock(block);

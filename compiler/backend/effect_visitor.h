@@ -24,6 +24,7 @@ class EffectVisitor : public expr::ExprVisitor {
 
   virtual void ReturnValue(Value* value) {}
 
+  auto CoerceToBool(Value* rhs) -> Value*;
   void ReturnDefinition(Definition* defn);
   auto Eval(expr::Expr* expr) -> Value*;
   auto EvalForEffect(expr::Expr* expr) -> bool;

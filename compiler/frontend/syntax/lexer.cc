@@ -310,6 +310,10 @@ class Lexer {
       pos_ += 1;
       Emit(kind, begin);
     };
+    const auto three = [&](const Token::Kind kind) {
+      pos_ += 3;
+      Emit(kind, begin);
+    };
     switch (c) {
       case '+':
         return n == '=' ? two(Token::kPlusEq) : one(Token::kPlus);
@@ -358,8 +362,12 @@ class Lexer {
       case ':':
         return one(Token::kColon);
       case '?':
-        if (n == '?')
+        if (n == '?') {
+          if (Peek(2) == '?')
+            return three(Token::kTODO);
+
           return two(Token::kQQ);
+        }
         if (n == '.')
           return two(Token::kQDot);
         return one(Token::kQMark);

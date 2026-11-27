@@ -1,4 +1,3 @@
----
 version: '3'
 vars:
   BUILD_DIR: build
@@ -18,6 +17,13 @@ tasks:
       - task: cmake
         vars:
           TARGET: all
+  build:release:
+    aliases:
+      - release
+    cmds:
+      - cmake --preset clang-release .
+      - cmake --build build-release --target all -j$(nproc)
+      - notify-send "Kura" "Build finished"
   build:renderer:
     aliases:
       - renderer

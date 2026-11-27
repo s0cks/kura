@@ -123,7 +123,8 @@ const auto kExpressionStart = K::Set({
 });
 
 // Where parsing of a top level item can safely start again.
-const auto kItemStart = K::Set({K::kLet, K::kFn, K::kType, K::kUse, K::kExtern, K::kDirective, K::kStaticAssert});
+const auto kItemStart =
+    K::Set({K::kLet, K::kTest, K::kFn, K::kType, K::kUse, K::kExtern, K::kDirective, K::kStaticAssert});
 
 // What can begin a match arm. Arms may be separated by a comma or just by starting the next one.
 const auto kPatternStart =
@@ -506,7 +507,7 @@ class TreeBuilder {
   // middle of something else means the something else was never finished.
   auto AtItemKeyword() const -> bool {
     const auto kind = PeekKind();
-    if (kind != K::kFn && kind != K::kType && kind != K::kUse && kind != K::kExtern)
+    if (kind != K::kFn && kind != K::kType && kind != K::kUse && kind != K::kExtern && kind != K::kTest)
       return false;
     return !(index_ > 0 && tokens_[index_ - 1].kind == K::kDot);
   }
@@ -2450,10 +2451,15 @@ class TreeBuilder {
     if (!Expect(K::kFatArrow)) {
       decl->body = NewMissing();
     } else {
-      // an unbraced body may start with `set` rules: `fn view() => set button(...) #block { ... }`
-      while (AtSetRule())
-        decl->set_rules.push_back(ParseSetRule());
-      decl->body = ParseExpression();
+      const auto todo_begin = Here();
+      if (Accept(K::kTODO)) {
+        decl->body = New<TodoExpr>(todo_begin);
+      } else {
+        // an unbraced body may start with `set` rules: `fn view() => set button(...) #block { ... }`
+        while (AtSetRule())
+          decl->set_rules.push_back(ParseSetRule());
+        decl->body = ParseExpression();
+      }
     }
     decl->span = SpanFrom(begin);
     return decl;

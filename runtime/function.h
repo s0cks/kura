@@ -38,6 +38,7 @@ class Function {
   expr::TypeExpr* return_type_ = nullptr;
   expr::DirectiveList directives_{};
   bool c_export_ = false;
+  bool incomplete_ = false;
   CSignature* c_signature_ = nullptr;
 
   void SetCSignature(CSignature* rhs) {
@@ -115,6 +116,14 @@ class Function {
 
   inline auto HasEntry() const -> bool {
     return GetEntry() != nullptr;
+  }
+
+  void SetIncomplete(const bool rhs) {
+    incomplete_ = rhs;
+  }
+
+  auto IsIncomplete() const -> bool {
+    return incomplete_;
   }
 
   auto HasDirective(const std::string_view rhs) -> bool;

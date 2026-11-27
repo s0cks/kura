@@ -82,7 +82,8 @@ namespace kura::syntax {
   V(LBrace,   "{")                    \
   V(RBrace,   "}")                    \
   V(LBrack,   "[")                    \
-  V(RBrack,   "]")
+  V(RBrack,   "]")                    \
+  V(TODO, "???")
 
 #define FOR_EACH_VALUE_TOKEN(V)     \
   V(PxLit,      "<px>")             \

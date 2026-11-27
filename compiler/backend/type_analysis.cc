@@ -1159,6 +1159,17 @@ class Analyzer {
     if (const auto l = instr->AsNewList())
       return Set(def, ListType(l, ctx));
 
+    if (const auto c = instr->AsCast()) {
+      const auto src = TypeOf(c->GetValue());
+      if (src->IsNever())
+        return Set(def, CompileType::Never());
+
+      if (c->GetToType() == kBoolType)
+        return Set(def, CompileType::Bool());
+
+      return Set(def, CompileType::Any());
+    }
+
     if (instr->IsNewNode())
       return Set(def, CompileType::Node());
 

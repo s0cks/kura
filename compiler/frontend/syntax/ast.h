@@ -55,6 +55,7 @@ namespace kura::syntax {
   V(MatchExpr)           \
   V(MatchArm)            \
   V(ForExpr)             \
+  V(TodoExpr)            \
   V(Lambda)              \
   V(UiElement)           \
   V(Paren)               \
@@ -654,6 +655,10 @@ struct MatchExpr : Node {
     detail::Visit(fn, scrutinee);
     detail::VisitAll(fn, arms);
   }
+};
+
+struct TodoExpr : Node {
+  DEFINE_NODE(TodoExpr);
 };
 
 // `for x in xs if guard fold acc = init => body`, or in brackets, as a

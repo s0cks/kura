@@ -149,6 +149,7 @@ class ExprBuilder {
   std::unordered_map<std::string, std::shared_ptr<CHeader>> headers_{};
   std::unordered_set<std::string> imported_{};
   std::unordered_set<std::string> pure_headers_{};
+  std::unordered_set<std::string> builtins_{};
   std::unordered_map<std::string, std::unordered_set<std::string>> pure_names_{};
   Module* module_ = nullptr;
   // The locals that hold the value of each enclosing `x |> stage-with-_`, innermost last. A `_` reads the
@@ -158,11 +159,14 @@ class ExprBuilder {
   std::unordered_map<const syntax::Node*, std::string> placeholder_names_{};
   // The call whose placeholders are being turned into parameters.
   const syntax::Call* partial_ = nullptr;
+  std::string_view current_function_name_{};
   uint32_t pipe_count_ = 0;
   bool include_tests_ = false;
   bool in_test_ = false;
   uint32_t active_test_flags_ = 0;
   uint32_t num_tests_ = 0;
+
+  auto ResolveBuiltin(const Span& where, const std::string& name) -> Expr*;
 
   [[noreturn]] void Error(const Span& where, const std::string& message) const;
   [[noreturn]] void Error(const syntax::Node* where, const std::string& message) const;
@@ -275,6 +279,7 @@ class ExprBuilder {
   auto BuildMatch(const syntax::MatchExpr* match) -> Expr*;
   auto BuildFor(const syntax::ForExpr* loop) -> Expr*;
   auto BuildIf(const syntax::IfExpr* node) -> Expr*;
+  auto BuildTodo(const syntax::TodoExpr* rhs) -> Expr*;
   auto BuildLambda(const syntax::Lambda* lambda) -> Expr*;
   auto BuildRecord(const syntax::RecordLit* record) -> Expr*;
   auto BuildUi(const syntax::UiElement* element) -> Expr*;

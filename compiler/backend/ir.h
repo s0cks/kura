@@ -20,6 +20,7 @@ namespace kura {
   V(GraphEntry)                 \
   V(TargetEntry)                \
   V(JoinEntry)                  \
+  V(Panic)                      \
   V(Constant)                   \
   V(UnaryOp)                    \
   V(BinaryOp)                   \
@@ -41,6 +42,7 @@ namespace kura {
   V(NewClosure)                 \
   V(Parameter)                  \
   V(Call)                       \
+  V(Cast)                       \
   V(PipeCall)                   \
   V(MathCall)                   \
   V(Return)                     \
@@ -1872,6 +1874,58 @@ class AssertInstr : public TemplateInstruction<4> {
  public:
   static inline auto New(Value* cond, Value* message = nullptr) -> AssertInstr* {
     return new AssertInstr(cond, message);
+  }
+};
+
+class PanicInstr : public TemplateInstruction<1> {
+ public:
+  explicit PanicInstr(Value* message) {
+    if (message)
+      SetMessage(message);
+  }
+  ~PanicInstr() override = default;
+
+  HAS_NAMED_INPUT(Message, 0);
+  DECLARE_INSTRUCTION_TYPE(Panic);
+
+ public:
+  static inline auto New(Value* rhs) -> PanicInstr* {
+    return new PanicInstr(rhs);
+  }
+};
+
+class CastInstr : public TemplateDefinition<1> {
+ private:
+  TypeId from_;
+  TypeId to_;
+
+ public:
+  CastInstr(TypeId from, TypeId to, Value* value) {
+    SetValue(value);
+  }
+
+  auto GetFromType() const -> TypeId {
+    return from_;
+  }
+
+  void SetFromType(const TypeId rhs) {
+    from_ = rhs;
+  }
+
+  auto GetToType() const -> TypeId {
+    return to_;
+  }
+
+  void SetToType(const TypeId rhs) {
+    to_ = rhs;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_INSTRUCTION_TYPE(Cast);
+
+ public:
+  static inline auto New(TypeId from, TypeId to, Value* rhs) -> CastInstr* {
+    return new CastInstr(from, to, rhs);
   }
 };
 

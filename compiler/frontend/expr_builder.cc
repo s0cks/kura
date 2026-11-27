@@ -115,10 +115,13 @@ static auto MatchColorConstructor(const std::string& name) -> std::optional<Colo
 }
 
 auto ExprBuilder::LoadName(const Node* where, const std::string& name) -> Expr* {
-  const auto local = GetScope()->GetLocalRecursive(name);
-  if (!local)
-    Error(where, "undefined name '" + name + "'");
-  return LoadLocalExpr::New(local);
+  if (const auto local = GetScope()->GetLocalRecursive(name))
+    return LoadLocalExpr::New(local);
+
+  if (name == "panic")
+    return ResolveBuiltin(where ? where->span : Span{}, name);
+
+  Error(where, "undefined name '" + name + "'");
 }
 
 auto ExprBuilder::CreateLocal(const Span& where, const std::string& name) -> LocalVariable* {
@@ -299,6 +302,7 @@ auto ExprBuilder::BuildModule() -> Module* {
     }
 
     LocalsScope body_scope(GetOwner());
+    current_function_name_ = name;
     SeqExpr* function_body = BuildSeq(body);
     if (name == "view") {
       // The View is the root of every view, and it isn't written: what the rules give it is the properties of a
@@ -686,6 +690,8 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return BuildBlock(node->As<syntax::Block>());
     case Node::kIfExpr:
       return BuildIf(node->As<syntax::IfExpr>());
+    case Node::kTodoExpr:
+      return BuildTodo(node->As<syntax::TodoExpr>());
     case Node::kMatchExpr:
       return BuildMatch(node->As<syntax::MatchExpr>());
     case Node::kForExpr:
@@ -1272,6 +1278,27 @@ auto ExprBuilder::BuildCallExpr(const syntax::Call* ctx) -> Expr* {
 
   const auto target = Build(ctx->callee);
   return BuildCall(target, BuildArgs(ctx->args));
+}
+
+auto ExprBuilder::ResolveBuiltin(const Span& where, const std::string& name) -> Expr* {
+  if (builtins_.insert(name).second) {
+    const auto fn = Function::New(name);
+    if (name == "panic") {
+      LocalsScope func_scope(GetOwner());
+      Function::ParameterList parameters{};
+      parameters.push_back({
+          CreateLocal(where, "msg"),
+          new NamedTypeExpr("String"),
+      });
+      fn->SetParameters(std::move(parameters));
+      fn->SetReturnType(new NamedTypeExpr("None"));
+    }
+
+    if (!module_scope_->CreateLocal(fn->GetName()))
+      Error(where, std::format("failed to declare builtin `{}`", name));
+  }
+
+  return LoadName(nullptr, name);
 }
 
 auto ExprBuilder::NumberLiteral(const Span& where, const std::string& text, const bool negate) const -> Object* {
@@ -1864,6 +1891,14 @@ auto ExprBuilder::BuildIf(const syntax::IfExpr* ctx) -> Expr* {
   // else-if chains arrive as a nested IfExpr; wrap it so Else is always a Seq.
   const auto else_expr = BuildSeq(ctx->else_branch);
   return IfExpr::New(condition, then_expr, else_expr);
+}
+
+auto ExprBuilder::BuildTodo(const syntax::TodoExpr* rhs) -> Expr* {
+  return CallExpr::New(
+      ResolveBuiltin(rhs->span, "panic"),
+      {
+          LiteralExpr::New(String::New(std::format("function `{}` is not implemented", current_function_name_))),
+      });
 }
 
 auto ExprBuilder::BuildLiteralPattern(const syntax::LiteralPattern* ctx) -> PatternExpr* {

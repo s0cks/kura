@@ -404,7 +404,8 @@ void kura_rt_test_end() {
     }
     if (!found) {
       passed = false;
-      why = "it failed, but not the way it was expected to: nothing it said contains \"" + suite_.expect + "\"";
+      why = std::format("it failed, but not the way it was expected to: `{}` was not the expected message `{}`",
+                        suite_.panic_message, suite_.expect);
     }
   }
 
@@ -420,7 +421,8 @@ void kura_rt_test_end() {
             << " (" << duration << ")" << std::endl;
   std::cout << "\nfailures:\n";
   if (!why.empty()) {
-    std::cout << "\n" << rang::fg::red << "Failed" << rang::fg::reset << ": " << rang::style::bold << suite_.name
+    std::cout << "\n"
+              << rang::fg::red << "Failed" << rang::fg::reset << ": " << rang::style::bold << suite_.name
               << rang::style::reset << "\n  " << why << "\n";
     // what it did say, so the difference between that and what was wanted is on the screen
     for (const auto& f : suite_.failed)

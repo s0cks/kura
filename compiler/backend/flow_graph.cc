@@ -13,6 +13,13 @@
 #include "type_id.h"
 
 namespace kura {
+static inline auto Name(const Value* value) -> std::string {
+  if (!value || !value->GetDefinition())
+    return "<none>";
+
+  return "%" + std::to_string(value->GetDefinition()->GetId());
+}
+
 static inline auto IsEmptyJumpBlock(EntryInstr* block, EntryInstr* target) -> bool {
   if (!block || block->IsJoinEntry())
     return false;
@@ -35,7 +42,7 @@ static inline auto HasNoSideEffects(Instruction* instr) -> bool {
          instr->IsLoadIndex() || instr->IsLoadLength() || instr->IsLoadVariantPayload() || instr->IsTestVariant() ||
          instr->IsNewVariant() || instr->IsNewList() || instr->IsNewRecord() || instr->IsLayoutRect() ||
          instr->IsRectIntersects() || instr->IsRectPastClip() || instr->IsNewColor() || instr->IsCastColor() ||
-         instr->IsMathCall() || instr->IsLoadFunction();
+         instr->IsMathCall() || instr->IsLoadFunction() || instr->IsCast();
 }
 
 static inline auto IsZeroAlphaConstant(Definition* def) -> bool {
@@ -233,6 +240,10 @@ static inline auto GetCSEKey(Instruction* instr) -> std::optional<std::string> {
 
     return std::nullopt;
   }
+
+  if (const auto c = instr->AsCast())
+    return std::format("Cast:{}:{}:{}", static_cast<int>(c->GetToType()), static_cast<int>(c->GetFromType()),
+                       Name(c->GetValue()));
 
   if (const auto nc = instr->AsNewColor())
     return "NewColor:" + std::to_string(static_cast<int>(nc->GetModel())) + inputs_key();
@@ -1228,7 +1239,17 @@ void FlowGraph::EliminateDeadPaints() {
 
 void FlowGraph::DedupeConstants() {
   std::unordered_map<std::string, ConstantInstr*> pool{};
-  EntryInstr* entry_block = GetEntry()->GetTarget();
+  EntryInstr* entry_block = nullptr;
+  for (EntryInstr* b : reverse_postorder_) {
+    if (!b->IsGraphEntry() && b->GetNext() != nullptr) {
+      entry_block = b;
+      break;
+    }
+  }
+
+  if (!entry_block)
+    return;
+
   for (const auto block : GetReversePostorder()) {
     for (Instruction* instr = block->GetNext(); instr != nullptr;) {
       Instruction* next = instr->GetNext();

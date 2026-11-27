@@ -45,6 +45,15 @@ auto Value::ToString() const -> std::string {
   return Name(this);
 }
 
+auto PanicInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "PanicInsr(";
+  if (HasMessage())
+    ss << "message=" << Name(GetMessage());
+  ss << ")";
+  return ss.str();
+}
+
 auto ConstantInstr::GetCanonicalKey() const -> std::string {
   switch (value_->GetType()) {
     case kNoneType:
@@ -426,6 +435,16 @@ auto AssertInstr::ToString() const -> std::string {
   if (has_operands_)
     ss << "left=" << Name(GetLeft()) << ", right=" << Name(GetRight()) << ", ";
   ss << "fail_fast=" << fail_fast_;
+  ss << ")";
+  return ss.str();
+}
+
+auto CastInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "CastInstr(";
+  ss << "from=" << GetFromType() << ", ";
+  ss << "to=" << GetToType() << ", ";
+  ss << "value=" << Name(GetValue());
   ss << ")";
   return ss.str();
 }
