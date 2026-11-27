@@ -79,11 +79,14 @@ fn view(state: State): Node => {
                 n if n < 0 => rgb(209, 77, 65),
                 _ => rgb(255, 252, 240),
               }){
-    #block(direction: "column",
-           height: 40%,
+    set block(direction: "column")
+
+    #block( height: 40%,
            min-height: 40%,
            shrink: 1){
-      #block(direction: "row", gap: 16px){
+      set block(direction: "row")
+
+      #block(gap: 16px){
         #input(size: 24px, grow: 1, placeholder: "Init value...", on-input: InitValue, state.message)
 
         #button(shrink: 0){
@@ -91,16 +94,12 @@ fn view(state: State): Node => {
         }
       }
 
-      #block(direction: "row"){
+      #block {
         #text("value: {state.value} ")
       }
 
-      #block(direction: "row"){
+      #block {
         #text("number of values: {state.num_items} ")
-      }
-
-      #block(direction: "row"){
-        #text("bg: {background.r}, {background.g}, {background.b}, {background.a}")
       }
 
       #line
@@ -114,7 +113,7 @@ fn view(state: State): Node => {
       counter-buttons()
     }
 
-    #block(direction: "column", height: 60%, min-height: 30%, grow: 1){
+    #block(height: 60%, min-height: 30%, grow: 1){
       #scroll(width: 100%){
         #block(direction: "column"){
           #list(width: 100%){
