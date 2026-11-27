@@ -14,6 +14,8 @@
 #include "log.h"
 #include "lsp/error.h"
 #include "lsp/hover.h"
+#include "lsp/json.h"
+#include "lsp/semantic_tokens.h"
 #include "lsp/server/params.h"
 #include "lsp/server/request.h"
 #include "lsp/task/index_doc_task.h"
@@ -29,10 +31,21 @@ Server::Server(uv_loop_t* loop) :
   caps_.textDocumentSync = kFullTextDocumentSync;
   caps_.hoverProvider = true;
   caps_.documentSymbolProvider = true;
+  caps_.definitionProvider = true;
   caps_.referencesProvider = true;
+  caps_.documentHighlightProvider = true;
+  caps_.renameProvider = true;
+  caps_.foldingRangeProvider = true;
+  caps_.workspaceSymbolProvider = true;
+  caps_.inlayHintProvider = true;
+  caps_.documentLinkProvider = true;
+  caps_.signatureHelpTriggerCharacters = {"(", ","};
+  caps_.semanticTokensLegend = GetSemanticTokensLegend();
+  caps_.documentFormattingProvider = true;
+  caps_.documentRangeFormattingProvider = true;
   caps_.codeActionProvider = true;
   caps_.completionProvider.triggerCharacters = {
-      ".", "=>", ":", "fn", "type",
+      ".", ":", "#", "@", "/", "\"",
   };
 
   uv_os_setenv("UV_THREADPOOL_SIZE", "4");
@@ -58,7 +71,21 @@ Server::Server(uv_loop_t* loop) :
   V(CodeActionResolve, "codeAction/resolve")        \
   V(DocumentSymbols, "textDocument/documentSymbol") \
   V(References, "textDocument/references")          \
-  V(Completion, "textDocument/completion")
+  V(Completion, "textDocument/completion")          \
+  V(Definition, "textDocument/definition")          \
+  V(DocumentHighlight, "textDocument/documentHighlight") \
+  V(PrepareRename, "textDocument/prepareRename")    \
+  V(Rename, "textDocument/rename")                  \
+  V(FoldingRange, "textDocument/foldingRange")      \
+  V(Formatting, "textDocument/formatting")          \
+  V(RangeFormatting, "textDocument/rangeFormatting") \
+  V(SignatureHelp, "textDocument/signatureHelp")    \
+  V(SemanticTokensFull, "textDocument/semanticTokens/full") \
+  V(InlayHint, "textDocument/inlayHint")            \
+  V(DocumentLink, "textDocument/documentLink")      \
+  V(WorkspaceSymbol, "workspace/symbol")            \
+  V(Ignored, "$/cancelRequest")                     \
+  V(Ignored, "$/setTrace")
 
 #define MAP(Name, Route)                             \
   router_.Insert(Route, [this](const Request& req) { \
@@ -190,13 +217,13 @@ static inline void SerializeList(const json_int_t req_id, const std::vector<T>& 
 void Server::Send(const URI& uri, const std::vector<Diagnostic>& rhs) {
   json_t* doc = json_object();
   KASSERT(doc);
-  json_object_set(doc, "jsonrpc", json_string("2.0"));
-  json_object_set(doc, "method", json_string("textDocument/publishDiagnostics"));
+  json_object_set_new(doc, "jsonrpc", json_string("2.0"));
+  json_object_set_new(doc, "method", json_string("textDocument/publishDiagnostics"));
 
   json_t* params = json_object();
   KASSERT(params);
   {
-    json_object_set(params, "uri", json_string(uri.c_str()));
+    json_object_set_new(params, "uri", json_string(uri.c_str()));
 
     json_t* diagnostics = json_array();
     KASSERT(diagnostics);
@@ -204,11 +231,11 @@ void Server::Send(const URI& uri, const std::vector<Diagnostic>& rhs) {
       json_t* value = json_object();
       KASSERT(value);
       diagnostic >> value;
-      json_array_append(diagnostics, value);
+      json_array_append_new(diagnostics, value);
     }
-    json_object_set(params, "diagnostics", diagnostics);
+    json_object_set_new(params, "diagnostics", diagnostics);
   }
-  json_object_set(doc, "params", params);
+  json_object_set_new(doc, "params", params);
 
   return Send(doc);
 }
@@ -231,6 +258,15 @@ void Server::Send(const json_int_t req_id, const std::vector<Symbol>& rhs) {
   Send(res);
 }
 
+void Server::SendResult(const json_int_t req_id, json_t* result) {
+  json_t* doc = json_object();
+  json_object_set_new(doc, "jsonrpc", json_string("2.0"));
+  json_object_set_new(doc, "id", json_integer(req_id));
+  json_object_set_new(doc, "result", result ? result : json_null());
+  Send(doc);
+  json_decref(doc);
+}
+
 void Server::Send(const json_int_t req_id, const ResponseType& rhs) {
   Response res = {
       .id = req_id,
@@ -247,8 +283,13 @@ void Server::DispatchJsonRpc(std::string_view json_msg) {
   }
 
   const auto handler = router_.Search(req.method);
-  if (!handler)
-    return log::error(std::format("failed to find route for {}", req.method));
+  if (!handler) {
+    // Notifications we don't know are ignored, as the protocol says; a
+    // request must be answered or the client waits for it forever.
+    if (req.has_id && !req.method.empty())
+      SendError(req.id, LSP_ERROR_METHOD_NOT_FOUND, std::format("method {} is not supported", req.method));
+    return log::info(std::format("no route for {}", req.method));
+  }
 
   (*handler)(req);
 }
@@ -318,6 +359,9 @@ void Server::HandleDidClose(const Request& req) {
   textDocument << doc;
   log::info(std::format("didClose: {}", textDocument.uri));
   docs_.Remove(textDocument.uri);
+  // A closed file has no problems to show, and the editor keeps what it was
+  // last told until it is told otherwise.
+  Send(textDocument.uri, std::vector<Diagnostic>{});
 }
 
 void Server::HandleHover(const Request& req) {
@@ -326,16 +370,15 @@ void Server::HandleHover(const Request& req) {
 
   auto* doc = docs_.Get(params.textDocument.uri);
   if (!doc)
-    return SendParseError(req.id);
+    return SendNull(req.id);
 
-  const auto node = doc->GetNodeAtPos(params.position);
-  if (!node)
-    return SendInternalError(req.id);
+  const auto hover = GetHover(*doc, params.position, &modules_);
+  if (!hover)
+    return SendNull(req.id);
 
-  std::stringstream ss{};
-  hover_info_stream his(ss);
-  his << *node;
-  return Send(req.id, HoverForRange(ss.str(), params.position, params.position, MarkupContent::kMarkdown));
+  json_t* result = json_object();
+  *hover >> result;
+  return SendResult(req.id, result);
 }
 
 void Server::HandleCodeAction(const Request& req) {
@@ -346,6 +389,7 @@ void Server::HandleCodeAction(const Request& req) {
   if (!doc)
     return SendInternalError(req.id, std::format("document {} not indexed", params.textDocument.uri));
 
+  doc->EnsureTree();
   return Send(req.id, GetCodeActions(*doc, params.range));
 }
 

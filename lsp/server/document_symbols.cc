@@ -2,6 +2,7 @@
 
 #include <format>
 
+#include "lsp/outline.h"
 #include "lsp/server/server.h"
 
 namespace kura::lsp {
@@ -20,9 +21,6 @@ void Server::HandleDocumentSymbols(const Request& req) {
   if (!doc)
     return SendInternalError(req.id, std::format("document {} not indexed", params.textDocument.uri));
 
-  std::vector<Symbol> symbols{};
-  doc->GetSymbols(symbols);
-
-  Send(req.id, symbols);
+  Send(req.id, GetOutline(*doc));
 }
 }  // namespace kura::lsp

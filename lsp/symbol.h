@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "lsp/types.h"
 
@@ -52,6 +53,7 @@ struct Symbol {
   Kind kind;
   Range range;
   Range selectionRange;
+  std::vector<Symbol> children{};
 
 #define DEFINE_KIND_CHECK(Name)          \
   inline auto Is##Name() const -> bool { \

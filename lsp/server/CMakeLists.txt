@@ -9,5 +9,6 @@ target_sources(kura-lsp-common
          server.cc
          shutdown.cc
          completion.cc
+         features.cc
          document_symbols.cc
          document_references.cc)

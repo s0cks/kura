@@ -10,6 +10,7 @@
 #include "lsp/diagnostic.h"
 #include "lsp/document.h"
 #include "lsp/error.h"
+#include "lsp/modules.h"
 #include "lsp/server/response.h"
 #include "lsp/server/router.h"
 #include "lsp/task/task.h"
@@ -50,6 +51,7 @@ class Server {
   std::vector<char> buffer_{};
   Router router_{};
   DocumentStore docs_{};
+  ModuleResolver modules_{docs_};
   ServerInfo info_{};
   ServerCapabilities caps_{};
 
@@ -72,6 +74,22 @@ class Server {
   void HandleDocumentSymbols(const Request& req);
   void HandleReferences(const Request& req);
   void HandleCompletion(const Request& req);
+  void HandleDefinition(const Request& req);
+  void HandleDocumentHighlight(const Request& req);
+  void HandlePrepareRename(const Request& req);
+  void HandleRename(const Request& req);
+  void HandleFoldingRange(const Request& req);
+  void HandleFormatting(const Request& req);
+  void HandleRangeFormatting(const Request& req);
+  void HandleWorkspaceSymbol(const Request& req);
+  void HandleSemanticTokens(const Request& req);
+  void HandleSignatureHelp(const Request& req);
+  void HandleInlayHint(const Request& req);
+  void HandleDocumentLink(const Request& req);
+  void HandleIgnored(const Request& req);
+  void HandleSemanticTokensFull(const Request& req);
+
+  bool shutdown_requested_ = false;
 
   static inline void AllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buff) {
     buff->base = new char[suggested_size];
@@ -91,6 +109,11 @@ class Server {
 
   void Start();
 
+  // The open document for `uri`, or null when it is not (or no longer) open.
+  inline auto GetDocument(const URI& uri) -> Document* {
+    return docs_.Get(uri);
+  }
+
   void Send(const std::string rhs);
   void Send(const json_t* doc);
   void Send(const Response& resp);
@@ -100,6 +123,14 @@ class Server {
   void Send(const json_int_t req_id, const std::vector<CompletionItem>& rhs);
   void Send(const json_int_t req_id, const std::vector<CodeAction>& rhs);
   void Send(const URI& uri, const std::vector<Diagnostic>& diagnostics);
+
+  // Answers a request with `result`, taking ownership of it. A null `result`
+  // is sent as JSON `null`, which is how a request with nothing to say is
+  // answered ("no definition here"), as opposed to an error.
+  void SendResult(json_int_t req_id, json_t* result);
+  inline void SendNull(const json_int_t req_id) {
+    SendResult(req_id, json_null());
+  }
 
   inline void SendError(const json_int_t req_id, const int code, const std::string_view message) {
     return Send(req_id, Error{

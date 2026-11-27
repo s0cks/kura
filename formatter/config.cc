@@ -33,13 +33,19 @@ struct ConfigSource {
     if (!exists())
       return false;
 
+    // The parsers read the text of the file, not its name.
+    const auto data = Slurp(std::string(filename));
+    if (!data)
+      return false;
+
     switch (kind) {
       case kJson:
-        return ParseConfigJson(filename, rhs);
+        return ParseConfigJson(*data, rhs);
 
       case kYaml:
-        return ParseConfigYaml(filename, rhs);
+        return ParseConfigYaml(*data, rhs);
     }
+    return false;
   }
 };
 

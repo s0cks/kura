@@ -9,10 +9,12 @@ struct Request {
   json_t* doc;
   json_error_t error;
 
-  json_int_t id;
-  std::string_view method;
+  json_int_t id = 0;
+  // A notification has no id and must not be answered, not even with an error.
+  bool has_id = false;
+  std::string_view method{};
 
-  json_t* params;
+  json_t* params = nullptr;
 
   Request(const char* data, const size_t len);
   ~Request();

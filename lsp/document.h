@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "compiler/frontend/syntax/parser.h"
+#include "lsp/binder.h"
 #include "lsp/symbol.h"
 #include "lsp/types.h"
 #include "lsp/uri.h"
@@ -23,6 +24,7 @@ class Document {
   uint64_t version_ = 0;
   uint64_t tree_version_ = 0;
   std::shared_ptr<const syntax::SourceFile> source_{};
+  std::unique_ptr<Bindings> bindings_{};
 
   void Update(std::string content);
 
@@ -91,6 +93,21 @@ class Document {
   void SetSyntaxTree(std::unique_ptr<syntax::SyntaxTree>&& rhs, const uint64_t version) {
     tree_ = std::move(rhs);
     tree_version_ = version;
+    bindings_.reset();
+  }
+
+  // Parses the text now when the tree is behind it. Indexing is done on a
+  // worker so diagnostics don't stall typing, but a request for a definition
+  // or a rename must be answered for the text the client is looking at, so it
+  // can't wait for that. Returns false when there is no tree to be had.
+  auto EnsureTree() -> bool;
+
+  // The names in the current tree: what they are declared as and where they
+  // are used. Built when first asked for, and again after the tree changes.
+  auto GetBindings() -> const Bindings*;
+
+  auto GetOffsetNode(uint32_t offset) const -> const syntax::Node* {
+    return tree_ ? syntax::FindNodeAt(tree_->GetRoot(), offset) : nullptr;
   }
 
   void GetSymbols(std::vector<Symbol>& rhs) const;
@@ -99,6 +116,11 @@ class Document {
   auto operator=(Document&& rhs) -> Document& = delete;
   auto operator=(const Document& rhs) -> Document& = delete;
 };
+
+// A position in `source` the way LSP counts it: a line, and a column in UTF-16
+// code units rather than bytes. For text that is not the document's current
+// text, such as a tree an index run finished after another edit.
+auto ToLspPosition(const syntax::SourceFile& source, uint32_t offset) -> Position;
 
 class DocumentStore {
  private:
@@ -114,6 +136,14 @@ class DocumentStore {
   auto Get(const URI& uri) -> Document*;
   void Update(const URI& uri, std::string content);
   void Remove(const URI& uri);
+
+  // Calls `fn` with every open document. `fn` must not open or close any.
+  template <typename F>
+  void ForEach(F&& fn) {
+    std::shared_lock lock(mutex_);
+    for (const auto& [uri, doc] : docs_)
+      fn(*doc);
+  }
 
   auto operator=(DocumentStore&& rhs) -> DocumentStore& = delete;
   auto operator=(const DocumentStore& rhs) -> DocumentStore& = delete;

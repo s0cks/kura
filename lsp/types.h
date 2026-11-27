@@ -2,6 +2,7 @@
 #define KURA_LSP_TYPES_H
 
 #include <initializer_list>
+#include <optional>
 #include <jansson.h>
 #include <string>
 #include <variant>
@@ -135,12 +136,18 @@ enum TextDocumentSync : uint8_t {
   kIncrementalTextDocumentSync,
 };
 
+// Providers a client only needs to know are there.
 #define FOR_EACH_PROVIDER_FLAG(V) \
   V(hoverProvider)                \
   V(documentSymbolProvider)       \
   V(definitionProvider)           \
   V(referencesProvider)           \
-  V(codeActionProvider)
+  V(documentHighlightProvider)    \
+  V(foldingRangeProvider)         \
+  V(documentFormattingProvider)   \
+  V(documentRangeFormattingProvider) \
+  V(workspaceSymbolProvider)      \
+  V(inlayHintProvider)
 
 struct CompletionProvider {
   bool resolveProvider;
@@ -149,13 +156,27 @@ struct CompletionProvider {
   void operator>>(json_t* rhs) const;
 };
 
+// The token types and modifiers a `semanticTokens` response indexes into, in
+// the order they are announced to the client.
+struct SemanticTokensLegend {
+  std::vector<std::string> tokenTypes{};
+  std::vector<std::string> tokenModifiers{};
+};
+
 struct ServerCapabilities {
   TextDocumentSync textDocumentSync{};
   CompletionProvider completionProvider{};
 
-#define DEFINE_PROVIDER_FLAG(Name) bool Name;
+#define DEFINE_PROVIDER_FLAG(Name) bool Name = false;
   FOR_EACH_PROVIDER_FLAG(DEFINE_PROVIDER_FLAG)
 #undef DEFINE_PROVIDER_FLAG
+
+  // These are objects on the wire, because they carry options.
+  bool codeActionProvider = false;
+  bool renameProvider = false;  // announced with `prepareProvider`
+  bool documentLinkProvider = false;
+  std::vector<std::string> signatureHelpTriggerCharacters{};
+  std::optional<SemanticTokensLegend> semanticTokensLegend{};
 
   void operator>>(json_t* rhs) const;
 };

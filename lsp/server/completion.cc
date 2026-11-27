@@ -1,6 +1,7 @@
 #include "lsp/server/completion.h"
 
 #include "lsp/completion_item.h"
+#include "lsp/completion.h"
 #include "lsp/keyword_completion.h"
 #include "lsp/server/server.h"
 
@@ -24,6 +25,7 @@ void Server::HandleCompletion(const Request& req) {
   if (!doc)
     return SendInternalError(req.id, std::format("document {} not indexed", params.textDocument.uri));
 
-  return Send(req.id, GetDeclarationCompletions(*doc, doc->ToOffset(params.position)));
+  doc->EnsureTree();
+  return Send(req.id, GetCompletions(*doc, doc->ToOffset(params.position), &modules_));
 }
 }  // namespace kura::lsp

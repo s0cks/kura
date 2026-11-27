@@ -52,6 +52,18 @@ class DocumentBuilder {
   DECLARE_LOWER_FN(Block);
   DECLARE_LOWER_FN(Pipe);
   DECLARE_LOWER_FN(ForExpr);
+  DECLARE_LOWER_FN(Paren);
+  DECLARE_LOWER_FN(BoolLit);
+  DECLARE_LOWER_FN(Index);
+  DECLARE_LOWER_FN(RangeExpr);
+  DECLARE_LOWER_FN(RangePattern);
+  DECLARE_LOWER_FN(RecordPattern);
+  DECLARE_LOWER_FN(FieldPattern);
+  DECLARE_LOWER_FN(QualifiedType);
+  DECLARE_LOWER_FN(StaticAssert);
+  DECLARE_LOWER_FN(TestDecl);
+  DECLARE_LOWER_FN(ExternDecl);
+  DECLARE_LOWER_FN(IsExpr);
   DECLARE_LOWER_FN(VariantPattern);
   DECLARE_LOWER_FN(VariantRef);
   DECLARE_LOWER_FN(Lambda);

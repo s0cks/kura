@@ -59,6 +59,31 @@ auto Document::ToRange(const Span& span) const -> Range {
 
 Document::~Document() = default;
 
+auto Document::EnsureTree() -> bool {
+  if (IsTreeCurrent())
+    return true;
+
+  SetSyntaxTree(syntax::ParseText(uri_, contents_), version_);
+  return tree_ != nullptr;
+}
+
+auto Document::GetBindings() -> const Bindings* {
+  if (!EnsureTree())
+    return nullptr;
+
+  if (!bindings_)
+    bindings_ = Bindings::Build(tree_->GetRoot());
+  return bindings_.get();
+}
+
+auto ToLspPosition(const syntax::SourceFile& source, const uint32_t offset) -> Position {
+  const auto pos = source.GetPosition(offset);
+  return Position{
+      static_cast<int>(pos.line),
+      static_cast<int>(source.GetUtf16Column(offset)),
+  };
+}
+
 void Document::GetSymbols(std::vector<Symbol>& rhs) const {
   const auto* root = GetRoot();
   if (!root)

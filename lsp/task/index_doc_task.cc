@@ -13,35 +13,51 @@ void IndexDocumentTask::DoWork(IndexDocumentTask* ctx) {
   log::info(std::format("indexing {}", ctx->name));
   ctx->tree = syntax::ParseText(ctx->name, ctx->text);
 
+  // The tree that was just parsed belongs to `text`, so positions come from a
+  // source file made of that text, not from whatever the document holds by the
+  // time this runs (it may already be newer).
   const auto& tree = ctx->tree;
-  const auto& doc = ctx->doc;
-  const auto& source = doc->GetSource();
+  const auto& source = tree->GetSource();
 
-  log::info(std::format("{} total diagnostics", doc->GetTree()->GetDiagnostics().size()));
   for (const auto& d : tree->GetDiagnostics()) {
-    const auto start = source.GetPosition(d.span.begin);
-    const auto end = source.GetPosition(d.span.end);
-    ctx->diagnostics.push_back(Diagnostic{
-        .range = Range{start, end},
-        .severity = static_cast<Diagnostic::Severity>(d.severity),
+    Diagnostic out{
+        .range = Range{ToLspPosition(source, d.span.begin), ToLspPosition(source, d.span.end)},
+        .severity = ToLspSeverity(d.severity),
         .code = d.code,
-        .source = doc->GetUri(),
-        .message =
-            MarkupContent{
-                .kind = MarkupContent::kPlainText,
-                .value = d.message,
-            },
-    });
+        .source = std::string("kura"),
+        .message = ToLspMessage(d),
+    };
+
+    // Each secondary label becomes a "related information" entry, which
+    // editors show as a clickable list under the message.
+    for (const auto& label : d.labels) {
+      out.related.push_back(DiagnosticRelated{
+          .uri = ctx->doc->GetUri(),
+          .range = Range{ToLspPosition(source, label.span.begin), ToLspPosition(source, label.span.end)},
+          .message = label.message,
+      });
+    }
+    ctx->diagnostics.push_back(std::move(out));
   }
-  log::info(std::format("{} indexed", ctx->name));
+  log::info(std::format("{} indexed, {} diagnostics", ctx->name, ctx->diagnostics.size()));
 }
 
 void IndexDocumentTask::OnFinished(IndexDocumentTask* ctx, int status) {
-  if (ctx->tree && ctx->version > ctx->doc->GetTreeVersion())
-    ctx->doc->SetSyntaxTree(std::move(ctx->tree), ctx->version);
+  // The document may have been closed while this ran on a worker thread; the
+  // pointer the task was made with is then dangling, so look it up again.
+  auto* doc = ctx->server->GetDocument(ctx->name);
+  if (doc != ctx->doc) {
+    delete ctx;
+    return;
+  }
 
-  log::info(std::format("sending {} diagnostics", ctx->diagnostics.size()));
-  ctx->server->Send(ctx->doc->GetUri(), ctx->diagnostics);
+  if (ctx->tree && ctx->version > doc->GetTreeVersion())
+    doc->SetSyntaxTree(std::move(ctx->tree), ctx->version);
+
+  // Only the newest text's diagnostics are worth showing: when a later edit
+  // is already queued, its own run will publish, and this one would flicker.
+  if (ctx->version >= doc->GetVersion())
+    ctx->server->Send(doc->GetUri(), ctx->diagnostics);
 
   delete ctx;
 }

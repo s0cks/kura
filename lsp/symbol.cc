@@ -4,19 +4,29 @@
 
 namespace kura::lsp {
 void Symbol::operator>>(json_t* doc) const {
-  json_object_set(doc, "name", json_string(name.c_str()));
-  json_object_set(doc, "detail", json_string(detail.c_str()));
-  json_object_set(doc, "kind", json_integer(kind));
+  json_object_set_new(doc, "name", json_string(name.c_str()));
+  json_object_set_new(doc, "detail", json_string(detail.c_str()));
+  json_object_set_new(doc, "kind", json_integer(kind));
 
   json_t* range_node = json_object();
   KASSERT(range_node);
   range >> range_node;
-  json_object_set(doc, "range", range_node);
+  json_object_set_new(doc, "range", range_node);
 
   json_t* selectionRange_node = json_object();
   KASSERT(selectionRange_node);
   selectionRange >> selectionRange_node;
-  json_object_set(doc, "selectionRange", selectionRange_node);
+  json_object_set_new(doc, "selectionRange", selectionRange_node);
+
+  if (!children.empty()) {
+    json_t* children_node = json_array();
+    for (const auto& child : children) {
+      json_t* entry = json_object();
+      child >> entry;
+      json_array_append_new(children_node, entry);
+    }
+    json_object_set_new(doc, "children", children_node);
+  }
 }
 
 auto Symbol::operator<<(const json_t* doc) -> Symbol& {

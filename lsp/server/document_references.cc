@@ -2,8 +2,6 @@
 
 #include <jansson.h>
 
-#include "lsp/server/server.h"
-
 namespace kura::lsp {
 auto ReferenceParams::operator<<(const json_t* doc) -> ReferenceParams& {
   json_t* textDocument_node = json_object_get(doc, "textDocument");
@@ -15,9 +13,5 @@ auto ReferenceParams::operator<<(const json_t* doc) -> ReferenceParams& {
     position << position_node;
 
   return *this;
-}
-
-void Server::HandleReferences(const Request& req) {
-  SendInternalError(req.id, "No references found");
 }
 }  // namespace kura::lsp

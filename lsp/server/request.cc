@@ -7,7 +7,8 @@ Request::Request(const char* data, const size_t len) {
     return;
 
   json_t* id_node = json_object_get(doc, "id");
-  id = id_node ? json_integer_value(id_node) : 0;
+  has_id = id_node != nullptr;
+  id = json_is_integer(id_node) ? json_integer_value(id_node) : 0;
 
   json_t* method_node = json_object_get(doc, "method");
   if (!method_node || !json_is_string(method_node))

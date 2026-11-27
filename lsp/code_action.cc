@@ -117,6 +117,36 @@ void AddEmptyParameterList(const Document& doc, const syntax::Diagnostic& diag, 
       }},
   });
 }
+
+// Every diagnostic that came with a machine-applicable fix gets it as a quick
+// fix, so a new suggestion in the parser shows up in the editor without a
+// handler of its own.
+void AddSuggestions(const Document& doc, const syntax::Diagnostic& diag, const Span& selection,
+                    std::vector<CodeAction>& actions) {
+  if (diag.suggestions.empty() || !Overlaps(diag.span, selection))
+    return;
+
+  CodeAction action{
+      .title = diag.help.empty() ? std::format("Fix: {}", diag.message) : diag.help,
+      .isPreferred = true,
+      .uri = doc.GetUri(),
+  };
+
+  // `help:` is a sentence for the terminal ("#button elements should have ..."); as the
+  // title of an action it is the code that says what happens.
+  if (diag.code == syntax::DiagnosticCode::kButtonMissingOnClick)
+    action.title = "Add an `on-click` property";
+  else if (action.title.size() > 72)
+    action.title = std::format("Fix: {}", diag.message);
+
+  for (const auto& edit : diag.suggestions) {
+    action.edits.push_back(TextEdit{
+        .range = doc.ToRange(edit.span),
+        .newText = edit.replacement,
+    });
+  }
+  actions.push_back(std::move(action));
+}
 }  // namespace
 
 auto GetCodeActions(const Document& doc, const Range& range) -> std::vector<CodeAction> {
@@ -130,6 +160,8 @@ auto GetCodeActions(const Document& doc, const Range& range) -> std::vector<Code
       AddEmptyParameterList(doc, diag, selection, actions);
     else if (diag.code == syntax::DiagnosticCode::kIfWithoutElse)
       AddElse(doc, diag, selection, actions);
+    else
+      AddSuggestions(doc, diag, selection, actions);
   }
 
   return actions;

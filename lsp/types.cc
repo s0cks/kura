@@ -44,19 +44,19 @@ auto Position::operator<<(const json_t* rhs) -> Position& {
 
 void Position::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set(doc, "line", json_integer(line));
-  json_object_set(doc, "character", json_integer(character));
+  json_object_set_new(doc, "line", json_integer(line));
+  json_object_set_new(doc, "character", json_integer(character));
 }
 
 void Range::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_t* start_node = json_object();
   start >> start_node;
-  json_object_set(doc, "start", start_node);
+  json_object_set_new(doc, "start", start_node);
 
   json_t* end_node = json_object();
   end >> end_node;
-  json_object_set(doc, "end", end_node);
+  json_object_set_new(doc, "end", end_node);
 }
 
 auto Range::operator<<(const json_t* doc) -> Range& {
@@ -82,13 +82,13 @@ void TextEdit::operator>>(json_t* doc) const {
 
 void MarkupContent::operator>>(json_t* doc) const {
   KASSERT(doc);
-  json_object_set(doc, "value", json_string(value.data()));
+  json_object_set_new(doc, "value", json_string(value.data()));
   switch (kind) {
     case kura::lsp::MarkupContent::kPlainText:
-      json_object_set(doc, "kind", json_string("plaintext"));
+      json_object_set_new(doc, "kind", json_string("plaintext"));
       break;
     case kura::lsp::MarkupContent::kMarkdown:
-      json_object_set(doc, "kind", json_string("markdown"));
+      json_object_set_new(doc, "kind", json_string("markdown"));
       break;
     default:
       break;
@@ -99,11 +99,11 @@ void Hover::operator>>(json_t* doc) const {
   KASSERT(doc);
   json_t* range_node = json_object();
   range >> range_node;
-  json_object_set(doc, "range", range_node);
+  json_object_set_new(doc, "range", range_node);
 
   json_t* contents_node = json_object();
   contents >> contents_node;
-  json_object_set(doc, "contents", contents_node);
+  json_object_set_new(doc, "contents", contents_node);
 }
 
 void FromJson(json_t* doc, Position& rhs) {
@@ -124,13 +124,20 @@ void ServerInfo::operator>>(json_t* doc) const {
 }
 
 void CompletionProvider::operator>>(json_t* doc) const {
-  json_object_set(doc, "resolveProvider", json_boolean(resolveProvider));
+  json_object_set_new(doc, "resolveProvider", json_boolean(resolveProvider));
 
   json_t* triggerCharacters_node = json_array();
   KASSERT(triggerCharacters_node);
   for (const auto& triggerChar : triggerCharacters)
-    json_array_append(triggerCharacters_node, json_string(triggerChar.c_str()));
-  json_object_set(doc, "triggerCharacters", triggerCharacters_node);
+    json_array_append_new(triggerCharacters_node, json_string(triggerChar.c_str()));
+  json_object_set_new(doc, "triggerCharacters", triggerCharacters_node);
+}
+
+static inline auto ToJsonArray(const std::vector<std::string>& values) -> json_t* {
+  json_t* array = json_array();
+  for (const auto& value : values)
+    json_array_append_new(array, json_string(value.c_str()));
+  return array;
 }
 
 void ServerCapabilities::operator>>(json_t* doc) const {
@@ -139,7 +146,7 @@ void ServerCapabilities::operator>>(json_t* doc) const {
 
 #define SET_PROVIDER_FLAG(Name) \
   if (Name)                     \
-    json_object_set(doc, #Name, json_boolean(Name));
+    json_object_set_new(doc, #Name, json_true());
 
   FOR_EACH_PROVIDER_FLAG(SET_PROVIDER_FLAG)
 #undef SET_PROVIDER_FLAG
@@ -147,6 +154,42 @@ void ServerCapabilities::operator>>(json_t* doc) const {
   json_t* completionProvider_node = json_object();
   KASSERT(completionProvider_node);
   completionProvider >> completionProvider_node;
-  json_object_set(doc, "completionProvider", completionProvider_node);
+  json_object_set_new(doc, "completionProvider", completionProvider_node);
+
+  if (codeActionProvider) {
+    json_t* node = json_object();
+    json_object_set_new(node, "codeActionKinds", ToJsonArray({"quickfix", "refactor", "source"}));
+    json_object_set_new(doc, "codeActionProvider", node);
+  }
+
+  if (renameProvider) {
+    json_t* node = json_object();
+    json_object_set_new(node, "prepareProvider", json_true());
+    json_object_set_new(doc, "renameProvider", node);
+  }
+
+  if (documentLinkProvider) {
+    json_t* node = json_object();
+    json_object_set_new(node, "resolveProvider", json_false());
+    json_object_set_new(doc, "documentLinkProvider", node);
+  }
+
+  if (!signatureHelpTriggerCharacters.empty()) {
+    json_t* node = json_object();
+    json_object_set_new(node, "triggerCharacters", ToJsonArray(signatureHelpTriggerCharacters));
+    json_object_set_new(doc, "signatureHelpProvider", node);
+  }
+
+  if (semanticTokensLegend) {
+    json_t* legend = json_object();
+    json_object_set_new(legend, "tokenTypes", ToJsonArray(semanticTokensLegend->tokenTypes));
+    json_object_set_new(legend, "tokenModifiers", ToJsonArray(semanticTokensLegend->tokenModifiers));
+
+    json_t* node = json_object();
+    json_object_set_new(node, "legend", legend);
+    json_object_set_new(node, "full", json_true());
+    json_object_set_new(node, "range", json_false());
+    json_object_set_new(doc, "semanticTokensProvider", node);
+  }
 }
 }  // namespace kura::lsp
