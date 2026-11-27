@@ -38,13 +38,15 @@ Kura is engineered to solve these friction points by providing:
 A complete counter implementation in Kura follows the Model-View-Update (MVU) pattern:
 
 ```kura
-type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int)
+type Message = Increment | Decrement | Reset | Set(Int) | Resized(Size) | Append(Int) | InitValue(String)
 
 type State = {
   value: Int,
   width: Float,
   height: Float,
   items: Seq<String>,
+  num_items: Int,
+  message: String,
 }
  
 fn init(): State =>
@@ -53,13 +55,15 @@ fn init(): State =>
     width: 0.0,
     height: 0.0,
     items: [  ],
+    num_items: 0,
+    message: "",
   }
 
 fn update(msg: Message, state: State): State =>
   match msg {
     Increment => { state | value += 1 }
     Decrement => { state | value -= 1 }
-    Reset => { state | value: 0, items: [] }
+    Reset => { state | value: 0, items: [], num_items: 0 }
     Set(n) => { state | value: n }
     Resized(size) =>
       {
@@ -67,14 +71,41 @@ fn update(msg: Message, state: State): State =>
         width: size.width,
         height: size.height,
       }
-    Append(n) => { state | items += [ "{n}"] }
+    InitValue(t) => { state | message: t, }
+    Append(n) => { state | items += [ "{n}"], num_items += 1 }
     _ => state
   }
 
-fn counter-buttons() =>
+test "test reset" {
+  let state = init()
+  assert(new_state.value == 1)
+  let new_state = update(Reset, state)
+  assert(new_state.value == 0)
+}
+
+test "test append" {
+  let state = init()
+  assert(state.num_items == 0)
+  let new_state = update(state, Append(10))
+  assert(new_state.num_items == 1)
+  assert(new_state.items == [ 10 ])
+}
+
+test "test increment" {
+  let state = update(Increment, init())
+  assert(state.value == 2)
+}
+
+test "test decrement" {
+  let state = update(Decrement, init())
+  assert(state.value == 0)
+}
+
+fn counter-buttons(): Node =>
   set text(size: 24px, 
            text-align: "center")
-  set button(justify: "center", padding: 16px, fill: white, radius: 16px)
+  set button(justify: "center", padding: 16px, fill: rgb(255, 252, 240), radius: 16px)
+
   #fragment{
     #button(on-click: Increment){
       #text("Increment")
@@ -86,41 +117,76 @@ fn counter-buttons() =>
   }
 
 
-fn row(label: String) =>
+fn row(label: String): Node =>
   set text(size: 24px)
-  #block(direction: "row", justify: "center", padding: 4px, fill: white){
+
+  #block(width: 100%, direction: "row", justify: "center", padding: 4px){
     #text(label)
   }
 
 fn view(state: State): Node => {
   set text(size: 24px)
-  set button(justify: "center", padding: 16px, fill: white)
+  set button(justify: "center", padding: 16px, fill: rgb(255, 252, 240), radius: 16px)
   set block(gap: 16px, padding: 32px, justify: "center")
+  set line(fill: rgb(67, 133, 190))
+
+  let background = match state.value {
+    n if n > 0 => rgb(135, 154, 57),
+    n if n < 0 => rgb(209, 77, 65),
+    _ => rgb(255, 252, 240),
+  }
 
   #block(direction: "column",
          width: 1fr,
          height: 1fr,
          fill: match state.value {
-                n if n > 0 => green,
-                n if n < 0 => red,
-                _ => white,
+                n if n > 0 => rgb(135, 154, 57),
+                n if n < 0 => rgb(209, 77, 65),
+                _ => rgb(255, 252, 240),
               }){
-    #block(direction: "column",
-           grow: 1){
-      #block(direction: "row"){
-        #text("value: {state.value}")
+    set block(direction: "column")
+
+    #block( height: 40%,
+           min-height: 40%,
+           shrink: 1){
+      set block(direction: "row")
+
+      #block(gap: 16px){
+        #input(size: 24px, grow: 1, placeholder: "Init value...", on-input: InitValue, state.message)
+
+        #button(shrink: 0){
+          #text("Set")
+        }
       }
 
-      #button(on-click: Append(state.value), radius: 16px){
+      #block {
+        #text("value: {state.value} ")
+      }
+
+      #block {
+        #text("number of values: {state.num_items} ")
+      }
+
+      #line
+
+      #button(on-click: Append(state.value)){
         #text("Append")
       }
+
+      #line
 
       counter-buttons()
     }
 
-    #list(){
-      for _, item in state.items =>
-        row(item)
+    #block(height: 60%, min-height: 30%, grow: 1){
+      #scroll(width: 100%){
+        #block(direction: "column"){
+          #list(width: 100%){
+            for _, item in state.items =>
+              row(item)
+          }
+        }
+      }
     }
   }
 }
