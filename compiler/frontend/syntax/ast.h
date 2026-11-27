@@ -49,6 +49,9 @@ namespace kura::syntax {
   V(VarRef)              \
   V(VariantRef)          \
   V(SeqLit)              \
+  V(TupleType)           \
+  V(TupleLit)            \
+  V(TuplePattern)        \
   V(RecordLit)           \
   V(Block)               \
   V(IfExpr)              \
@@ -548,6 +551,33 @@ struct VariantRef : Node {
 
 struct SeqLit : Node {
   DEFINE_NODE(SeqLit)
+  std::vector<Node*> elements{};
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, elements);
+  }
+};
+
+struct TupleType : Node {
+  DEFINE_NODE(TupleType);
+  std::vector<Node*> elements{};
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, elements);
+  }
+};
+
+struct TupleLit : Node {
+  DEFINE_NODE(TupleLit);
+  std::vector<Node*> elements{};
+
+  void ForEachChild(const NodeFn& fn) const override {
+    detail::VisitAll(fn, elements);
+  }
+};
+
+struct TuplePattern : Node {
+  DEFINE_NODE(TuplePattern);
   std::vector<Node*> elements{};
 
   void ForEachChild(const NodeFn& fn) const override {

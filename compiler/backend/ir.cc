@@ -245,6 +245,13 @@ auto NewListInstr::ToString() const -> std::string {
   return ss.str();
 }
 
+auto NewTupleInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "NewTupleInstr(";
+  ss << ")";
+  return ss.str();
+}
+
 auto SpreadInstr::ToString() const -> std::string {
   return "Spread(" + Name(GetInstance()) + ", " + Name(GetValue()) + ")";
 }

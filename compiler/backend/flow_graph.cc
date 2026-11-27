@@ -42,7 +42,7 @@ static inline auto HasNoSideEffects(Instruction* instr) -> bool {
          instr->IsLoadIndex() || instr->IsLoadLength() || instr->IsLoadVariantPayload() || instr->IsTestVariant() ||
          instr->IsNewVariant() || instr->IsNewList() || instr->IsNewRecord() || instr->IsLayoutRect() ||
          instr->IsRectIntersects() || instr->IsRectPastClip() || instr->IsNewColor() || instr->IsCastColor() ||
-         instr->IsMathCall() || instr->IsLoadFunction() || instr->IsCast();
+         instr->IsMathCall() || instr->IsLoadFunction() || instr->IsCast() || instr->IsNewTuple();
 }
 
 static inline auto IsZeroAlphaConstant(Definition* def) -> bool {
@@ -683,7 +683,7 @@ auto TypeNeedsARC(const CompileType* type) -> bool {
 auto InputIsConsumed(Instruction* instr, uint64_t idx) -> bool {
   if (instr->IsReturn() || instr->IsSeqAppend() || instr->IsUpdateRecord() || instr->IsNewList() ||
       instr->IsNewRecord() || instr->IsNewVariant() || instr->IsNewClosure() || instr->IsStoreLocal() ||
-      instr->IsCall() || instr->IsRegisterEvent()) {
+      instr->IsCall() || instr->IsRegisterEvent() || instr->IsNewTuple()) {
     return true;
   }
   if (instr->IsStoreProperty())

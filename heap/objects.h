@@ -109,6 +109,23 @@ struct SeqObj : HeapObject {
   }
 };
 
+struct TupleObj : HeapObject {
+  uint64_t count;
+
+  inline auto items() -> Value* {
+    return reinterpret_cast<Value*>(this + 1);
+  }
+
+  inline auto items() const -> const Value* {
+    return reinterpret_cast<const Value*>(this + 1);
+  }
+
+  static constexpr auto PayloadSize(const uint64_t count) -> uint64_t {
+    return sizeof(uint64_t) + count * sizeof(Value);
+  }
+};
+static_assert(sizeof(TupleObj) == 16);
+
 struct RecordObj : HeapObject {
   struct Field {
     uint64_t hash;
@@ -187,6 +204,7 @@ constexpr auto KindHasPointers(const ObjKind kind) -> bool {
     case ObjKind::kNode:
     case ObjKind::kClosure:
     case ObjKind::kBox:
+    case ObjKind::kTuple:
       return true;
     default:
       return false;
@@ -214,6 +232,12 @@ void VisitPointerSlots(HeapObject* obj, F&& visit) {
       const auto record = obj->As<RecordObj>();
       for (uint32_t idx = 0; idx < record->count; idx++)
         visit_value(record->fields()[idx].value);
+      return;
+    }
+    case ObjKind::kTuple: {
+      const auto tuple = obj->As<TupleObj>();
+      for (uint64_t idx = 0; idx < tuple->count; idx++)
+        visit_value(tuple->items()[idx]);
       return;
     }
     case ObjKind::kClosure: {
@@ -262,6 +286,7 @@ auto NewRecord(Heap& heap, Space space, uint32_t capacity) -> RecordObj*;
 auto NewClosure(Heap& heap, Space space, void* function, uint64_t arity, uint64_t captures) -> ClosureObj*;
 auto NewBox(Heap& heap, Space space, Value value) -> BoxObj*;
 auto NewNode(Heap& heap, Space space, const char* kind_name) -> NodeObj*;
+auto NewTuple(Heap& heap, Space space, uint64_t count) -> TupleObj*;
 }  // namespace kura::heap
 
 #endif  // KURA_HEAP_OBJECTS_H

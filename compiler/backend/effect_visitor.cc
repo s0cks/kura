@@ -414,8 +414,37 @@ auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, Tar
     return true;
   }
 
+  if (const auto tuple = pattern->AsTuplePattern()) {
+    auto all_irrefutable = true;
+    const auto& elements = tuple->GetElements();
+    for (size_t idx = 0; idx < elements.size(); idx++) {
+      const auto at = Bind(ConstantInstr::New(Int::New(static_cast<int64_t>(idx))));
+      const auto value = Bind(LoadIndexInstr::New(subject, at));
+      auto elem_irrefutable = false;
+      if (!LowerPattern(elements[idx], value, fail, &elem_irrefutable))
+        return false;
+
+      all_irrefutable = all_irrefutable && elem_irrefutable;
+    }
+    *irrefutable = all_irrefutable;
+    return true;
+  }
+
   Fail("unsupported pattern");
   return false;
+}
+
+auto EffectVisitor::VisitTuplePattern(expr::TuplePatternExpr* expr) -> VisitResult {
+  return Fail("a pattern can only appear in a match");
+}
+
+auto EffectVisitor::VisitTuple(expr::TupleExpr* expr) -> VisitResult {
+  ValueList values{};
+  if (!EvalList(expr->GetChildren(), &values))
+    return false;
+
+  ReturnDefinition(NewTupleInstr::New(values));
+  return true;
 }
 
 auto EffectVisitor::VisitMatch(expr::MatchExpr* expr) -> VisitResult {

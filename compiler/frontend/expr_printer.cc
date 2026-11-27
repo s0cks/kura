@@ -90,6 +90,16 @@ auto ExprPrinter::VisitCase(CaseExpr* expr) -> VisitResult {
   return true;
 }
 
+auto ExprPrinter::VisitTuple(TupleExpr* expr) -> VisitResult {
+  NOT_IMPLEMENTED;
+  return true;
+}
+
+auto ExprPrinter::VisitTuplePattern(TuplePatternExpr* expr) -> VisitResult {
+  NOT_IMPLEMENTED;
+  return true;
+}
+
 auto ExprPrinter::VisitNewColor(NewColorExpr* expr) -> VisitResult {
   NOT_IMPLEMENTED;
   return true;

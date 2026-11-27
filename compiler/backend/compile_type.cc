@@ -33,6 +33,15 @@ auto CompileType::Intern(CompileType* proto) -> CompileType* {
     case kFloat:
       ss << "Float";
       break;
+    case kTuple: {
+      ss << "(";
+      for (size_t idx = 0; idx < proto->members_.size(); idx++)
+        ss << (idx ? ", " : "") << proto->members_[idx]->ToString();
+      if (proto->members_.size() == 1)
+        ss << ",";
+      ss << ")";
+      break;
+    }
     case kNumber:
       ss << "Number";
       break;
@@ -152,6 +161,12 @@ auto CompileType::Color(ColorModel model) -> CompileType* {
 auto CompileType::Seq(CompileType* element) -> CompileType* {
   const auto type = new CompileType(kSeq);
   type->element_ = element;
+  return Intern(type);
+}
+
+auto CompileType::Tuple(std::vector<CompileType*> elements) -> CompileType* {
+  const auto type = new CompileType(kTuple);
+  type->members_ = std::move(elements);
   return Intern(type);
 }
 
@@ -286,6 +301,15 @@ auto CompileType::IsAssignable(CompileType* from, CompileType* to) -> bool {
       return from->IsNumeric();
     case kSeq:
       return from->IsSeq() && IsAssignable(from->element_, to->element_);
+    case kTuple: {
+      if (!from->IsTuple() || from->members_.size() != to->members_.size())
+        return false;
+      for (size_t idx = 0; idx < from->members_.size(); idx++) {
+        if (!IsAssignable(from->members_[idx], to->members_[idx]))
+          return false;
+      }
+      return true;
+    }
 
 #define DEFINE_CASE(Name) \
   case k##Name:           \
@@ -353,6 +377,12 @@ auto CompileType::Join(CompileType* a, CompileType* b) -> CompileType* {
     return Number();
   if (a->IsSeq() && b->IsSeq())
     return Seq(Join(a->element_, b->element_));
+  if (a->IsTuple() && b->IsTuple() && a->members_.size() == b->members_.size()) {
+    std::vector<CompileType*> elements{};
+    for (size_t idx = 0; idx < a->members_.size(); idx++)
+      elements.push_back(Join(a->members_[idx], b->members_[idx]));
+    return Tuple(std::move(elements));
+  }
   if (a->IsRecord() && b->IsRecord() && a->fields_.size() == b->fields_.size()) {
     std::vector<Field> fields{};
     for (size_t idx = 0; idx < a->fields_.size(); idx++) {

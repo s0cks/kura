@@ -73,6 +73,7 @@ auto RepOf(CompileType* type) -> Rep {
     case CompileType::kString:
     case CompileType::kNode:
     case CompileType::kSeq:
+    case CompileType::kTuple:
     case CompileType::kRecord:
     case CompileType::kFunction:
       return Rep::kPtr;
@@ -121,6 +122,8 @@ auto TagOf(CompileType* type) -> uint64_t {
       return rt::kTagNode;
     case CompileType::kSeq:
       return rt::kTagSeq;
+    case CompileType::kTuple:
+      return rt::kTagTuple;
     case CompileType::kRecord:
       return rt::kTagRecord;
     case CompileType::kFunction:
@@ -392,7 +395,8 @@ class Generator {
             sv == "kura_rt_ffi_error" || sv == "kura_rt_test_fail" || sv == "kura_rt_test_fail_cmp") {
           fn->addFnAttr(llvm::Attribute::Cold);
         } else if (sv == "kura_rt_len" || sv == "kura_rt_string_cmp" || sv == "kura_rt_record_count" ||
-                   sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_closure_new") {
+                   sv == "kura_rt_seq_get_ptr" || sv == "kura_rt_seq_get_bits" || sv == "kura_rt_tuple_get_ptr" ||
+                   sv == "kura_rt_tuple_get_bits" || sv == "kura_rt_closure_new") {
           fn->setOnlyReadsMemory();
         }
       }
@@ -1456,11 +1460,15 @@ class Generator {
 
     // Or tag is in {5, 6, 10, 11, 12, 13}:
     // Fast bitmask test for tags 0..15: (1 << 5) | (1 << 6) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) = 0x3C60
-    llvm::Value* in_range = b_.CreateICmpULT(tag, b_.getInt64(16), "tag.u16");
+    constexpr uint64_t kHeapTagMask = (1ULL << rt::kTagString) | (1ULL << rt::kTagColor) | (1ULL << rt::kTagNode) |
+                                      (1ULL << rt::kTagSeq) | (1ULL << rt::kTagRecord) | (1ULL << rt::kTagFunction) |
+                                      (1ULL << rt::kTagTuple);
+
+    llvm::Value* in_range = b_.CreateICmpULT(tag, b_.getInt64(32), "tag.u32");
     llvm::Value* safe_shift = b_.CreateSelect(in_range, tag, b_.getInt64(0));
     llvm::Value* bit = b_.CreateShl(b_.getInt64(1), safe_shift);
-    llvm::Value* is_obj_tag =
-        b_.CreateAnd(in_range, b_.CreateICmpNE(b_.CreateAnd(bit, b_.getInt64(0x3C60)), b_.getInt64(0)), "tag.is_obj");
+    llvm::Value* is_obj_tag = b_.CreateAnd(
+        in_range, b_.CreateICmpNE(b_.CreateAnd(bit, b_.getInt64(kHeapTagMask)), b_.getInt64(0)), "tag.is_obj");
 
     llvm::Value* may_hold_ptr = b_.CreateOr(is_variant, is_obj_tag, "tag.has_ptr");
 
@@ -1944,6 +1952,20 @@ class Generator {
     Fail("internal error: can't generate a constant of " + value->ToString());
   }
 
+  LOWER_FN(NewTuple) {
+    llvm::Value* tuple = nullptr;
+    if (instr->IsStackAllocated()) {
+      tuple = StackBlock(heap::TupleObj::PayloadSize(instr->GetInputs().size()));
+      CallRt("kura_rt_stack_tuple", void_ty_, {tuple, b_.getInt64(instr->GetInputs().size())});
+    } else {
+      tuple = CallRt("kura_rt_tuple_new", ptr_ty_, {b_.getInt64(instr->GetInputs().size())});
+    }
+    uint64_t index = 0;
+    for (const auto input : instr->GetInputs())
+      CallRt("kura_rt_tuple_set", void_ty_, {tuple, b_.getInt64(index++), As(input, CompileType::Any())});
+    return Define(instr, tuple, instr->GetCompileType());
+  }
+
   void EmitInstruction(Instruction* instr) {
 #define CHECK(Name)                     \
   if (const auto i = instr->As##Name()) \
@@ -1989,6 +2011,7 @@ class Generator {
     CHECK(CastColor);
     CHECK(MathCall);
     CHECK(Assert);
+    CHECK(NewTuple);
 
 #undef CHECK
 
@@ -2073,6 +2096,16 @@ class Generator {
       const auto index = As(l->GetIndex(), CompileType::Int());
       CompileType* elem_ty = l->GetCompileType();
 
+      if (inst_ty->IsTuple() && elem_ty) {
+        const Rep elem_rep = RepOf(elem_ty);
+        if (elem_rep == Rep::kPtr)
+          return Define(l, CallRt("kura_rt_tuple_get_ptr", ptr_ty_, {object, index}), elem_ty);
+        if (elem_rep == Rep::kInt || elem_rep == Rep::kFloat || elem_rep == Rep::kBool)
+          return Define(l, FromBits(CallRt("kura_rt_tuple_get_bits", i64_, {object, index}), elem_ty), elem_ty);
+        if (elem_rep == Rep::kNone)
+          return Define(l, b_.getInt8(0), elem_ty);
+        return Define(l, CallRt("kura_rt_tuple_get", value_ty_, {object, index}), elem_ty);
+      }
       if (inst_ty->IsSeq() && elem_ty && RepOf(elem_ty) != Rep::kTagged && RepOf(elem_ty) != Rep::kNone) {
         if (RepOf(elem_ty) == Rep::kPtr)
           return Define(l, CallRt("kura_rt_seq_get_ptr", ptr_ty_, {object, index}), elem_ty);

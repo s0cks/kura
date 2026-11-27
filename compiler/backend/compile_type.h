@@ -32,6 +32,7 @@ class CompileType {
     kFunction,
     kUnion,
     kHandle,
+    kTuple,
 
 #define DEFINE_KIND(Name) k##Name,
     FOR_EACH_COLOR_MODEL(DEFINE_KIND)
@@ -97,6 +98,7 @@ class CompileType {
   DEFINE_KIND_CHECK(Function)
   DEFINE_KIND_CHECK(Union)
   DEFINE_KIND_CHECK(Handle)
+  DEFINE_KIND_CHECK(Tuple)
   FOR_EACH_COLOR_MODEL(DEFINE_KIND_CHECK)
 #undef DEFINE_KIND_CHECK
 
@@ -183,6 +185,7 @@ class CompileType {
   static auto Float() -> CompileType*;
   static auto Number() -> CompileType*;
   static auto String() -> CompileType*;
+  static auto Tuple(const std::vector<CompileType*> elements) -> CompileType*;
 
 #define DEFINE_NEW(Name) static auto Name() -> CompileType*;
   FOR_EACH_COLOR_MODEL(DEFINE_NEW)

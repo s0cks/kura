@@ -22,7 +22,8 @@ class StorePropertyExpr;
   V(Variant)                  \
   V(Record)                   \
   V(Function)                 \
-  V(Union)
+  V(Union)                    \
+  V(Tuple)
 
 #define FORWARD_DECLARE(Name) class Name##TypeExpr;
 FOR_EACH_TYPE_EXPR(FORWARD_DECLARE)
@@ -187,6 +188,40 @@ class FunctionTypeExpr : public TypeExpr {
   }
 
   DECLARE_TYPE_EXPR(Function);
+};
+
+class TupleTypeExpr : public TypeExpr {
+ private:
+  std::vector<TypeExpr*> elements_{};
+
+ public:
+  explicit TupleTypeExpr(std::vector<TypeExpr*> elements) :
+    elements_(std::move(elements)) {}
+  ~TupleTypeExpr() override = default;
+
+  auto GetElements() const -> const std::vector<TypeExpr*>& {
+    return elements_;
+  }
+
+  auto ToString() const -> std::string override {
+    std::string out = "(";
+    for (size_t i = 0; i < elements_.size(); i++) {
+      if (i > 0)
+        out += ", ";
+      out += elements_[i]->ToString();
+    }
+    if (elements_.size() == 1)
+      out += ",";
+    out += ")";
+    return out;
+  }
+
+  DECLARE_TYPE_EXPR(Tuple);
+
+ public:
+  static inline auto New(std::vector<TypeExpr*> elements) -> TupleTypeExpr* {
+    return new TupleTypeExpr(std::move(elements));
+  }
 };
 
 // `Node | None`, `Click(Position) | Tick`

@@ -289,6 +289,15 @@ class FreeLocals : public expr::ExprVisitor {
     return true;
   }
 
+  auto VisitTuple(expr::TupleExpr* expr) -> VisitResult override {
+    for (const auto child : expr->GetChildren()) {
+      if (!Walk(child))
+        return false;
+    }
+
+    return true;
+  }
+
   auto VisitIf(expr::IfExpr* expr) -> VisitResult override {
     return Walk(expr->GetCondition()) && Walk(expr->GetThen()) && Walk(expr->GetElse());
   }
@@ -388,6 +397,10 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitWildcardPattern(expr::WildcardPatternExpr*) -> VisitResult override {
+    return true;
+  }
+
+  auto VisitTuplePattern(expr::TuplePatternExpr* expr) -> VisitResult override {
     return true;
   }
 

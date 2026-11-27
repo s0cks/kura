@@ -184,6 +184,13 @@ class Analyzer {
     if (const auto variant = te->AsVariant())
       return CompileType::Variant(variant->GetTypeName(), Resolve(variant->GetPayload(), params, where));
 
+    if (const auto tuple = te->AsTuple()) {
+      std::vector<CompileType*> elements{};
+      for (auto* elem : tuple->GetElements())
+        elements.push_back(Resolve(elem, params, where));
+      return CompileType::Tuple(std::move(elements));
+    }
+
     if (const auto record = te->AsRecord()) {
       std::vector<CompileType::Field> fields{};
       for (const auto& field : record->GetFields())
@@ -1075,6 +1082,13 @@ class Analyzer {
     if (!def)
       return false;
 
+    if (const auto t = instr->AsNewTuple()) {
+      std::vector<CompileType*> elements{};
+      for (uint64_t idx = 0; idx < t->GetNumberOfInputs(); idx++)
+        elements.push_back(TypeOf(t->GetInputAt(idx)));
+      return Set(def, CompileType::Tuple(std::move(elements)));
+    }
+
     if (const auto t = instr->AsRectIntersects())
       return Set(def, CompileType::Bool());
 
@@ -1184,6 +1198,23 @@ class Analyzer {
       const auto index = TypeOf(l->GetIndex());
       if (!(index->IsInt() || index->IsNumber() || index->IsAny() || index->IsNever()))
         Report(instr, "an index must be an Int, not " + index->ToString());
+
+      if (type->IsTuple()) {
+        const auto c_instr = l->GetIndex()->GetDefinition() ? l->GetIndex()->GetDefinition()->AsConstant() : nullptr;
+        const auto c = c_instr ? c_instr->AsConstantInt() : nullptr;
+        if (!c) {
+          Report(instr, "tuple index must be a constant integer literal");
+          return Set(def, CompileType::Any());
+        }
+        const int64_t idx = c->GetValue();
+        const auto& elems = type->GetMembers();
+        if (idx < 0 || static_cast<size_t>(idx) >= elems.size()) {
+          Report(instr, "tuple index " + std::to_string(idx) + " out of bounds for tuple of size " +
+                            std::to_string(elems.size()));
+          return Set(def, CompileType::Any());
+        }
+        return Set(def, elems[static_cast<size_t>(idx)]);
+      }
 
       if (type->IsSeq())
         return Set(def, type->GetElementType());

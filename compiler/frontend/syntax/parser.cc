@@ -129,7 +129,7 @@ const auto kItemStart =
 // What can begin a match arm. Arms may be separated by a comma or just by starting the next one.
 const auto kPatternStart =
     K::Set({K::kUnderscore, K::kIdent, K::kNone, K::kUpperIdent, K::kMinus, K::kNumber, K::kString, K::kTrue, K::kFalse,
-            K::kPxLit, K::kPctLit, K::kFrLit, K::kColorLit, K::kLBrace, K::kDotDot, K::kDotDotEq});
+            K::kLParen, K::kPxLit, K::kPctLit, K::kFrLit, K::kColorLit, K::kLBrace, K::kDotDot, K::kDotDotEq});
 
 // What can stand as a child of a `#element { ... }` besides an element, a binding or a `set` rule.
 const auto kChildExpressionStart =
@@ -263,6 +263,7 @@ class TreeBuilder {
   // Parsing a guard (`pattern if guard => ...`, `for ... if guard => ...`): a `(...)` followed by `=>` is the
   // arrow of the arm or loop, not a lambda.
   bool in_guard_ = false;
+  bool in_fn_return_type_ = false;
   // Parsing the condition of an `if`, `when` or `match`, where a `{` after `x is Name` starts the block, not a
   // record pattern. Parentheses switch it off: `if (x is Point { x, y }) { ... }`.
   bool no_brace_pattern_ = false;
@@ -768,6 +769,49 @@ class TreeBuilder {
     ExpectClosing(K::kGt, open.span);
   }
 
+  auto ParseParenType() -> Node* {
+    const bool allow_arrow = !in_fn_return_type_;
+    FlagScope nested_type(in_fn_return_type_, false);
+
+    const auto begin = Here();
+    const auto open = Next();  // '('
+    std::vector<Node*> items{};
+    bool saw_comma = false;
+
+    while (!Is(K::kRParen) && !AtEof() && !AtItemKeyword()) {
+      items.push_back(ParseTypeExpr());
+      if (Accept(K::kComma)) {
+        saw_comma = true;
+        continue;
+      }
+      break;
+    }
+    ExpectClosing(K::kRParen, open.span);
+
+    if (allow_arrow && Accept(K::kFatArrow)) {
+      auto* fn = New<FunctionType>(begin);
+      fn->params = std::move(items);
+      fn->result = ParseTypeExpr();
+      fn->span = SpanFrom(begin);
+      return fn;
+    }
+
+    if (items.empty()) {
+      Report(DiagnosticCode::kUnexpectedToken, SpanFrom(begin), "empty `()` is not a valid tuple type",
+             "empty parentheses")
+          .WithHelp("use `None` for no value, or add element types like `(Int, String)`");
+      return NewError(begin);
+    }
+
+    if (items.size() == 1 && !saw_comma)
+      return items[0];
+
+    auto* tuple = New<TupleType>(begin);
+    tuple->elements = std::move(items);
+    tuple->span = SpanFrom(begin);
+    return tuple;
+  }
+
   auto ParseTypeMember() -> Node* {
     NestingGuard guard(*this);
     const auto begin = Here();
@@ -812,7 +856,7 @@ class TreeBuilder {
       case K::kLBrace:
         return ParseRecordType();
       case K::kLParen:
-        return ParseFunctionType();
+        return ParseParenType();
       default:
         ExpectedHere("a type");
         return NewMissing();
@@ -1064,6 +1108,8 @@ class TreeBuilder {
         }
         return first;
       }
+      case K::kLParen:
+        return ParseTuplePattern(begin);
       default:
         ExpectedHere("a pattern");
         return NewMissing();
@@ -1679,6 +1725,8 @@ class TreeBuilder {
       Next();
     if (binding->is_let && Is(K::kLBrace))
       binding->pattern = ParseRecordPattern(Here(), false, Name{});
+    else if (binding->is_let && Is(K::kLParen))
+      binding->pattern = ParseTuplePattern(Here());
     else
       binding->name = ParseName("a name");
     if (binding->is_let && Accept(K::kColon))
@@ -2157,15 +2205,32 @@ class TreeBuilder {
         if (!in_guard_ && LooksLikeLambda())
           return ParseLambda();
         const auto open = Next();
-        auto* paren = New<Paren>(begin);
-        {
-          FlagScope no_guard(in_guard_, false);
-          FlagScope no_condition(no_brace_pattern_, false);
-          paren->inner = ParseExpression();
+        FlagScope no_guard(in_guard_, false);
+        FlagScope no_condition(no_brace_pattern_, false);
+
+        if (Accept(K::kRParen)) {
+          Report(DiagnosticCode::kUnexpectedToken, SpanFrom(begin), "empty `()` is not a valid expression",
+                 "empty parentheses")
+              .WithHelp("use `None` for no value, or write a tuple like `(1, 2)`");
+          return NewError(begin);
         }
-        ExpectClosing(K::kRParen, open.span);
-        paren->span = SpanFrom(begin);
-        return paren;
+
+        auto* first = ParseExpression();
+        if (!Accept(K::kComma)) {
+          auto* paren = New<Paren>(begin);
+          paren->inner = first;
+          ExpectClosing(K::kRParen, open.span);
+          paren->span = SpanFrom(begin);
+          return paren;
+        }
+
+        auto* tuple = New<TupleLit>(begin);
+        tuple->elements.push_back(first);
+        ParseDelimited(K::kRParen, open.span, [&] {
+          tuple->elements.push_back(ParseExpression());
+        });
+        tuple->span = SpanFrom(begin);
+        return tuple;
       }
       case K::kElse:
         ReportHere(DiagnosticCode::kDuplicateElse, "this `else` has no `if` to belong to", "no matching `if`")
@@ -2179,6 +2244,16 @@ class TreeBuilder {
         ExpectedHere("an expression");
         return NewMissing();
     }
+  }
+
+  auto ParseTuplePattern(const uint32_t begin) -> Node* {
+    const auto open = Next();  // '('
+    auto* pattern = New<TuplePattern>(begin);
+    ParseDelimited(K::kRParen, open.span, [&] {
+      pattern->elements.push_back(ParsePattern());
+    });
+    pattern->span = SpanFrom(begin);
+    return pattern;
   }
 
   // ---- strings --------------------------------------------------------------
@@ -2439,8 +2514,10 @@ class TreeBuilder {
                     (decl->name.missing ? std::string("name") : decl->name.text) + "() => ...`");
     }
 
-    if (Accept(K::kColon))
+    if (Accept(K::kColon)) {
+      FlagScope ret_type(in_fn_return_type_, true);
       decl->result = ParseTypeExpr();
+    }
 
     if (!decl->result) {
       Warn(DiagnosticCode::kFnMissingResultType, decl->name.span,
@@ -2487,6 +2564,7 @@ class TreeBuilder {
       ExpectedHere("`(`");
     }
     if (Accept(K::kColon)) {
+      FlagScope ret_type(in_fn_return_type_, true);
       decl->result = ParseTypeExpr();
     } else {
       ReportHere(DiagnosticCode::kExternWithoutReturnType,

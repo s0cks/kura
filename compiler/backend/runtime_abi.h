@@ -38,6 +38,7 @@ enum Tag : uint64_t {
   kTagFunction = 13,
   kTagHandle = 14,
   kTagVoid = 15,
+  kTagTuple = 16,
 };
 
 static constexpr const uint64_t kVariantBit = 1ULL << 63;
@@ -208,6 +209,12 @@ auto MakeString(std::string_view value) -> KuraValue;
   V(kura_rt_string_cmp)           \
   V(kura_rt_seq_new)              \
   V(kura_rt_seq_get)              \
+  V(kura_rt_tuple_new)            \
+  V(kura_rt_stack_tuple)          \
+  V(kura_rt_tuple_get_ptr)        \
+  V(kura_rt_tuple_get_bits)       \
+  V(kura_rt_tuple_set)            \
+  V(kura_rt_tuple_get)            \
   V(kura_rt_vec_from)             \
   V(kura_rt_seq_from_vec)         \
   V(kura_rt_seq_concat)           \
@@ -300,6 +307,13 @@ int64_t kura_rt_string_cmp(void* a, void* b);
 
 void* kura_rt_color_new(const float* components, uint64_t model);
 void kura_rt_color_unbox(const void* color_obj, uint64_t target_model, float* out);
+
+void kura_rt_stack_tuple(void* memory, const uint64_t count);
+void kura_rt_tuple_set(void* tuple_ptr, const uint64_t index, const uint64_t tag, const uint64_t bits);
+auto kura_rt_tuple_get(void* tuple_ptr, const uint64_t index) -> KuraValue;
+auto kura_rt_tuple_get_bits(void* tuple_ptr, const uint64_t index) -> uint64_t;
+auto kura_rt_tuple_get_ptr(void* tuple_ptr, const uint64_t index) -> void*;
+void* kura_rt_tuple_new(const uint64_t count);
 
 void* kura_rt_seq_new(uint64_t capacity);
 KuraValue kura_rt_seq_get(void* seq, int64_t index);

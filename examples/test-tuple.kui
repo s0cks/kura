@@ -1,0 +1,21 @@
+test "test basic tuple" {
+  let t = (10, 11)
+  assert(t[0] == 10)
+  assert(t[1] == 11)
+}
+
+test "test tuple to string" {
+  let t = (113, 1212, 12)
+  assert("{t[0]}, {t[1]}, {t[2]}" == "113, 1212, 12")
+}
+
+type Pos = (Int, Int)
+
+fn add-two(t: Pos): Pos =>
+  (t[0] + 2, t[1] + 2)
+
+test "test helper" {
+  let t = add-two((11, 11))
+  assert(t[0] == 13)
+  assert(t[1] == 13)
+}

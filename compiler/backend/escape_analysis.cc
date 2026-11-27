@@ -24,6 +24,8 @@ class Analyzer {
   static auto IsCandidate(Instruction* instr) -> bool {
     if (const auto list = instr->AsNewList())
       return true;
+    if (const auto tuple = instr->AsNewTuple())
+      return true;
     if (const auto record = instr->AsNewRecord())
       return !record->HasInputs();  // a spread makes its size known only when it runs
     if (const auto variant = instr->AsNewVariant())
@@ -180,6 +182,10 @@ class Analyzer {
 
     // what keeps it: it lives as long as what it is put in
     if (const auto l = user->AsNewList()) {
+      Contain(root, result);
+      return nullptr;
+    }
+    if (const auto t = user->AsNewTuple()) {
       Contain(root, result);
       return nullptr;
     }

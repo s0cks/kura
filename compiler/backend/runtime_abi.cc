@@ -12,9 +12,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "backend/compile_type.h"
 #include "binary_op.h"
 #include "common.h"
 #include "heap/color_storage.h"
+#include "heap/header.h"
 #include "heap/heap.h"
 #include "heap/objects.h"
 #include "object.h"
@@ -34,6 +36,7 @@ using heap::ObjKind;
 using heap::RecordObj;
 using heap::SeqObj;
 using heap::StringObj;
+using heap::TupleObj;
 
 thread_local Phase tl_phase = Phase::kModel;
 
@@ -75,6 +78,10 @@ auto NewStr(const std::string_view text) -> StringObj* {
 
 auto NewSeqObj(const uint64_t capacity) -> SeqObj* {
   return heap::NewSeq(TheHeap(), AllocationSpace(), capacity);
+}
+
+auto NewTupleObj(const uint64_t count) -> TupleObj* {
+  return heap::NewTuple(TheHeap(), AllocationSpace(), count);
 }
 
 auto NewRecordObj(const uint64_t capacity) -> RecordObj* {
@@ -128,6 +135,8 @@ auto TagName(const uint64_t tag) -> std::string {
   switch (tag) {
     case kTagNone:
       return "None";
+    case kTagTuple:
+      return "Tuple";
     case kTagBool:
       return "Bool";
     case kTagInt:
@@ -250,6 +259,18 @@ auto RecordEqual(const RecordObj* a, const RecordObj* b) -> bool {
   return true;
 }
 
+auto TupleEqual(const TupleObj* a, const TupleObj* b) -> bool {
+  const auto x = a ? a->count : 0;
+  const auto y = b ? b->count : 0;
+  if (x != y)
+    return false;
+  for (uint64_t idx = 0; idx < x; idx++) {
+    if (!Equal(FromHeap(a->items()[idx]), FromHeap(b->items()[idx])))
+      return false;
+  }
+  return true;
+}
+
 auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
   if (IsScalar(a.tag) && IsScalar(b.tag) && a.tag != b.tag) {
     const auto x = a.tag == kTagInt ? static_cast<double>(static_cast<int64_t>(a.bits)) : AsDouble(a.bits);
@@ -266,6 +287,8 @@ auto Equal(const KuraValue& a, const KuraValue& b) -> bool {
     case kTagBool:
     case kTagInt:
       return a.bits == b.bits;
+    case kTagTuple:
+      return TupleEqual(reinterpret_cast<TupleObj*>(a.bits), reinterpret_cast<TupleObj*>(b.bits));
     case kTagFloat:
     case kTagPx:
     case kTagPct:
@@ -320,6 +343,17 @@ auto Format(const KuraValue& value) -> std::string {
   switch (value.tag) {
     case kTagNone:
       return "None";
+    case kTagTuple: {
+      const auto tuple = reinterpret_cast<TupleObj*>(value.bits);
+      std::stringstream ss{};
+      ss << "(";
+      for (uint64_t idx = 0; idx < tuple->count; idx++)
+        ss << (idx ? ", " : "") << Format(FromHeap(tuple->items()[idx]));
+      if (tuple->count == 1)
+        ss << ",";
+      ss << ")";
+      return ss.str();
+    }
     case kTagBool:
       return value.bits ? "true" : "false";
     case kTagInt:
@@ -508,6 +542,14 @@ class FrameMover {
           copy->Push(Move(seq->items()[idx]));
         return reinterpret_cast<uword>(copy);
       }
+      case ObjKind::kTuple: {
+        const auto tuple = from->As<TupleObj>();
+        const auto copy = heap::NewTuple(heap_, space, tuple->count);
+        moved_[from->address()] = reinterpret_cast<uword>(copy);
+        for (uint64_t idx = 0; idx < tuple->count; idx++)
+          copy->items()[idx] = Move(tuple->items()[idx]);
+        return reinterpret_cast<uword>(copy);
+      }
       case ObjKind::kRecord: {
         const auto record = from->As<RecordObj>();
         const auto copy = heap::NewRecord(heap_, space, record->count);
@@ -649,6 +691,47 @@ void* kura_rt_string_join(void* const* parts, const uint64_t count) {
 }
 
 void kura_rt_destroy(void* ptr) {}
+
+static void InitStackObject(void* memory, const kura::heap::ObjKind kind, const uint64_t payload) {
+  const auto total = (sizeof(kura::heap::HeapObject) + payload + kura::kObjectAlignment - 1) &
+                     ~static_cast<uint64_t>(kura::kObjectAlignment - 1);
+  std::memset(memory, 0, total);
+  static_cast<kura::heap::HeapObject*>(memory)->header =
+      kura::heap::ObjectHeader::Make(kind, kura::heap::Space::kStatic, total);
+}
+
+void kura_rt_stack_tuple(void* memory, const uint64_t count) {
+  InitStackObject(memory, kura::heap::ObjKind::kTuple, kura::heap::TupleObj::PayloadSize(count));
+  static_cast<TupleObj*>(memory)->count = count;
+}
+
+void kura_rt_tuple_set(void* tuple_ptr, const uint64_t index, const uint64_t tag, const uint64_t bits) {
+  auto* tuple = static_cast<TupleObj*>(tuple_ptr);
+  KURA_HEAP_CHECK(tuple != nullptr && index < tuple->count, "tuple index %llu out of bounds (count=%llu)",
+                  static_cast<unsigned long long>(index), static_cast<unsigned long long>(tuple->count));
+  tuple->items()[index] = kura::heap::Value{tag, bits};
+}
+
+auto kura_rt_tuple_get(void* tuple_ptr, const uint64_t index) -> KuraValue {
+  auto* tuple = static_cast<TupleObj*>(tuple_ptr);
+  KURA_HEAP_CHECK(tuple != nullptr && index < tuple->count, "tuple index %llu out of bounds (count=%llu)",
+                  static_cast<unsigned long long>(index), static_cast<unsigned long long>(tuple->count));
+  return FromHeap(tuple->items()[index]);
+}
+
+auto kura_rt_tuple_get_bits(void* tuple_ptr, const uint64_t index) -> uint64_t {
+  auto* tuple = static_cast<TupleObj*>(tuple_ptr);
+  KURA_HEAP_CHECK(tuple != nullptr && index < tuple->count, "tuple index %llu out of bounds (count=%llu)",
+                  static_cast<unsigned long long>(index), static_cast<unsigned long long>(tuple->count));
+  return tuple->items()[index].bits;
+}
+
+auto kura_rt_tuple_get_ptr(void* tuple_ptr, const uint64_t index) -> void* {
+  auto* tuple = static_cast<TupleObj*>(tuple_ptr);
+  KURA_HEAP_CHECK(tuple != nullptr && index < tuple->count, "tuple index %llu out of bounds (count=%llu)",
+                  static_cast<unsigned long long>(index), static_cast<unsigned long long>(tuple->count));
+  return reinterpret_cast<void*>(tuple->items()[index].bits);
+}
 
 void* kura_rt_seq_get_ptr(void* seq, const int64_t index) {
   const auto s = static_cast<SeqObj*>(seq);
@@ -805,6 +888,10 @@ int64_t kura_rt_string_cmp(void* a, void* b) {
 
 void* kura_rt_seq_new(const uint64_t capacity) {
   return NewSeqObj(capacity);
+}
+
+void* kura_rt_tuple_new(const uint64_t count) {
+  return NewTupleObj(count);
 }
 
 KuraValue kura_rt_seq_get(void* seq, const int64_t index) {
@@ -1026,14 +1113,6 @@ void* kura_rt_closure_fn(void* closure, const uint64_t arguments) {
     Panic("expected " + std::to_string(c->arity) + " argument(s) but got " + std::to_string(arguments));
 
   return c->function;
-}
-
-static void InitStackObject(void* memory, const kura::heap::ObjKind kind, const uint64_t payload) {
-  const auto total = (sizeof(kura::heap::HeapObject) + payload + kura::kObjectAlignment - 1) &
-                     ~static_cast<uint64_t>(kura::kObjectAlignment - 1);
-  std::memset(memory, 0, total);
-  static_cast<kura::heap::HeapObject*>(memory)->header =
-      kura::heap::ObjectHeader::Make(kind, kura::heap::Space::kStatic, total);
 }
 
 void kura_rt_stack_seq(void* memory, const uint64_t capacity) {

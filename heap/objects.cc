@@ -59,6 +59,14 @@ auto NewString(Heap& heap, const Space space, const std::string_view data) -> St
   return str;
 }
 
+auto NewTuple(Heap& heap, Space space, uint64_t count) -> TupleObj* {
+  const auto tuple = New<TupleObj>(heap, space, ObjKind::kTuple, TupleObj::PayloadSize(count));
+  if (!tuple)
+    return nullptr;
+  tuple->count = count;
+  return tuple;
+}
+
 static_assert(sizeof(ColorObj) == 32);
 
 auto NewColor(Heap& heap, const Space space, const ColorModel model, const float* components) -> ColorObj* {

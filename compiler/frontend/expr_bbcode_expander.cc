@@ -14,6 +14,16 @@ VISIT_FN(Literal) {
   return Stop();
 }
 
+VISIT_FN(Tuple) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
+VISIT_FN(TuplePattern) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
 VISIT_FN(MathCall) {
   // TODO(@s0cks): implement
   return Stop();

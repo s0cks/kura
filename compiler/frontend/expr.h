@@ -54,6 +54,8 @@ namespace kura::expr {
   V(MathCall)            \
   V(CastColor)           \
   V(NewColor)            \
+  V(Tuple)               \
+  V(TuplePattern)        \
   V(Assert)
 
 class Expr;
@@ -1528,6 +1530,76 @@ class AssertExpr : public TemplateExpr<2> {
  public:
   static inline auto New(Expr* cond, Expr* message) -> AssertExpr* {
     return new AssertExpr(cond, message);
+  }
+};
+
+class TupleExpr : public DynamicTemplateExpr {
+ public:
+  explicit TupleExpr(const ExprList children) :
+    DynamicTemplateExpr(std::move(children)) {}
+  ~TupleExpr() override = default;
+
+  DECLARE_EXPR_TYPE(Tuple);
+
+ public:
+  static inline auto New(const ExprList children) -> Expr* {
+    return new TupleExpr(std::move(children));
+  }
+};
+
+class TuplePatternExpr : public PatternExpr {
+ public:
+  using ElementList = std::vector<PatternExpr*>;
+
+ private:
+  ElementList elements_{};
+
+ public:
+  explicit TuplePatternExpr(ElementList elements) :
+    elements_(std::move(elements)) {}
+  ~TuplePatternExpr() override = default;
+
+  auto GetElements() const -> const ElementList& {
+    return elements_;
+  }
+
+  auto GetNumberOfChildren() const -> uint64_t override {
+    return elements_.size();
+  }
+
+  auto GetChildAt(const uint64_t idx) const -> Expr* override {
+    return elements_[idx];
+  }
+
+  auto HasChildAt(const uint64_t idx) const -> bool override {
+    return idx < elements_.size() && elements_[idx] != nullptr;
+  }
+
+  auto HasChildren() const -> bool override {
+    return !elements_.empty();
+  }
+
+  auto VisitChildren(ExprVisitor* vis) -> VisitResult override {
+    for (const auto& elem : elements_) {
+      if (!elem->Accept(vis))
+        return VisitResult::kStop;
+    }
+    return VisitResult::kContinue;
+  }
+
+  auto VisitChildren(const std::function<VisitResult(Expr*)> vis) -> VisitResult override {
+    for (const auto& elem : elements_) {
+      if (!vis(elem))
+        return VisitResult::kStop;
+    }
+    return VisitResult::kContinue;
+  }
+
+  DECLARE_EXPR_TYPE(TuplePattern);
+
+ public:
+  static inline auto New(ElementList elements) -> PatternExpr* {
+    return new TuplePatternExpr(std::move(elements));
   }
 };
 

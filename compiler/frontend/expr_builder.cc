@@ -617,6 +617,9 @@ auto ExprBuilder::BuildType(const Node* node) -> TypeExpr* {
   if (const auto* named = node->As<syntax::NamedType>())
     return new NamedTypeExpr(named->name.text, build_all(named->args));
 
+  if (const auto* tuple = node->As<syntax::TupleType>())
+    return new TupleTypeExpr(build_all(tuple->elements));
+
   if (const auto* qualified = node->As<syntax::QualifiedType>()) {
     auto args = build_all(qualified->args);
     const auto& alias = qualified->qualifier.text;
@@ -668,6 +671,12 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return Literal(NumberLiteral(node->span, node->As<syntax::NumberLit>()->text, false));
     case Node::kStringLit:
       return Literal(String::New(node->As<syntax::StringLit>()->value));
+    case Node::kTupleLit: {
+      ExprList items{};
+      for (const auto* item : node->As<syntax::TupleLit>()->elements)
+        items.push_back(Build(item));
+      return TupleExpr::New(std::move(items));
+    }
     case Node::kBoolLit:
       return Literal(node->As<syntax::BoolLit>()->value ? Bool::True() : Bool::False());
     case Node::kNoneLit:
@@ -891,11 +900,15 @@ auto ExprBuilder::BuildIndex(const syntax::Index* ctx) -> Expr* {
   if (const auto constant = Fold(index); constant && constant->kind == Constant::kInt) {
     if (constant->integer < 0) {
       Error(ctx->index,
-            "index " + std::to_string(constant->integer) + " is out of range: a Seq has no negative positions");
+            "index " + std::to_string(constant->integer) + " is out of range: negative positions are not allowed");
     }
     if (object->IsList() && static_cast<size_t>(constant->integer) >= object->AsList()->GetChildren().size()) {
       Error(ctx->index, "index " + std::to_string(constant->integer) + " is out of range for a Seq of " +
                             std::to_string(object->AsList()->GetChildren().size()));
+    }
+    if (object->IsTuple() && static_cast<size_t>(constant->integer) >= object->AsTuple()->GetChildren().size()) {
+      Error(ctx->index, "index " + std::to_string(constant->integer) + " is out of range for a Tuple of " +
+                            std::to_string(object->AsTuple()->GetChildren().size()));
     }
   }
   return IndexExpr::New(object, index);
@@ -1406,6 +1419,25 @@ auto ExprBuilder::BuildBindings(const syntax::Binding* binding) -> std::vector<S
 
 void ExprBuilder::Destructure(const syntax::Node* pattern, const std::string& source,
                               std::vector<StoreLocalExpr*>& out) {
+  if (const auto* tuple = pattern->As<syntax::TuplePattern>()) {
+    for (size_t i = 0; i < tuple->elements.size(); i++) {
+      const auto* elem = tuple->elements[i];
+      const auto load = IndexExpr::New(LoadName(elem, source), Literal(Int::New(static_cast<int64_t>(i))));
+      if (const auto* binding = elem->As<syntax::BindingPattern>()) {
+        out.push_back(StoreLocalExpr::New(DeclareLocal(binding->name.span, binding->name.text), load));
+      } else if (elem->Is<syntax::WildcardPattern>()) {
+        continue;
+      } else if (elem->Is<syntax::TuplePattern>() || elem->Is<syntax::RecordPattern>()) {
+        const auto nested = "%destructure" + std::to_string(pipe_count_++);
+        out.push_back(StoreLocalExpr::New(DeclareLocal(elem->span, nested), load));
+        Destructure(elem, nested, out);
+      } else {
+        Unsupported(elem, "a pattern that can fail in a `let`");
+      }
+    }
+    return;
+  }
+
   const auto* record = pattern->As<syntax::RecordPattern>();
   if (record == nullptr)
     Unsupported(pattern, "a pattern that can fail in a `let`");
@@ -1423,7 +1455,7 @@ void ExprBuilder::Destructure(const syntax::Node* pattern, const std::string& so
       out.push_back(StoreLocalExpr::New(DeclareLocal(binding->name.span, binding->name.text), load));
     } else if (field->pattern->Is<syntax::WildcardPattern>()) {
       continue;
-    } else if (field->pattern->Is<syntax::RecordPattern>()) {
+    } else if (field->pattern->Is<syntax::RecordPattern>() || field->pattern->Is<syntax::TuplePattern>()) {
       const auto nested = "%destructure" + std::to_string(pipe_count_++);
       out.push_back(StoreLocalExpr::New(DeclareLocal(field->span, nested), load));
       Destructure(field->pattern, nested, out);
@@ -1923,6 +1955,12 @@ auto ExprBuilder::BuildPattern(const Node* node) -> PatternExpr* {
     return WildcardPatternExpr::New();
   if (node->Is<syntax::NonePattern>())
     return LiteralPatternExpr::New(Literal(None::Get())->AsLiteral());
+  if (const auto* tuple = node->As<syntax::TuplePattern>()) {
+    TuplePatternExpr::ElementList elements{};
+    for (const auto* elem : tuple->elements)
+      elements.push_back(BuildPattern(elem));
+    return TuplePatternExpr::New(std::move(elements));
+  }
   if (const auto* lit = node->As<syntax::LiteralPattern>())
     return BuildLiteralPattern(lit);
   if (const auto* binding = node->As<syntax::BindingPattern>())

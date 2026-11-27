@@ -24,6 +24,7 @@ namespace kura {
   V(Constant)                   \
   V(UnaryOp)                    \
   V(BinaryOp)                   \
+  V(NewTuple)                   \
   V(NewList)                    \
   V(NewRecord)                  \
   V(NewNode)                    \
@@ -1926,6 +1927,21 @@ class CastInstr : public TemplateDefinition<1> {
  public:
   static inline auto New(TypeId from, TypeId to, Value* rhs) -> CastInstr* {
     return new CastInstr(from, to, rhs);
+  }
+};
+
+class NewTupleInstr : public New {
+ public:
+  NewTupleInstr(const ValueList inputs) :
+    inputs_(std::move(inputs)) {}
+  ~NewTupleInstr() override = default;
+
+  HAS_INPUT_LIST;
+  DECLARE_INSTRUCTION_TYPE(NewTuple);
+
+ public:
+  static inline auto New(const ValueList values) -> NewTupleInstr* {
+    return new NewTupleInstr(std::move(values));
   }
 };
 

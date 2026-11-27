@@ -69,6 +69,7 @@ namespace kura::heap {
   V(RangePattern)
 
 // What a heap object is. Mirrors the runtime ABI's object kinds; the collector uses it to find an object's slots.
+// clang-format off
 enum class ObjKind : uint8_t {
   kInvalid = 0,
   kString,
@@ -82,11 +83,13 @@ enum class ObjKind : uint8_t {
   FOR_EACH_SYNTAX_NODE(DEFINE_KIND)
 #undef DEFINE_KIND
 
-      kColor,
+  kColor,
+  kTuple,
 
   // A free block inside the tenured space. Never reachable from a Value.
   kFree = 0xFE,
 };
+// clang-format on
 
 // Which part of the heap an object lives in. This is the lifetime the compiler chose for it:
 //
