@@ -9,7 +9,7 @@ test "size" {
   assert(size(6) == 2, "expected size(6) to equal 2")
 }
 
-@should-fail("todo should always panic when called")
+@should-fail
 test "todo should panic" {
   assert(test-todo(), "todo should always panic when called")
 }
