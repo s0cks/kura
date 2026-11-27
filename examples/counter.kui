@@ -36,6 +36,36 @@ fn update(msg: Message, state: State): State =>
     _ => state
   }
 
+
+// TODO(@s0cks): implement
+test "test reset" {
+  let state = init()
+  assert(new_state.value == 1)
+  let new_state = update(Reset, state)
+  assert(new_state.value == 0)
+}
+
+// TODO(@s0cks): implement
+test "test append" {
+  let state = init()
+  assert(state.num_items == 0)
+  let new_state = update(state, Append(10))
+  assert(new_state.num_items == 1)
+  assert(new_state.items == [ 10 ])
+}
+
+// TODO(@s0cks): implement
+test "test increment" {
+  let state = update(Increment, init())
+  assert(state.value == 2)
+}
+
+// TODO(@s0cks): implement
+test "test decrement" {
+  let state = update(Decrement, init())
+  assert(state.value == 0)
+}
+
 fn counter-buttons(): Node =>
   set text(size: 24px, 
            text-align: "center")
