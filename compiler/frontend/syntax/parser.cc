@@ -2215,8 +2215,25 @@ class TreeBuilder {
           return NewError(begin);
         }
 
-        auto* first = ParseExpression();
+        const auto parse_tuple_elem = [&]() -> Node* {
+          if (Is(K::kSpread)) {
+            const auto spread_tok = Next();
+            auto* arg = Arg::New(spread_tok.span);
+            arg->form = Arg::kSpread;
+            arg->value = ParseExpression();
+            arg->span = SpanFrom(spread_tok.span.begin);
+            return arg;
+          }
+          return ParseExpression();
+        };
+
+        auto* first = parse_tuple_elem();
         if (!Accept(K::kComma)) {
+          if (const auto* arg = first->As<Arg>(); arg && arg->form == Arg::kSpread) {
+            Report(DiagnosticCode::kUnexpectedToken, arg->span,
+                   "spread `...` is only valid inside a tuple, record, list, or call", "unexpected `...`");
+            return NewError(begin);
+          }
           auto* paren = New<Paren>(begin);
           paren->inner = first;
           ExpectClosing(K::kRParen, open.span);
@@ -2227,7 +2244,7 @@ class TreeBuilder {
         auto* tuple = New<TupleLit>(begin);
         tuple->elements.push_back(first);
         ParseDelimited(K::kRParen, open.span, [&] {
-          tuple->elements.push_back(ParseExpression());
+          tuple->elements.push_back(parse_tuple_elem());
         });
         tuple->span = SpanFrom(begin);
         return tuple;
@@ -2244,6 +2261,19 @@ class TreeBuilder {
         ExpectedHere("an expression");
         return NewMissing();
     }
+  }
+
+  auto ParseTupleElement() -> Node* {
+    if (Accept(K::kSpread)) {
+      const auto begin = prev_end_ - 3;
+      auto* spread = New<Arg>(begin);  // or reuse Expr Spread / Arg::kSpread
+      spread->form = Arg::kSpread;
+      spread->value = ParseExpression();
+      spread->span = SpanFrom(begin);
+      return spread;
+    }
+
+    return ParseExpression();
   }
 
   auto ParseTuplePattern(const uint32_t begin) -> Node* {

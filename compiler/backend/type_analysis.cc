@@ -1084,8 +1084,24 @@ class Analyzer {
 
     if (const auto t = instr->AsNewTuple()) {
       std::vector<CompileType*> elements{};
-      for (uint64_t idx = 0; idx < t->GetNumberOfInputs(); idx++)
-        elements.push_back(TypeOf(t->GetInputAt(idx)));
+      for (uint64_t idx = 0; idx < t->GetNumberOfInputs(); idx++) {
+        CompileType* elem_ty = TypeOf(t->GetInputAt(idx));
+        if (t->IsSpreadAt(idx)) {
+          if (elem_ty->IsNever())
+            return Set(def, CompileType::Never());
+
+          if (!elem_ty->IsTuple()) {
+            Report(instr, "can only spread a tuple into a tuple, not " + elem_ty->ToString());
+            return Set(def, CompileType::Any());
+          }
+
+          for (CompileType* inner : elem_ty->GetMembers())
+            elements.push_back(inner);
+        } else {
+          elements.push_back(elem_ty);
+        }
+      }
+
       return Set(def, CompileType::Tuple(std::move(elements)));
     }
 

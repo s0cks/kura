@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #include "color.h"
+#include "frontend/expr.h"
 #include "function.h"
 #include "math_op.h"
 #include "module.h"
@@ -673,8 +674,14 @@ auto ExprBuilder::Build(const Node* node) -> Expr* {
       return Literal(String::New(node->As<syntax::StringLit>()->value));
     case Node::kTupleLit: {
       ExprList items{};
-      for (const auto* item : node->As<syntax::TupleLit>()->elements)
+      for (const auto* item : node->As<syntax::TupleLit>()->elements) {
+        if (const auto* arg = item->As<syntax::Arg>()) {
+          items.push_back(expr::SpreadExpr::New(Build(arg->value)));
+          continue;
+        }
+
         items.push_back(Build(item));
+      }
       return TupleExpr::New(std::move(items));
     }
     case Node::kBoolLit:

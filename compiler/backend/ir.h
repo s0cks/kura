@@ -1931,17 +1931,25 @@ class CastInstr : public TemplateDefinition<1> {
 };
 
 class NewTupleInstr : public New {
+ private:
+  std::vector<bool> spreads_{};
+
  public:
-  NewTupleInstr(const ValueList inputs) :
-    inputs_(std::move(inputs)) {}
+  NewTupleInstr(const ValueList inputs, std::vector<bool> spreads = {}) :
+    inputs_(std::move(inputs)),
+    spreads_(std::move(spreads)) {}
   ~NewTupleInstr() override = default;
+
+  auto IsSpreadAt(const uint64_t rhs) const -> bool {
+    return rhs < spreads_.size() && spreads_[rhs];
+  }
 
   HAS_INPUT_LIST;
   DECLARE_INSTRUCTION_TYPE(NewTuple);
 
  public:
-  static inline auto New(const ValueList values) -> NewTupleInstr* {
-    return new NewTupleInstr(std::move(values));
+  static inline auto New(const ValueList values, std::vector<bool> spreads = {}) -> NewTupleInstr* {
+    return new NewTupleInstr(std::move(values), std::move(spreads));
   }
 };
 

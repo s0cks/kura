@@ -440,10 +440,26 @@ auto EffectVisitor::VisitTuplePattern(expr::TuplePatternExpr* expr) -> VisitResu
 
 auto EffectVisitor::VisitTuple(expr::TupleExpr* expr) -> VisitResult {
   ValueList values{};
-  if (!EvalList(expr->GetChildren(), &values))
-    return false;
+  std::vector<bool> spreads{};
+  for (const auto child : expr->GetChildren()) {
+    if (const auto spread = child->AsSpread()) {
+      const auto val = Eval(spread->GetValue());
+      if (!val)
+        return false;
 
-  ReturnDefinition(NewTupleInstr::New(values));
+      values.push_back(val);
+      spreads.push_back(true);
+    } else {
+      const auto val = Eval(child);
+      if (!val)
+        return false;
+
+      values.push_back(val);
+      spreads.push_back(false);
+    }
+  }
+
+  ReturnDefinition(NewTupleInstr::New(std::move(values), std::move(spreads)));
   return true;
 }
 

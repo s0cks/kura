@@ -19,3 +19,12 @@ test "test helper" {
   assert(t[0] == 13)
   assert(t[1] == 13)
 }
+
+test "test tuple spread" {
+  let t = (11, 12)
+  let t2 = (10, ...t, 13)
+  assert(t2[0] == 10)
+  assert(t2[1] == 11)
+  assert(t2[2] == 12)
+  assert(t2[3] == 13)
+}

@@ -15,3 +15,4 @@ node_modules/
 .astro/
 /misc/
 counter-ir.txt
+TODO.md

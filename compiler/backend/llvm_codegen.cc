@@ -1953,16 +1953,31 @@ class Generator {
   }
 
   LOWER_FN(NewTuple) {
+    const uint64_t total_count = instr->GetCompileType()->GetMembers().size();
     llvm::Value* tuple = nullptr;
     if (instr->IsStackAllocated()) {
-      tuple = StackBlock(heap::TupleObj::PayloadSize(instr->GetInputs().size()));
-      CallRt("kura_rt_stack_tuple", void_ty_, {tuple, b_.getInt64(instr->GetInputs().size())});
+      tuple = StackBlock(heap::TupleObj::PayloadSize(total_count));
+      CallRt("kura_rt_stack_tuple", void_ty_, {tuple, b_.getInt64(total_count)});
     } else {
-      tuple = CallRt("kura_rt_tuple_new", ptr_ty_, {b_.getInt64(instr->GetInputs().size())});
+      tuple = CallRt("kura_rt_tuple_new", ptr_ty_, {b_.getInt64(total_count)});
     }
-    uint64_t index = 0;
-    for (const auto input : instr->GetInputs())
-      CallRt("kura_rt_tuple_set", void_ty_, {tuple, b_.getInt64(index++), As(input, CompileType::Any())});
+
+    uint64_t out_index = 0;
+    for (uint64_t i = 0; i < instr->GetNumberOfInputs(); i++) {
+      Value* input = instr->GetInputAt(i);
+      if (instr->IsSpreadAt(i)) {
+        CompileType* spread_ty = Type(input);
+        llvm::Value* src_tuple = ObjectPtr(Val(input), spread_ty);
+        const auto& inner_elems = spread_ty->GetMembers();
+        for (size_t j = 0; j < inner_elems.size(); j++) {
+          llvm::Value* item = CallRt("kura_rt_tuple_get", value_ty_, {src_tuple, b_.getInt64(j)});
+          CallRt("kura_rt_tuple_set", void_ty_, {tuple, b_.getInt64(out_index++), item});
+        }
+      } else {
+        CallRt("kura_rt_tuple_set", void_ty_, {tuple, b_.getInt64(out_index++), As(input, CompileType::Any())});
+      }
+    }
+
     return Define(instr, tuple, instr->GetCompileType());
   }
 
