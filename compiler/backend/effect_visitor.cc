@@ -426,7 +426,27 @@ auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, Tar
   if (const auto tuple = pattern->AsTuplePattern()) {
     auto all_irrefutable = true;
     const auto& elements = tuple->GetElements();
-    for (size_t idx = 0; idx < elements.size(); idx++) {
+    const int64_t rest_index = tuple->GetRestIndex();
+
+    if (rest_index < 0) {
+      for (size_t idx = 0; idx < elements.size(); idx++) {
+        const auto at = Bind(ConstantInstr::New(Int::New(static_cast<int64_t>(idx))));
+        const auto value = Bind(LoadIndexInstr::New(subject, at));
+        auto elem_irrefutable = false;
+        if (!LowerPattern(elements[idx], value, fail, &elem_irrefutable))
+          return false;
+
+        all_irrefutable = all_irrefutable && elem_irrefutable;
+      }
+      *irrefutable = all_irrefutable;
+      return true;
+    }
+
+    const size_t prefix = static_cast<size_t>(rest_index);
+    const size_t suffix = elements.size() - prefix;
+
+    // 1. Prefix elements [0 .. prefix - 1]
+    for (size_t idx = 0; idx < prefix; idx++) {
       const auto at = Bind(ConstantInstr::New(Int::New(static_cast<int64_t>(idx))));
       const auto value = Bind(LoadIndexInstr::New(subject, at));
       auto elem_irrefutable = false;
@@ -435,6 +455,26 @@ auto EffectVisitor::LowerPattern(expr::PatternExpr* pattern, Value* subject, Tar
 
       all_irrefutable = all_irrefutable && elem_irrefutable;
     }
+
+    // 2. Named `...rest` slice
+    if (LocalVariable* rest_local = tuple->GetRestLocal()) {
+      auto* slice = SliceTupleInstr::New(subject, prefix, suffix);
+      owner_->Define(rest_local, slice);
+      Bind(slice);
+    }
+
+    // 3. Suffix elements via negative index `-(suffix - j)`
+    for (size_t j = 0; j < suffix; j++) {
+      const int64_t neg_idx = -static_cast<int64_t>(suffix - j);
+      const auto at = Bind(ConstantInstr::New(Int::New(neg_idx)));
+      const auto value = Bind(LoadIndexInstr::New(subject, at));
+      auto elem_irrefutable = false;
+      if (!LowerPattern(elements[prefix + j], value, fail, &elem_irrefutable))
+        return false;
+
+      all_irrefutable = all_irrefutable && elem_irrefutable;
+    }
+
     *irrefutable = all_irrefutable;
     return true;
   }
@@ -653,27 +693,26 @@ auto EffectVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) ->
   if (!iterable)
     return false;
 
-  const auto list = Bind(NewListInstr::New({}));
+  const auto initial_list = Bind(NewListInstr::New({}));
 
   Loop loop{};
   if (!BeginLoop(iterable, &loop))
     return false;
+
+  const auto list_phi = loop.header->NewPhi();
+  list_phi->AddIncoming(loop.preheader, initial_list);
+  {
+    Instruction* first = loop.index;
+    Instruction::Link(loop.header, list_phi);
+    Instruction::Link(list_phi, first);
+  }
 
   if (expr->GetLocal() != nullptr)
     owner_->Define(expr->GetLocal(), loop.item->GetDefinition());
   if (expr->GetIndex() != nullptr)
     owner_->Define(expr->GetIndex(), loop.index);
 
-  const auto append = [&]() -> bool {
-    const auto value = Eval(expr->GetBody());
-    if (!value)
-      return false;
-
-    const auto at = Bind(LoadLengthInstr::New(list));
-    Emit(StoreIndexInstr::New(list, at, value));
-    return true;
-  };
-
+  Value* next_list = nullptr;
   if (expr->HasClause()) {
     const auto condition = Eval(expr->GetClause());
     if (!condition)
@@ -683,21 +722,35 @@ auto EffectVisitor::VisitListComprehension(expr::ListComprehensionExpr* expr) ->
     const auto skip = owner_->NewTarget("guard.skip");
     const auto latch = owner_->NewJoin("guard.latch");
     owner_->Terminate(BranchInstr::New(CoerceToBool(condition), keep, skip, latch));
-    owner_->Enter(keep);
-    if (!append())
-      return false;
 
+    owner_->Enter(keep);
+    const auto value = Eval(expr->GetBody());
+    if (!value)
+      return false;
+    const auto appended = Bind(SeqAppendInstr::New(Value::New(list_phi), value));
+    const auto keep_end = owner_->block_;
     owner_->Terminate(GotoInstr::New(latch));
+
     owner_->Enter(skip);
+    const auto skip_end = owner_->block_;
     owner_->Terminate(GotoInstr::New(latch));
+
     owner_->Enter(latch);
-  } else if (!append()) {
-    return false;
+    const auto phi = latch->NewPhi();
+    phi->AddIncoming(keep_end, appended);
+    phi->AddIncoming(skip_end, Value::New(list_phi));
+    next_list = Bind(phi);
+  } else {
+    const auto value = Eval(expr->GetBody());
+    if (!value)
+      return false;
+    next_list = Bind(SeqAppendInstr::New(Value::New(list_phi), value));
   }
 
+  list_phi->AddIncoming(owner_->block_, next_list);
   EndLoop(&loop);
   if (WantsValue())
-    ReturnValue(list);
+    ReturnValue(Value::New(list_phi));
 
   return true;
 }

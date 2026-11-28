@@ -1211,6 +1211,16 @@ class Analyzer {
     if (const auto l = instr->AsNewList())
       return Set(def, ListType(l, ctx));
 
+    if (const auto a = instr->AsSeqAppend()) {
+      const auto seq_ty = TypeOf(a->GetSeq());
+      const auto item_ty = TypeOf(a->GetItem());
+      if (seq_ty->IsNever())
+        return Set(def, CompileType::Never());
+      if (seq_ty->IsSeq())
+        return Set(def, CompileType::Seq(CompileType::Join(seq_ty->GetElementType(), item_ty)));
+      return Set(def, CompileType::Any());
+    }
+
     if (const auto c = instr->AsCast()) {
       const auto src = TypeOf(c->GetValue());
       if (src->IsNever())

@@ -1554,11 +1554,26 @@ class TuplePatternExpr : public PatternExpr {
 
  private:
   ElementList elements_{};
+  int64_t rest_index_ = -1;
+  LocalVariable* rest_ = nullptr;
 
  public:
   explicit TuplePatternExpr(ElementList elements) :
     elements_(std::move(elements)) {}
   ~TuplePatternExpr() override = default;
+
+  void SetRest(int64_t idx, LocalVariable* local) {
+    rest_index_ = idx;
+    rest_ = local;
+  }
+
+  auto GetRestIndex() const -> uint64_t {
+    return rest_index_;
+  }
+
+  auto GetRestLocal() const -> LocalVariable* {
+    return rest_;
+  }
 
   auto GetElements() const -> const ElementList& {
     return elements_;
@@ -1593,6 +1608,7 @@ class TuplePatternExpr : public PatternExpr {
       if (!vis(elem))
         return VisitResult::kStop;
     }
+
     return VisitResult::kContinue;
   }
 

@@ -294,12 +294,7 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitTuple(expr::TupleExpr* expr) -> VisitResult override {
-    for (const auto child : expr->GetChildren()) {
-      if (!Walk(child))
-        return false;
-    }
-
-    return true;
+    return expr->VisitChildren(this);
   }
 
   auto VisitIf(expr::IfExpr* expr) -> VisitResult override {
@@ -405,7 +400,9 @@ class FreeLocals : public expr::ExprVisitor {
   }
 
   auto VisitTuplePattern(expr::TuplePatternExpr* expr) -> VisitResult override {
-    return true;
+    if (expr->GetRestLocal() != nullptr)
+      defs.insert(expr->GetRestLocal());
+    return expr->VisitChildren(this);
   }
 
   auto VisitLiteralPattern(expr::LiteralPatternExpr*) -> VisitResult override {

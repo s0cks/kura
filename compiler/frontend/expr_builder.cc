@@ -2062,7 +2062,14 @@ auto ExprBuilder::BuildPattern(const Node* node) -> PatternExpr* {
     TuplePatternExpr::ElementList elements{};
     for (const auto* elem : tuple->elements)
       elements.push_back(BuildPattern(elem));
-    return TuplePatternExpr::New(std::move(elements));
+    auto* pat = static_cast<TuplePatternExpr*>(TuplePatternExpr::New(std::move(elements)));
+    if (tuple->rest_index >= 0) {
+      LocalVariable* rest_local = (!tuple->rest.missing && !tuple->rest.text.empty())
+                                    ? CreateLocal(tuple->rest.span, tuple->rest.text)
+                                    : nullptr;
+      pat->SetRest(tuple->rest_index, rest_local);
+    }
+    return pat;
   }
   if (const auto* lit = node->As<syntax::LiteralPattern>())
     return BuildLiteralPattern(lit);
@@ -2160,6 +2167,14 @@ auto ExprBuilder::BuildFor(const syntax::ForExpr* ctx) -> Expr* {
   if (has_destructure)
     Destructure(ctx->second, binding, destructure_stores);
 
+  LocalVariable* accumulator_local = nullptr;
+  if (ctx->has_fold) {
+    const auto& accumulator = ctx->accumulator.text;
+    if (accumulator == binding || (has_index && accumulator == index_name))
+      Error(ctx, "the fold accumulator and the loop variable are both named '" + accumulator + "'");
+    accumulator_local = CreateLocal(ctx->span, accumulator);
+  }
+
   Expr* guard = ctx->guard ? Build(ctx->guard) : nullptr;
   Expr* body = Build(ctx->body);
   if (!destructure_stores.empty()) {
@@ -2181,10 +2196,6 @@ auto ExprBuilder::BuildFor(const syntax::ForExpr* ctx) -> Expr* {
   if (!ctx->has_fold)
     return ListComprehensionExpr::New(iterable, body, binding_local, binding, guard, index_local);
 
-  const auto& accumulator = ctx->accumulator.text;
-  if (accumulator == binding || (has_index && accumulator == index_name))
-    Error(ctx, "the fold accumulator and the loop variable are both named '" + accumulator + "'");
-  const auto accumulator_local = CreateLocal(ctx->span, accumulator);
   return FoldExpr::New(iterable, binding_local, accumulator_local, initial, body, guard, index_local);
 }
 

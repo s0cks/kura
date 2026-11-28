@@ -45,3 +45,63 @@ test "test destructuring params" {
   assert(t[0] == 10)
   assert(t[1] == 11)
 }
+
+test "test destructuring lambda" {
+  let sum-pair = ((a, b)) => a + b
+  assert(sum-pair((10, 25)) == 35)
+
+  let nested = ((a, (b, c))) => a + b + c
+  assert(nested((1, (2, 3))) == 6)
+}
+
+test "test match tuple" {
+  let classify = (p) => match p {
+    (0, 0) => "origin",
+    (0, y) => "y-axis: {y}",
+    (x, 0) => "x-axis: {x}",
+    (x, y) if x == y => "diagonal",
+    (x, y) => "({x}, {y})",
+  }
+
+  assert(classify((0, 0)) == "origin")
+  assert(classify((0, 7)) == "y-axis: 7")
+  assert(classify((4, 0)) == "x-axis: 4")
+  assert(classify((5, 5)) == "diagonal")
+  assert(classify((2, 9)) == "(2, 9)")
+}
+
+test "test match tuple rest" {
+  let summarize = (t) => match t {
+    (0, ...mid, 99) => mid[0] + mid[1],
+    (head, ...mid, tail) => head + mid[0] + mid[1] + tail,
+  }
+
+  assert(summarize((0, 10, 20, 99)) == 30)
+  assert(summarize((1, 2, 3, 4)) == 10)
+
+  let ignore-middle = (t) => match t {
+    (first, ..., last) => first * 10 + last,
+    _ => false
+  }
+
+  assert(ignore-middle((7, 100, 200, 3)) == 73)
+}
+
+test "test for loop tuple rest" {
+  let rows = [(1, 10, 20, 2), (3, 30, 40, 4)]
+  let sum = for _, (head, ...mid, tail) in rows fold acc = 0 =>
+    acc + head + mid[0] + mid[1] + tail
+
+  assert(sum == 110)
+}
+
+test "test for loop tuple destructuring" {
+  let pairs = [(1, 10), (2, 20), (3, 30)]
+
+  let total = for _, (k, v) in pairs fold acc = 0 => acc + k + v
+  assert(total == 66)
+
+  let filtered = [k * v for _, (k, v) in pairs if k > 1]
+  assert(filtered[0] == 40)
+  assert(filtered[1] == 90)
+}
