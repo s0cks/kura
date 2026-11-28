@@ -268,6 +268,10 @@ class FreeLocals : public expr::ExprVisitor {
     return true;
   }
 
+  auto VisitSliceTuple(expr::SliceTupleExpr* expr) -> VisitResult override {
+    return Walk(expr->GetValue());
+  }
+
   auto VisitUnary(expr::UnaryExpr* expr) -> VisitResult override {
     return Walk(expr->GetValue());
   }

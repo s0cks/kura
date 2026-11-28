@@ -56,6 +56,7 @@ namespace kura::expr {
   V(NewColor)            \
   V(Tuple)               \
   V(TuplePattern)        \
+  V(SliceTuple)          \
   V(Assert)
 
 class Expr;
@@ -1600,6 +1601,36 @@ class TuplePatternExpr : public PatternExpr {
  public:
   static inline auto New(ElementList elements) -> PatternExpr* {
     return new TuplePatternExpr(std::move(elements));
+  }
+};
+
+class SliceTupleExpr : public TemplateExpr<1> {
+ private:
+  uint64_t prefix_;
+  uint64_t suffix_;
+
+ public:
+  SliceTupleExpr(Expr* value, const uint64_t prefix, const uint64_t suffix) :
+    prefix_(prefix),
+    suffix_(suffix) {
+    SetValue(value);
+  }
+  ~SliceTupleExpr() override = default;
+
+  auto GetPrefix() const -> uint64_t {
+    return prefix_;
+  }
+
+  auto GetSuffix() const -> uint64_t {
+    return suffix_;
+  }
+
+  HAS_NAMED_INPUT(Value, 0);
+  DECLARE_EXPR_TYPE(SliceTuple);
+
+ public:
+  static inline auto New(Expr* value, const uint64_t prefix, const uint64_t suffix) -> SliceTupleExpr* {
+    return new SliceTupleExpr(value, prefix, suffix);
   }
 };
 

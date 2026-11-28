@@ -162,6 +162,15 @@ auto EffectVisitor::VisitUnary(expr::UnaryExpr* expr) -> VisitResult {
   return true;
 }
 
+auto EffectVisitor::VisitSliceTuple(expr::SliceTupleExpr* expr) -> VisitResult {
+  const auto value = Eval(expr->GetValue());
+  if (!value)
+    return false;
+
+  ReturnDefinition(SliceTupleInstr::New(value, expr->GetPrefix(), expr->GetSuffix()));
+  return true;
+}
+
 auto EffectVisitor::LowerShortCircuit(expr::BinaryExpr* expr) -> VisitResult {
   const auto left = Eval(expr->GetLeft());
   if (!left)

@@ -280,10 +280,18 @@ auto ExprBuilder::BuildModule() -> Module* {
     }
     LocalsScope func_scope(GetOwner());
     Function::ParameterList parameters{};
-    for (const auto* param_node : *params) {
-      const auto* param = param_node->As<syntax::Param>();
-      const auto local = CreateLocal(param->span, param->name.text);
-      parameters.push_back({local, BuildType(param->type)});
+    std::vector<std::pair<const syntax::Node*, std::string>> param_patterns{};
+    for (size_t idx = 0; idx < params->size(); idx++) {
+      const auto* param = (*params)[idx]->As<syntax::Param>();
+      if (param->pattern != nullptr) {
+        const auto hidden = "%param" + std::to_string(idx);
+        const auto local = CreateLocal(param->span, hidden);
+        parameters.push_back({local, BuildType(param->type)});
+        param_patterns.emplace_back(param->pattern, hidden);
+      } else {
+        const auto local = CreateLocal(param->span, param->name.text);
+        parameters.push_back({local, BuildType(param->type)});
+      }
     }
     func->SetParameters(std::move(parameters));
     if (result)
@@ -304,7 +312,22 @@ auto ExprBuilder::BuildModule() -> Module* {
 
     LocalsScope body_scope(GetOwner());
     current_function_name_ = name;
-    SeqExpr* function_body = BuildSeq(body);
+    SeqExpr* function_body = nullptr;
+    if (param_patterns.empty()) {
+      function_body = BuildSeq(body);
+    } else {
+      ExprList body_stmts{};
+      for (const auto& [pat, hidden] : param_patterns) {
+        std::vector<StoreLocalExpr*> stores{};
+        Destructure(pat, hidden, stores);
+        for (auto* s : stores)
+          body_stmts.push_back(s);
+      }
+
+      body_stmts.push_back(Build(body));
+      function_body = SeqExpr::New(std::move(body_stmts));
+    }
+
     if (name == "view") {
       // The View is the root of every view, and it isn't written: what the rules give it is the properties of a
       // View that holds the whole of the body, which is how the builder gets the root's.
@@ -1359,9 +1382,31 @@ auto ExprBuilder::BuildUnit(const syntax::UnitLit* ctx, const bool negate) const
 auto ExprBuilder::BuildLambda(const syntax::Lambda* lambda) -> Expr* {
   LocalsScope lambda_scope(GetOwner());
   LambdaExpr::ParamList params{};
-  for (const auto& param : lambda->params)
-    params.push_back(CreateLocal(lambda->span, param.text));
-  return LambdaExpr::New(std::move(params), BuildSeq(lambda->body));
+  std::vector<std::pair<const syntax::Node*, std::string>> param_patterns{};
+
+  for (size_t idx = 0; idx < lambda->params.size(); idx++) {
+    const syntax::Node* pat = idx < lambda->param_patterns.size() ? lambda->param_patterns[idx] : nullptr;
+    if (pat != nullptr) {
+      const auto hidden = "%lambda_param" + std::to_string(pipe_count_++);
+      params.push_back(CreateLocal(pat->span, hidden));
+      param_patterns.emplace_back(pat, hidden);
+    } else {
+      params.push_back(CreateLocal(lambda->params[idx].span, lambda->params[idx].text));
+    }
+  }
+
+  if (param_patterns.empty())
+    return LambdaExpr::New(std::move(params), BuildSeq(lambda->body));
+
+  ExprList body_stmts{};
+  for (const auto& [pat, hidden] : param_patterns) {
+    std::vector<StoreLocalExpr*> stores{};
+    Destructure(pat, hidden, stores);
+    for (auto* s : stores)
+      body_stmts.push_back(s);
+  }
+  body_stmts.push_back(Build(lambda->body));
+  return LambdaExpr::New(std::move(params), SeqExpr::New(std::move(body_stmts)));
 }
 
 auto ExprBuilder::BuildRecord(const syntax::RecordLit* ctx) -> Expr* {
@@ -1426,6 +1471,57 @@ auto ExprBuilder::BuildBindings(const syntax::Binding* binding) -> std::vector<S
 
 void ExprBuilder::Destructure(const syntax::Node* pattern, const std::string& source,
                               std::vector<StoreLocalExpr*>& out) {
+  const auto bind_elem = [&](const syntax::Node* elem, Expr* load) {
+    if (const auto* binding = elem->As<syntax::BindingPattern>()) {
+      out.push_back(StoreLocalExpr::New(DeclareLocal(binding->name.span, binding->name.text), load));
+    } else if (elem->Is<syntax::WildcardPattern>()) {
+      // discard
+    } else if (elem->Is<syntax::TuplePattern>() || elem->Is<syntax::RecordPattern>()) {
+      const auto nested = "%destructure" + std::to_string(pipe_count_++);
+      out.push_back(StoreLocalExpr::New(DeclareLocal(elem->span, nested), load));
+      Destructure(elem, nested, out);
+    } else {
+      Unsupported(elem, "a pattern that can fail in a `let`");
+    }
+  };
+
+  if (const auto* tuple = pattern->As<syntax::TuplePattern>()) {
+    const size_t total_pat = tuple->elements.size();
+    if (tuple->rest_index < 0) {
+      for (size_t i = 0; i < total_pat; i++) {
+        const auto load =
+            IndexExpr::New(LoadName(tuple->elements[i], source), Literal(Int::New(static_cast<int64_t>(i))));
+        bind_elem(tuple->elements[i], load);
+      }
+      return;
+    }
+
+    // Prefix elements before `...rest`
+    const size_t prefix = static_cast<size_t>(tuple->rest_index);
+    const size_t suffix = total_pat - prefix;
+    for (size_t i = 0; i < prefix; i++) {
+      const auto load =
+          IndexExpr::New(LoadName(tuple->elements[i], source), Literal(Int::New(static_cast<int64_t>(i))));
+      bind_elem(tuple->elements[i], load);
+    }
+
+    // Named `...rest` -> SliceTupleExpr(source, prefix, suffix)
+    if (!tuple->rest.missing && !tuple->rest.text.empty()) {
+      const auto slice = SliceTupleExpr::New(LoadName(tuple, source), prefix, suffix);
+      out.push_back(StoreLocalExpr::New(DeclareLocal(tuple->rest.span, tuple->rest.text), slice));
+    }
+
+    // Suffix elements after `...rest`
+    for (size_t j = 0; j < suffix; j++) {
+      const int64_t neg_idx = -static_cast<int64_t>(suffix - j);
+      const auto load = IndexExpr::New(LoadName(tuple->elements[prefix + j], source), Literal(Int::New(neg_idx)));
+      bind_elem(tuple->elements[prefix + j], load);
+    }
+    return;
+  }
+
+  // Existing RecordPattern handling...
+
   if (const auto* tuple = pattern->As<syntax::TuplePattern>()) {
     for (size_t i = 0; i < tuple->elements.size(); i++) {
       const auto* elem = tuple->elements[i];
@@ -2042,29 +2138,54 @@ auto ExprBuilder::BuildFor(const syntax::ForExpr* ctx) -> Expr* {
   const auto& index_name = ctx->first.text;
   const auto has_index = index_name != "_";
   const syntax::BindingPattern* element = nullptr;
-  if (ctx->second != nullptr && !ctx->second->Is<syntax::WildcardPattern>()) {
+  const bool has_destructure =
+      ctx->second != nullptr && (ctx->second->Is<syntax::TuplePattern>() || ctx->second->Is<syntax::RecordPattern>());
+
+  if (ctx->second != nullptr && !ctx->second->Is<syntax::WildcardPattern>() && !has_destructure) {
     element = ctx->second->As<syntax::BindingPattern>();
     if (element == nullptr)
       Unsupported(ctx->second, "a pattern for the loop element");
   }
 
-  // the index and the element are only visible to the guard and the body
   LocalsScope loop_scope(GetOwner());
-  const std::string binding = element != nullptr ? element->name.text : "_";
+  const std::string binding = element != nullptr ? element->name.text
+                            : has_destructure    ? ("%loop_elem" + std::to_string(pipe_count_++))
+                                                 : "_";
   if (has_index && element != nullptr && index_name == binding)
     Error(ctx, "the index and the element of this loop are both named '" + binding + "'");
-  const auto binding_local = element != nullptr ? CreateLocal(ctx->span, binding) : nullptr;
+  const auto binding_local = (element != nullptr || has_destructure) ? CreateLocal(ctx->span, binding) : nullptr;
   const auto index_local = has_index ? CreateLocal(ctx->span, index_name) : nullptr;
+
+  std::vector<StoreLocalExpr*> destructure_stores{};
+  if (has_destructure)
+    Destructure(ctx->second, binding, destructure_stores);
+
   Expr* guard = ctx->guard ? Build(ctx->guard) : nullptr;
+  Expr* body = Build(ctx->body);
+  if (!destructure_stores.empty()) {
+    if (guard != nullptr) {
+      ExprList guard_seq{};
+      for (auto* store : destructure_stores)
+        guard_seq.push_back(store);
+      guard_seq.push_back(guard);
+      guard = SeqExpr::New(std::move(guard_seq));
+    } else {
+      ExprList body_seq{};
+      for (auto* store : destructure_stores)
+        body_seq.push_back(store);
+      body_seq.push_back(body);
+      body = SeqExpr::New(std::move(body_seq));
+    }
+  }
 
   if (!ctx->has_fold)
-    return ListComprehensionExpr::New(iterable, Build(ctx->body), binding_local, binding, guard, index_local);
+    return ListComprehensionExpr::New(iterable, body, binding_local, binding, guard, index_local);
 
   const auto& accumulator = ctx->accumulator.text;
   if (accumulator == binding || (has_index && accumulator == index_name))
     Error(ctx, "the fold accumulator and the loop variable are both named '" + accumulator + "'");
   const auto accumulator_local = CreateLocal(ctx->span, accumulator);
-  return FoldExpr::New(iterable, binding_local, accumulator_local, initial, Build(ctx->body), guard, index_local);
+  return FoldExpr::New(iterable, binding_local, accumulator_local, initial, body, guard, index_local);
 }
 
 // ╭────────────╮

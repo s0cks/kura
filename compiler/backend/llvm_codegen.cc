@@ -526,6 +526,27 @@ class Generator {
                    Convert(b, tb, CompileType::Any())});
   }
 
+  LOWER_FN(SliceTuple) {
+    CompileType* dst_ty = instr->GetCompileType();
+    const uint64_t sub_count = dst_ty->GetMembers().size();
+    llvm::Value* out_tuple = nullptr;
+    if (instr->IsStackAllocated()) {
+      out_tuple = StackBlock(heap::TupleObj::PayloadSize(sub_count));
+      CallRt("kura_rt_stack_tuple", void_ty_, {out_tuple, b_.getInt64(sub_count)});
+    } else {
+      out_tuple = CallRt("kura_rt_tuple_new", ptr_ty_, {b_.getInt64(sub_count)});
+    }
+
+    llvm::Value* src_tuple = ObjectPtr(Val(instr->GetValue()), Type(instr->GetValue()));
+    const uint64_t start = instr->GetPrefix();
+    for (uint64_t i = 0; i < sub_count; i++) {
+      llvm::Value* item = CallRt("kura_rt_tuple_get", value_ty_, {src_tuple, b_.getInt64(start + i)});
+      CallRt("kura_rt_tuple_set", void_ty_, {out_tuple, b_.getInt64(i), item});
+    }
+
+    Define(instr, out_tuple, dst_ty);
+  }
+
   LOWER_FN(Cast) {
     Value* src = instr->GetValue();
     CompileType* src_ty = Type(src);
@@ -2027,6 +2048,7 @@ class Generator {
     CHECK(MathCall);
     CHECK(Assert);
     CHECK(NewTuple);
+    CHECK(SliceTuple);
 
 #undef CHECK
 
@@ -2112,15 +2134,25 @@ class Generator {
       CompileType* elem_ty = l->GetCompileType();
 
       if (inst_ty->IsTuple() && elem_ty) {
+        llvm::Value* tuple_idx = index;
+        if (const auto c_instr =
+                l->GetIndex()->GetDefinition() ? l->GetIndex()->GetDefinition()->AsConstant() : nullptr) {
+          if (const auto c_int = c_instr->AsConstantInt(); c_int && c_int->GetValue() < 0) {
+            const int64_t resolved = static_cast<int64_t>(inst_ty->GetMembers().size()) + c_int->GetValue();
+            tuple_idx = b_.getInt64(static_cast<uint64_t>(resolved));
+          }
+        }
+
         const Rep elem_rep = RepOf(elem_ty);
         if (elem_rep == Rep::kPtr)
-          return Define(l, CallRt("kura_rt_tuple_get_ptr", ptr_ty_, {object, index}), elem_ty);
+          return Define(l, CallRt("kura_rt_tuple_get_ptr", ptr_ty_, {object, tuple_idx}), elem_ty);
         if (elem_rep == Rep::kInt || elem_rep == Rep::kFloat || elem_rep == Rep::kBool)
-          return Define(l, FromBits(CallRt("kura_rt_tuple_get_bits", i64_, {object, index}), elem_ty), elem_ty);
+          return Define(l, FromBits(CallRt("kura_rt_tuple_get_bits", i64_, {object, tuple_idx}), elem_ty), elem_ty);
         if (elem_rep == Rep::kNone)
           return Define(l, b_.getInt8(0), elem_ty);
-        return Define(l, CallRt("kura_rt_tuple_get", value_ty_, {object, index}), elem_ty);
+        return Define(l, CallRt("kura_rt_tuple_get", value_ty_, {object, tuple_idx}), elem_ty);
       }
+
       if (inst_ty->IsSeq() && elem_ty && RepOf(elem_ty) != Rep::kTagged && RepOf(elem_ty) != Rep::kNone) {
         if (RepOf(elem_ty) == Rep::kPtr)
           return Define(l, CallRt("kura_rt_seq_get_ptr", ptr_ty_, {object, index}), elem_ty);

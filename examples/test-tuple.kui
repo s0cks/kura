@@ -28,3 +28,20 @@ test "test tuple spread" {
   assert(t2[2] == 12)
   assert(t2[3] == 13)
 }
+
+test "test slice tuple" {
+  let t = (10, 11, 12, 13)
+  let (head, ...mid, tail) = t
+  assert(head == 10)
+  assert(mid[0] == 11)
+  assert(mid[1] == 12)
+  assert(tail == 13)
+}
+
+fn ident((a, b): (Int, Int)): (Int, Int) => (a, b)
+
+test "test destructuring params" {
+  let t = ident((10, 11))
+  assert(t[0] == 10)
+  assert(t[1] == 11)
+}

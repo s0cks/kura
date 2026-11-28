@@ -32,6 +32,7 @@ namespace kura {
   V(StoreIndex)                 \
   V(LoadIndex)                  \
   V(SeqAppend)                  \
+  V(SliceTuple)                 \
   V(StoreProperty)              \
   V(LoadProperty)               \
   V(LoadPropertySafely)         \
@@ -1950,6 +1951,52 @@ class NewTupleInstr : public New {
  public:
   static inline auto New(const ValueList values, std::vector<bool> spreads = {}) -> NewTupleInstr* {
     return new NewTupleInstr(std::move(values), std::move(spreads));
+  }
+};
+
+class SliceTupleInstr : public New {
+ private:
+  Value* value_;
+  uint64_t prefix_;
+  uint64_t suffix_;
+
+ public:
+  SliceTupleInstr(Value* value, const uint64_t prefix, const uint64_t suffix) :
+    value_(value),
+    prefix_(prefix),
+    suffix_(suffix) {}
+  ~SliceTupleInstr() override = default;
+
+  auto GetValue() const -> Value* {
+    return value_;
+  }
+
+  auto GetPrefix() const -> uint64_t {
+    return prefix_;
+  }
+
+  auto GetSuffix() const -> uint64_t {
+    return suffix_;
+  }
+
+  auto GetNumberOfInputs() const -> uint64_t override {
+    return 1;
+  }
+
+  auto GetInputAt(const uint64_t rhs) const -> Value* override {
+    return rhs == 0 ? value_ : nullptr;
+  }
+
+  void SetInputAt(const uint64_t idx, Value* rhs) override {
+    if (idx == 0)
+      value_ = rhs;
+  }
+
+  DECLARE_INSTRUCTION_TYPE(SliceTuple);
+
+ public:
+  static inline auto New(Value* value, const uint64_t prefix, const uint64_t suffix) -> SliceTupleInstr* {
+    return new SliceTupleInstr(value, prefix, suffix);
   }
 };
 

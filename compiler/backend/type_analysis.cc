@@ -1105,6 +1105,28 @@ class Analyzer {
       return Set(def, CompileType::Tuple(std::move(elements)));
     }
 
+    if (const auto s = instr->AsSliceTuple()) {
+      const auto src = TypeOf(s->GetValue());
+      if (src->IsNever())
+        return Set(def, CompileType::Never());
+
+      if (!src->IsTuple()) {
+        Report(instr, "can only destructure a tuple with `...`, not " + src->ToString());
+        return Set(def, CompileType::Any());
+      }
+
+      const auto& elems = src->GetMembers();
+      const uint64_t min_len = s->GetPrefix() + s->GetSuffix();
+      if (elems.size() < min_len) {
+        Report(instr, "tuple of size " + std::to_string(elems.size()) +
+                          " has too few elements for pattern requiring at least " + std::to_string(min_len));
+        return Set(def, CompileType::Any());
+      }
+
+      std::vector<CompileType*> sub(elems.begin() + s->GetPrefix(), elems.end() - s->GetSuffix());
+      return Set(def, CompileType::Tuple(std::move(sub)));
+    }
+
     if (const auto t = instr->AsRectIntersects())
       return Set(def, CompileType::Bool());
 
@@ -1222,14 +1244,17 @@ class Analyzer {
           Report(instr, "tuple index must be a constant integer literal");
           return Set(def, CompileType::Any());
         }
+
         const int64_t idx = c->GetValue();
         const auto& elems = type->GetMembers();
-        if (idx < 0 || static_cast<size_t>(idx) >= elems.size()) {
+        const int64_t real_idx = idx < 0 ? static_cast<int64_t>(elems.size()) + idx : idx;
+        if (real_idx < 0 || static_cast<size_t>(real_idx) >= elems.size()) {
           Report(instr, "tuple index " + std::to_string(idx) + " out of bounds for tuple of size " +
                             std::to_string(elems.size()));
           return Set(def, CompileType::Any());
         }
-        return Set(def, elems[static_cast<size_t>(idx)]);
+
+        return Set(def, elems[static_cast<size_t>(real_idx)]);
       }
 
       if (type->IsSeq())

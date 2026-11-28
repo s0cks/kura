@@ -26,6 +26,8 @@ class Analyzer {
       return true;
     if (const auto tuple = instr->AsNewTuple())
       return true;
+    if (instr->IsSliceTuple())
+      return true;
     if (const auto record = instr->AsNewRecord())
       return !record->HasInputs();  // a spread makes its size known only when it runs
     if (const auto variant = instr->AsNewVariant())
@@ -189,6 +191,12 @@ class Analyzer {
       Contain(root, result);
       return nullptr;
     }
+
+    if (user->IsSliceTuple()) {
+      Contain(root, result);
+      return nullptr;
+    }
+
     if (const auto c = user->AsNewClosure()) {
       Contain(root, result);
       return nullptr;

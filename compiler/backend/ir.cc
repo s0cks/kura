@@ -455,4 +455,14 @@ auto CastInstr::ToString() const -> std::string {
   ss << ")";
   return ss.str();
 }
+
+auto SliceTupleInstr::ToString() const -> std::string {
+  std::stringstream ss{};
+  ss << "SliceTuple(";
+  ss << "value=" << Name(GetValue()) << ", ";
+  ss << "prefix=" << GetPrefix() << ", ";
+  ss << "suffix=" << GetSuffix();
+  ss << ")";
+  return ss.str();
+}
 }  // namespace kura

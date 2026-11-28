@@ -95,6 +95,11 @@ auto ExprPrinter::VisitTuple(TupleExpr* expr) -> VisitResult {
   return true;
 }
 
+auto ExprPrinter::VisitSliceTuple(SliceTupleExpr* expr) -> VisitResult {
+  NOT_IMPLEMENTED;
+  return true;
+}
+
 auto ExprPrinter::VisitTuplePattern(TuplePatternExpr* expr) -> VisitResult {
   NOT_IMPLEMENTED;
   return true;

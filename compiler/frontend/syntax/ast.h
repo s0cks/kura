@@ -244,6 +244,7 @@ struct Param : Node {
   DEFINE_NODE(Param)
   Name name{};
   Node* type = nullptr;
+  Node* pattern = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, type);
@@ -579,6 +580,8 @@ struct TupleLit : Node {
 struct TuplePattern : Node {
   DEFINE_NODE(TuplePattern);
   std::vector<Node*> elements{};
+  int64_t rest_index = -1;
+  Name rest{};
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::VisitAll(fn, elements);
@@ -722,10 +725,12 @@ struct ForExpr : Node {
 struct Lambda : Node {
   DEFINE_NODE(Lambda)
   std::vector<Name> params{};
+  std::vector<Node*> param_patterns{};
   Node* body = nullptr;
 
   void ForEachChild(const NodeFn& fn) const override {
     detail::Visit(fn, body);
+    detail::VisitAll(fn, param_patterns);
   }
 };
 

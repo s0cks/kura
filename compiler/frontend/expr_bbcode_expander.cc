@@ -24,6 +24,11 @@ VISIT_FN(TuplePattern) {
   return Stop();
 }
 
+VISIT_FN(SliceTuple) {
+  // TODO(@s0cks): implement
+  return Stop();
+}
+
 VISIT_FN(MathCall) {
   // TODO(@s0cks): implement
   return Stop();

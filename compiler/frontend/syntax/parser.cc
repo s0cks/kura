@@ -1496,7 +1496,16 @@ class TreeBuilder {
     const auto open = Next();
     auto* lambda = New<Lambda>(begin);
     ParseDelimited(K::kRParen, open.span, [&] {
-      lambda->params.push_back(ParseName("a parameter name"));
+      if (Is(K::kLParen)) {
+        lambda->params.push_back(MissingName());
+        lambda->param_patterns.push_back(ParseTuplePattern(Here()));
+      } else if (Is(K::kLBrace)) {
+        lambda->params.push_back(MissingName());
+        lambda->param_patterns.push_back(ParseRecordPattern(Here(), false, Name{}));
+      } else {
+        lambda->params.push_back(ParseName("a parameter name"));
+        lambda->param_patterns.push_back(nullptr);
+      }
     });
     Expect(K::kFatArrow);
     lambda->body = ParseExpression();
@@ -2280,6 +2289,18 @@ class TreeBuilder {
     const auto open = Next();  // '('
     auto* pattern = New<TuplePattern>(begin);
     ParseDelimited(K::kRParen, open.span, [&] {
+      if (Is(K::kSpread)) {
+        const auto spread = Next();
+        if (pattern->rest_index >= 0) {
+          Report(DiagnosticCode::kUnexpectedToken, spread.span, "a tuple pattern can have only one `...`",
+                 "second `...` here");
+        }
+
+        pattern->rest_index = pattern->elements.size();
+        if (Is(K::kIdent))
+          pattern->rest = ParseName("a name for the remaining elements");
+        return;
+      }
       pattern->elements.push_back(ParsePattern());
     });
     pattern->span = SpanFrom(begin);
@@ -2473,7 +2494,12 @@ class TreeBuilder {
       }
       const auto begin = Here();
       auto* param = Param::New(Span(begin, begin));
-      param->name = ParseName("a parameter name");
+      if (Is(K::kLParen))
+        param->pattern = ParseTuplePattern(Here());
+      else if (Is(K::kLBrace))
+        param->pattern = ParseRecordPattern(Here(), false, Name{});
+      else
+        param->name = ParseName("a parameter name");
       if (Expect(K::kColon))
         param->type = ParseTypeExpr();
       else
