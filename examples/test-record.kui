@@ -1,21 +1,34 @@
-fn init(): Model =>
-  {
-    count: 0,
-    message: "Hello World",
+type State = {
+  count: Int,
+  message: String,
+}
+
+test "test destructuring let" {
+  let r: State = { count: 10, message: "Hello World" }
+  let {count, message} = r
+  assert(count == 10)
+  assert(message == "Hello World")
+}
+
+test "test destructuring match" {
+  let r: State = { count: 10, message: "Hello World" }
+  let new_message: String = match r {
+    { count, message } if count == 10 =>
+      "This is a test"
+    { count, message } if count == 11 =>
+      "This is another test"
+    _ => "failed"
   }
 
-fn init2(): Model =>
-  {
-    count: 10 + 10,
-    message: "Hello World",
+  assert(new_message == "This is a test")
+
+  let new_message2: String = match { count: 11, message: "Hello World" } {
+    { count, message } if count == 10 =>
+      "This is a test"
+    { count, message } if count == 11 =>
+      "This is another test"
+    _ => "failed"
   }
 
-fn init4(): Model =>
-  {
-    count: 0,
-  } +
-  {
-    message: "Hello World",
-  }
-
-fn init5(model: Model): Model => { ...model, count: model.count + 1, }
+  assert(new_message2 == "This is another test")
+}

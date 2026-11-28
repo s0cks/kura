@@ -1,0 +1,5 @@
+
+
+test "test int cast to str" {
+  assert(String(10) == "10")
+}
